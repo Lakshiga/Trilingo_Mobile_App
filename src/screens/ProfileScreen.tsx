@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
   Switch,
+  Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,7 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService from '../services/api';
-import { API_BASE_URL } from '../config/apiConfig';
+import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 interface SettingItem {
   id: string;
@@ -30,46 +31,35 @@ interface SettingItem {
   subtitle?: string;
 }
 
-// Helper function to convert server path to full URL
-const getFullImageUrl = (imageUrl: string): string | null => {
-  if (!imageUrl || imageUrl.trim().length === 0) {
-    return null;
+const AVATAR_CHOICES = ['👤', '😊', '🎓', '🌟', '⭐', '🦄', '🎨', '🚀', '💫', '🐱', '🦊', '🐼'] as const;
+
+type ProfileUserLike = {
+  id?: string | null;
+  username?: string | null;
+  isAdmin?: boolean;
+  isGuest?: boolean;
+};
+
+const getProfileStorageKey = (user?: ProfileUserLike | null) => {
+  if (!user) {
+    return 'guest_profile_image';
   }
 
-  // If it's already a full URL or local file, return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || 
-      imageUrl.startsWith('file://') || imageUrl.startsWith('data:') || 
-      imageUrl.startsWith('content://') || imageUrl.startsWith('asset://')) {
-    return imageUrl;
+  if (user.isGuest) {
+    return 'guest_profile_image';
   }
-  
-  // If it's a server path like "/uploads/profiles/image.jpg", construct full URL
-  if (imageUrl.startsWith('/uploads/') || imageUrl.startsWith('/profiles/')) {
-    // Remove /api from base URL and append the path
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
+
+  if (user.isAdmin) {
+    return `admin_profile_image_${user.id || 'admin'}`;
   }
-  
-  // Check if it's an emoji or invalid text (emojis are typically 1-4 characters, but can be longer)
-  // If it doesn't look like a valid path, return null
-  if (imageUrl.length <= 10 && !imageUrl.includes('.') && !imageUrl.includes('/')) {
-    // Likely an emoji or invalid text
-    return null;
-  }
-  
-  // If it looks like a relative path, try to construct full URL
-  if (imageUrl.startsWith('/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
-  }
-  
-  // Unknown format, return null to prevent invalid URL
-  return null;
+
+  return `profile_image_${user.id || user.username || 'user'}`;
 };
 
 // Helper function to validate profile image URL
 const isValidProfileImage = (imageUrl: string): boolean => {
   if (!imageUrl || imageUrl.length === 0) return false;
+  if (imageUrl === '[object Object]') return false;
   
   // Check if it's a URI with protocol (http, https, file, data, content, asset, ph, etc.)
   // Mobile URIs can have various formats
@@ -98,9 +88,88 @@ export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const profileScale = useRef(new Animated.Value(0)).current;
+
+  const saveImageToStorage = async (value: string) => {
+    try {
+      await AsyncStorage.setItem(getProfileStorageKey(currentUser), value);
+    } catch (error) {
+      console.warn('Failed to cache profile image', error);
+    }
+  };
+
+  const loadProfileImageFromStorage = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(getProfileStorageKey(currentUser));
+      if (stored && isValidProfileImage(stored)) {
+        setProfileImage(stored);
+        return true;
+      }
+    } catch (error) {
+      console.warn('Failed to load cached profile image', error);
+    }
+    return false;
+  };
+
+  const initializeProfileImage = async () => {
+    const loadedFromCache = await loadProfileImageFromStorage();
+    if (!loadedFromCache && currentUser?.profileImageUrl) {
+      setProfileImage(currentUser.profileImageUrl);
+    }
+  };
+
+  const uploadProfileImageToServer = async (imageUri: string) => {
+    if (!currentUser || currentUser.isGuest) {
+      await saveImageToStorage(imageUri);
+      Alert.alert('Saved', 'Profile image saved on this device.');
+      return;
+    }
+
+    try {
+      const response = await apiService.uploadProfileImage(imageUri);
+      if (response.isSuccess && response.profileImageUrl) {
+        const serverUrl = response.profileImageUrl;
+        await saveImageToStorage(serverUrl);
+        setProfileImage(serverUrl);
+        await updateUser({ profileImageUrl: serverUrl });
+        Alert.alert('Success', 'Profile image uploaded successfully!');
+      } else {
+        throw new Error(response.message || 'Failed to upload image.');
+      }
+    } catch (error: any) {
+      console.error('Failed to upload profile image:', error);
+      Alert.alert('Upload Error', error.message || 'Failed to upload image. Please try again.');
+    }
+  };
+
+  const handleAvatarSave = async (avatar: string) => {
+    setProfileImage(avatar);
+    await saveImageToStorage(avatar);
+
+    if (currentUser && !currentUser.isGuest) {
+      try {
+        const response = await apiService.updateProfile({ profileImageUrl: avatar });
+        if (!response.isSuccess) {
+          throw new Error(response.message || 'Failed to save avatar.');
+        }
+        await updateUser({ profileImageUrl: avatar });
+        Alert.alert('Success', 'Avatar saved successfully!');
+      } catch (error: any) {
+        console.error('Failed to save avatar:', error);
+        Alert.alert('Error', error.message || 'Failed to save avatar. Please try again.');
+      }
+    } else {
+      Alert.alert('Saved', 'Avatar updated!');
+    }
+  };
+
+  const handleAvatarSelect = async (avatar: string) => {
+    setAvatarModalVisible(false);
+    await handleAvatarSave(avatar);
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -122,7 +191,6 @@ export default function ProfileScreen() {
       }),
     ]).start();
 
-    // Request camera permissions and load profile image on mount
     (async () => {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -133,24 +201,8 @@ export default function ProfileScreen() {
           );
         }
       }
-      
-      // Load user's profile image from currentUser or AsyncStorage (for admin)
-      if (currentUser?.isAdmin) {
-        try {
-          const adminImage = await AsyncStorage.getItem('admin_profile_image');
-          if (adminImage && isValidProfileImage(adminImage)) {
-            setProfileImage(adminImage);
-            // Update context if not already set
-            if (currentUser.profileImageUrl !== adminImage) {
-              await updateUser({ profileImageUrl: adminImage });
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load admin image:', error);
-        }
-      } else if (currentUser?.profileImageUrl && isValidProfileImage(currentUser.profileImageUrl)) {
-        setProfileImage(currentUser.profileImageUrl);
-      }
+
+      await initializeProfileImage();
     })();
   }, [currentUser]);
 
@@ -171,42 +223,13 @@ export default function ProfileScreen() {
       if (!result.canceled) {
         const imageUri = result.assets[0].uri;
         
-        // Validate the image URI before setting
         if (!imageUri || !isValidProfileImage(imageUri)) {
           Alert.alert('Error', 'Invalid image selected. Please try again.');
           return;
         }
-        
+
         setProfileImage(imageUri);
-        
-        // Upload to backend if user is logged in and not a guest
-        if (currentUser && !currentUser.isGuest) {
-          // For admin users, store in AsyncStorage separately
-          if (currentUser.isAdmin) {
-            try {
-              await AsyncStorage.setItem('admin_profile_image', imageUri);
-              await updateUser({ profileImageUrl: imageUri });
-              Alert.alert('Success', 'Profile image saved successfully!');
-            } catch (error) {
-              console.error('Failed to save admin image:', error);
-            }
-          } else {
-            // For regular users, upload to backend first
-            try {
-              const response = await apiService.uploadProfileImage(imageUri);
-              if (response.isSuccess && response.profileImageUrl) {
-                // Update context with SERVER URL from backend (not local file URI)
-                const serverUrl = response.profileImageUrl;
-                await updateUser({ profileImageUrl: serverUrl });
-                setProfileImage(serverUrl); // Update local state with server URL
-                Alert.alert('Success', 'Profile image uploaded successfully!');
-              }
-            } catch (error: any) {
-              console.error('Failed to upload profile image:', error);
-              Alert.alert('Error', 'Failed to upload image. Please try again.');
-            }
-          }
-        }
+        await uploadProfileImageToServer(imageUri);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image. Please try again.');
@@ -234,48 +257,13 @@ export default function ProfileScreen() {
       if (!result.canceled) {
         const imageUri = result.assets[0].uri;
         
-        // Validate the image URI before setting
         if (!imageUri || !isValidProfileImage(imageUri)) {
           Alert.alert('Error', 'Invalid photo captured. Please try again.');
           return;
         }
         
         setProfileImage(imageUri);
-        
-        // Upload to backend if user is logged in and not a guest
-        if (currentUser && !currentUser.isGuest) {
-          // For admin users, store in AsyncStorage separately
-          if (currentUser.isAdmin) {
-            try {
-              await AsyncStorage.setItem('admin_profile_image', imageUri);
-              await updateUser({ profileImageUrl: imageUri });
-              Alert.alert('Success', 'Profile image saved successfully!');
-            } catch (error) {
-              console.error('Failed to save admin image:', error);
-            }
-          } else {
-            // For regular users, upload to backend first
-            try {
-              console.log('Uploading image to backend...', imageUri);
-              const response = await apiService.uploadProfileImage(imageUri);
-              console.log('Upload response:', response);
-              
-              if (response.isSuccess && response.profileImageUrl) {
-                // Update context with SERVER URL from backend (not local file URI)
-                const serverUrl = response.profileImageUrl;
-                await updateUser({ profileImageUrl: serverUrl });
-                setProfileImage(serverUrl); // Update local state with server URL
-                Alert.alert('Success', 'Profile image uploaded successfully!');
-              } else {
-                Alert.alert('Error', response.message || 'Failed to upload image. Please try again.');
-              }
-            } catch (error: any) {
-              console.error('Failed to upload profile image:', error);
-              const errorMessage = error.message || 'Failed to upload image. Please check your connection and try again.';
-              Alert.alert('Upload Error', errorMessage);
-            }
-          }
-        }
+        await uploadProfileImageToServer(imageUri);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to access camera. Please try again.');
@@ -283,48 +271,7 @@ export default function ProfileScreen() {
   };
 
   const selectAvatar = () => {
-    // Predefined avatar options
-    const avatars = ['👤', '😊', '🎓', '🌟', '⭐', '🦄', '🎨', '🚀', '💫'];
-    
-    Alert.alert(
-      'Select Avatar',
-      'Choose an avatar for your profile',
-      avatars.map((avatar, index) => ({
-        text: avatar,
-        onPress: async () => {
-          setProfileImage(avatar);
-          // Update user context and backend with selected avatar
-          if (currentUser && !currentUser.isGuest) {
-            // For admin users, store in AsyncStorage
-            if (currentUser.isAdmin) {
-              try {
-                await AsyncStorage.setItem('admin_profile_image', avatar);
-                await updateUser({ profileImageUrl: avatar });
-                Alert.alert('Success', 'Avatar saved successfully!');
-              } catch (error) {
-                console.error('Failed to save admin avatar:', error);
-                Alert.alert('Error', 'Failed to save avatar. Please try again.');
-              }
-            } else {
-              // For regular users, update via backend API
-              try {
-                const response = await apiService.updateProfile({ profileImageUrl: avatar });
-                if (response.isSuccess) {
-                  await updateUser({ profileImageUrl: avatar });
-                  Alert.alert('Success', 'Avatar saved successfully!');
-                } else {
-                  Alert.alert('Error', response.message || 'Failed to save avatar.');
-                }
-              } catch (error: any) {
-                console.error('Failed to save avatar:', error);
-                Alert.alert('Error', 'Failed to save avatar. Please try again.');
-              }
-            }
-          }
-        },
-      })),
-      { cancelable: true }
-    );
+    setAvatarModalVisible(true);
   };
 
   const handleProfilePicturePress = () => {
@@ -522,6 +469,9 @@ export default function ProfileScreen() {
     return emojis[icon] || '';
   };
 
+  const resolvedImageUri = resolveImageUri(profileImage);
+  const emojiProfile = profileImage && isEmojiLike(profileImage) ? profileImage : null;
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={theme.profileBackground} style={styles.gradient}>
@@ -564,61 +514,32 @@ export default function ProfileScreen() {
                   { transform: [{ scale: profileScale }] },
                 ]}
               >
-                {profileImage ? (
-                  // Check if profileImage is a URI or an emoji
-                  (profileImage.includes('://') || profileImage.startsWith('/')) && profileImage.length > 5 ? (
-                    // It's a URI - display as image
-                    imageLoadError ? (
-                      // Fallback if image fails to load
-                      <LinearGradient
-                        colors={['#FFD700', '#FFA500']}
-                        style={styles.profilePicture}
-                      >
-                        <Text style={styles.profileInitial}>
-                          {currentUser?.name?.charAt(0).toUpperCase() || currentUser?.username?.charAt(0).toUpperCase() || 'U'}
-                        </Text>
-                      </LinearGradient>
-                    ) : (
-                      (() => {
-                        const imageUri = getFullImageUrl(profileImage);
-                        return imageUri ? (
-                          <Image
-                            source={{ uri: imageUri }}
-                            style={styles.profilePictureImage}
-                            resizeMode="cover"
-                            onError={(error) => {
-                              console.error('Image load error:', error);
-                              setImageLoadError(true);
-                            }}
-                          />
-                        ) : (
-                          <LinearGradient
-                            colors={['#FFD700', '#FFA500']}
-                            style={styles.profilePicture}
-                          >
-                            <Text style={styles.profileInitial}>
-                              {currentUser?.name?.charAt(0).toUpperCase() || currentUser?.username?.charAt(0).toUpperCase() || 'U'}
-                            </Text>
-                          </LinearGradient>
-                        );
-                      })()
-                    )
-                  ) : (
-                    // It's an emoji - display as text
-                    <LinearGradient
-                      colors={['#FFD700', '#FFA500']}
-                      style={styles.profilePicture}
-                    >
-                      <Text style={styles.profileAvatar}>{profileImage}</Text>
-                    </LinearGradient>
-                  )
+                {resolvedImageUri && !imageLoadError ? (
+                  <Image
+                    source={{ uri: resolvedImageUri }}
+                    style={styles.profilePictureImage}
+                    resizeMode="cover"
+                    onError={(error) => {
+                      console.warn('Profile image load error:', error.nativeEvent?.error);
+                      setImageLoadError(true);
+                    }}
+                  />
+                ) : emojiProfile ? (
+                  <LinearGradient
+                    colors={['#FFD700', '#FFA500']}
+                    style={styles.profilePicture}
+                  >
+                    <Text style={styles.profileAvatar}>{emojiProfile}</Text>
+                  </LinearGradient>
                 ) : (
                   <LinearGradient
                     colors={['#FFD700', '#FFA500']}
                     style={styles.profilePicture}
                   >
                     <Text style={styles.profileInitial}>
-                      {currentUser?.name?.charAt(0).toUpperCase() || currentUser?.username?.charAt(0).toUpperCase() || 'U'}
+                      {currentUser?.name?.charAt(0).toUpperCase() ||
+                        currentUser?.username?.charAt(0).toUpperCase() ||
+                        'U'}
                     </Text>
                   </LinearGradient>
                 )}
@@ -724,6 +645,36 @@ export default function ProfileScreen() {
           <Text style={styles.versionText}>Version 1.0.0</Text>
         </ScrollView>
       </LinearGradient>
+
+      <Modal
+        visible={avatarModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvatarModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.avatarModal}>
+            <Text style={styles.avatarModalTitle}>Choose an avatar</Text>
+            <View style={styles.avatarGrid}>
+              {AVATAR_CHOICES.map((avatar) => (
+                <TouchableOpacity
+                  key={avatar}
+                  style={styles.avatarOption}
+                  onPress={() => handleAvatarSelect(avatar)}
+                >
+                  <Text style={styles.avatarOptionText}>{avatar}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setAvatarModalVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1011,5 +962,66 @@ const styles = StyleSheet.create({
     color: '#95A5A6',
     marginTop: 12,
     fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  avatarModal: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  avatarModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  avatarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  avatarOption: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  avatarOptionText: {
+    fontSize: 30,
+  },
+  modalCloseButton: {
+    marginTop: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: '#1F2937',
+    borderRadius: 24,
+  },
+  modalCloseText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });

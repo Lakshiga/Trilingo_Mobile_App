@@ -5,40 +5,8 @@ import { Image, TouchableOpacity, Animated, StyleSheet, View, Text } from 'react
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
 import { useNavigation } from '@react-navigation/native';
-import { API_BASE_URL } from '../config/apiConfig';
-
-// Helper function to convert server path to full URL
-const getFullImageUrl = (imageUrl: string): string | null => {
-  if (!imageUrl || imageUrl.trim().length === 0) {
-    return null;
-  }
-
-  // If it's already a full URL or local file, return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || 
-      imageUrl.startsWith('file://') || imageUrl.startsWith('data:') || 
-      imageUrl.startsWith('content://') || imageUrl.startsWith('asset://')) {
-    return imageUrl;
-  }
-  
-  // If it's a server path like "/uploads/profiles/image.jpg", construct full URL
-  if (imageUrl.startsWith('/uploads/') || imageUrl.startsWith('/profiles/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
-  }
-  
-  // Check if it's an emoji or invalid text
-  if (imageUrl.length <= 10 && !imageUrl.includes('.') && !imageUrl.includes('/')) {
-    return null;
-  }
-  
-  // If it looks like a relative path, try to construct full URL
-  if (imageUrl.startsWith('/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
-  }
-  
-  return null;
-};
+import ExerciseDetailScreen from '../screens/ExerciseDetailScreen';
+import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 import HomeScreen from '../screens/HomeScreen';
 import ExerciseScreen from '../screens/ExerciseScreen';
@@ -145,35 +113,54 @@ function TabNavigator() {
                 <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
                   {currentUser?.profileImageUrl ? (
                     (() => {
-                      const imageUri = getFullImageUrl(currentUser.profileImageUrl);
-                      return imageUri ? (
-                        <Image 
-                          source={{ uri: imageUri }} 
-                          style={{ 
+                      const profileImageUri = resolveImageUri(currentUser.profileImageUrl);
+                      const isEmoji = isEmojiLike(currentUser.profileImageUrl);
+
+                      if (profileImageUri) {
+                        return (
+                          <Image 
+                            source={{ uri: profileImageUri }} 
+                            style={{ 
+                              width: size, 
+                              height: size,
+                              borderRadius: size / 2,
+                              borderWidth: focused ? 2 : 0,
+                              borderColor: '#43BCCD',
+                              opacity: focused ? 1 : 0.6,
+                              backgroundColor: '#f0f0f0',
+                            }}
+                            resizeMode="cover"
+                          />
+                        );
+                      }
+
+                      if (isEmoji) {
+                        return (
+                          <View style={{ 
                             width: size, 
                             height: size,
                             borderRadius: size / 2,
+                            backgroundColor: '#FFD700',
+                            justifyContent: 'center',
+                            alignItems: 'center',
                             borderWidth: focused ? 2 : 0,
                             borderColor: '#43BCCD',
                             opacity: focused ? 1 : 0.6,
-                            backgroundColor: '#f0f0f0',
-                          }}
-                          resizeMode="cover"
+                          }}>
+                            <Text style={{ fontSize: size * 0.6 }}>{currentUser.profileImageUrl}</Text>
+                          </View>
+                        );
+                      }
+
+                      return (
+                        <Image 
+                          source={require('../../assets/profile.png')} 
+                          style={{ 
+                            width: size, 
+                            height: size,
+                            opacity: focused ? 1 : 0.6,
+                          }} 
                         />
-                      ) : (
-                        <View style={{ 
-                          width: size, 
-                          height: size,
-                          borderRadius: size / 2,
-                          backgroundColor: '#FFD700',
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          borderWidth: focused ? 2 : 0,
-                          borderColor: '#43BCCD',
-                          opacity: focused ? 1 : 0.6,
-                        }}>
-                          <Text style={{ fontSize: size * 0.6 }}>{currentUser.profileImageUrl}</Text>
-                        </View>
                       );
                     })()
                   ) : (
@@ -309,6 +296,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Stories" component={StoriesScreen} />
         <Stack.Screen name="Activities" component={ActivitiesScreen} />
         <Stack.Screen name="Exercise" component={ExerciseScreen} />
+        <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
       </Stack.Navigator>
   );
 }

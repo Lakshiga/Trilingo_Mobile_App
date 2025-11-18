@@ -25,7 +25,7 @@ const VideosScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Fetch videos from backend (Activities with ActivityTypeId = 7 for Story Player or video content)
-useEffect(() => {
+  useEffect(() => {
     const fetchVideos = async () => {
       try {
         setLoading(true);

@@ -9,36 +9,15 @@ import { useUser } from '../context/UserContext';
 import { API_BASE_URL } from '../config/apiConfig';
 
 // Helper function to convert server path to full URL
-const getFullImageUrl = (imageUrl: string): string | null => {
-  if (!imageUrl || imageUrl.trim().length === 0) {
-    return null;
-  }
-
-  // If it's already a full URL or local file, return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || 
-      imageUrl.startsWith('file://') || imageUrl.startsWith('data:') || 
-      imageUrl.startsWith('content://') || imageUrl.startsWith('asset://')) {
+const getFullImageUrl = (imageUrl: string): string => {
+  if (imageUrl.startsWith('http') || imageUrl.startsWith('file') || imageUrl.startsWith('data:') || imageUrl.startsWith('content://')) {
     return imageUrl;
   }
-  
-  // If it's a server path like "/uploads/profiles/image.jpg", construct full URL
-  if (imageUrl.startsWith('/uploads/') || imageUrl.startsWith('/profiles/')) {
+  if (imageUrl.startsWith('/uploads/')) {
     const baseUrl = API_BASE_URL.replace('/api', '');
     return `${baseUrl}${imageUrl}`;
   }
-  
-  // Check if it's an emoji or invalid text
-  if (imageUrl.length <= 10 && !imageUrl.includes('.') && !imageUrl.includes('/')) {
-    return null;
-  }
-  
-  // If it looks like a relative path, try to construct full URL
-  if (imageUrl.startsWith('/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
-  }
-  
-  return null;
+  return imageUrl;
 };
 
 const HomeScreen: React.FC = () => {
@@ -130,20 +109,21 @@ const HomeScreen: React.FC = () => {
           >
             <View style={styles.profileSection}>
               {currentUser?.profileImageUrl ? (
-                (() => {
-                  const imageUri = getFullImageUrl(currentUser.profileImageUrl);
-                  return imageUri ? (
-                    <Image 
-                      source={{ uri: imageUri }} 
-                      style={styles.profileImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.profileImage}>
-                      <Text style={styles.emojiAvatar}>{currentUser.profileImageUrl}</Text>
-                    </View>
-                  );
-                })()
+                // Check if it's a URI or an emoji
+                (currentUser.profileImageUrl.includes('://') || currentUser.profileImageUrl.startsWith('/')) && 
+                currentUser.profileImageUrl.length > 5 ? (
+                  // It's a URI - display as image
+                  <Image 
+                    source={{ uri: getFullImageUrl(currentUser.profileImageUrl) }} 
+                    style={styles.profileImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  // It's an emoji - display as text
+                  <View style={styles.profileImage}>
+                    <Text style={styles.emojiAvatar}>{currentUser.profileImageUrl}</Text>
+                  </View>
+                )
               ) : (
                 <Ionicons name="person-circle-outline" size={44} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
               )}

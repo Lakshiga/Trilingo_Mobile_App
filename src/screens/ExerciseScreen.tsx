@@ -9,12 +9,15 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Audio } from 'expo-av';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import apiService, { ExerciseDto, ActivityDto } from '../services/api';
+import { extractExerciseMediaInfo, parseExerciseJson } from '../utils/exerciseHelpers';
 
 const { width } = Dimensions.get('window');
 
@@ -27,7 +30,7 @@ type ExerciseScreenRouteParams = {
 };
 
 const ExerciseScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: ExerciseScreenRouteParams }, 'params'>>();
   const { theme, isDarkMode } = useTheme();
   const { activity } = route.params || { activity: { id: 0, title: 'Activity', description: '' } };
@@ -75,17 +78,21 @@ const ExerciseScreen: React.FC = () => {
     }
   };
 
-  const parseExerciseData = (jsonData: string) => {
-    try {
-      return JSON.parse(jsonData);
-    } catch (e) {
-      return { title: 'Exercise', description: 'Complete this exercise' };
-    }
+  const openExerciseDetail = (startIndex: number) => {
+    navigation.navigate('ExerciseDetail' as never, {
+      activity,
+      exercises,
+      startIndex,
+    } as never);
   };
 
   const ExerciseCard = ({ exercise, index }: { exercise: ExerciseDto; index: number }) => {
-    const exerciseData = parseExerciseData(exercise.jsonData);
+    const exerciseData = parseExerciseJson(exercise.jsonData);
+    const { imageUrl, audioUrl, title, description } = extractExerciseMediaInfo(exerciseData);
     const cardAnim = useRef(new Animated.Value(0)).current;
+    const [sound, setSound] = useState<Audio.Sound | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [imageError, setImageError] = useState(false);
 
     useEffect(() => {
       Animated.timing(cardAnim, {
@@ -95,6 +102,53 @@ const ExerciseScreen: React.FC = () => {
         useNativeDriver: true,
       }).start();
     }, []);
+
+    // Cleanup audio on unmount
+    useEffect(() => {
+      return () => {
+        if (sound) {
+          sound.unloadAsync().catch(console.error);
+        }
+      };
+    }, [sound]);
+
+    const handlePlayAudio = async () => {
+      if (!audioUrl) return;
+
+      try {
+        if (sound) {
+          // If sound is already loaded, toggle play/pause
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            if (status.isPlaying) {
+              await sound.pauseAsync();
+              setIsPlaying(false);
+            } else {
+              await sound.playAsync();
+              setIsPlaying(true);
+            }
+          }
+        } else {
+          // Load and play new audio
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true }
+          );
+          setSound(newSound);
+          setIsPlaying(true);
+
+          // Handle playback finish
+          newSound.setOnPlaybackStatusUpdate((status: any) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        Alert.alert('Error', 'Could not play audio. Please try again.');
+      }
+    };
 
     const gradients: readonly [string, string, ...string[]][] = [
       ['#FF6B9D', '#C06C84'] as const,
@@ -124,7 +178,7 @@ const ExerciseScreen: React.FC = () => {
           },
         ]}
       >
-        <TouchableOpacity activeOpacity={0.9}>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => openExerciseDetail(index)}>
           <LinearGradient
             colors={gradient}
             start={{ x: 0, y: 0 }}
@@ -135,15 +189,44 @@ const ExerciseScreen: React.FC = () => {
               <View style={styles.exerciseNumber}>
                 <Text style={styles.exerciseNumberText}>{index + 1}</Text>
               </View>
+              
+              {/* Image Display */}
+              {imageUrl && !imageError && (
+                <View style={styles.exerciseImageContainer}>
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.exerciseImage}
+                    resizeMode="cover"
+                    onError={() => setImageError(true)}
+                  />
+                </View>
+              )}
+              
               <View style={styles.exerciseTextContainer}>
                 <Text style={styles.exerciseTitle}>
-                  {exerciseData.title || `Exercise ${index + 1}`}
+                  {title || `Exercise ${index + 1}`}
                 </Text>
                 <Text style={styles.exerciseDescription} numberOfLines={2}>
-                  {exerciseData.description || 'Complete this exercise to continue'}
+                  {description || 'Complete this exercise to continue'}
                 </Text>
               </View>
-              <MaterialIcons name="play-arrow" size={32} color="#fff" />
+              
+              {/* Audio Play Button */}
+              {audioUrl ? (
+                <TouchableOpacity
+                  onPress={handlePlayAudio}
+                  style={styles.audioButton}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name={isPlaying ? 'pause' : 'play-arrow'}
+                    size={32}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+              ) : (
+                <MaterialIcons name="play-arrow" size={32} color="#fff" />
+              )}
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -310,6 +393,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  exerciseImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  exerciseImage: {
+    width: '100%',
+    height: '100%',
+  },
   exerciseTextContainer: {
     flex: 1,
   },
@@ -323,6 +420,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     opacity: 0.9,
+  },
+  audioButton: {
+    padding: 4,
   },
   emptyContainer: {
     flex: 1,
