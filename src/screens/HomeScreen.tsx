@@ -6,19 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
-import { API_BASE_URL } from '../config/apiConfig';
-
-// Helper function to convert server path to full URL
-const getFullImageUrl = (imageUrl: string): string => {
-  if (imageUrl.startsWith('http') || imageUrl.startsWith('file') || imageUrl.startsWith('data:') || imageUrl.startsWith('content://')) {
-    return imageUrl;
-  }
-  if (imageUrl.startsWith('/uploads/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${imageUrl}`;
-  }
-  return imageUrl;
-};
+import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -109,21 +97,34 @@ const HomeScreen: React.FC = () => {
           >
             <View style={styles.profileSection}>
               {currentUser?.profileImageUrl ? (
-                // Check if it's a URI or an emoji
-                (currentUser.profileImageUrl.includes('://') || currentUser.profileImageUrl.startsWith('/')) && 
-                currentUser.profileImageUrl.length > 5 ? (
-                  // It's a URI - display as image
-                  <Image 
-                    source={{ uri: getFullImageUrl(currentUser.profileImageUrl) }} 
-                    style={styles.profileImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  // It's an emoji - display as text
-                  <View style={styles.profileImage}>
-                    <Text style={styles.emojiAvatar}>{currentUser.profileImageUrl}</Text>
-                  </View>
-                )
+                (() => {
+                  const imageUri = resolveImageUri(currentUser.profileImageUrl);
+                  const emojiValue = isEmojiLike(currentUser.profileImageUrl)
+                    ? currentUser.profileImageUrl
+                    : null;
+
+                  if (imageUri) {
+                    return (
+                      <Image 
+                        source={{ uri: imageUri }} 
+                        style={styles.profileImage}
+                        resizeMode="cover"
+                      />
+                    );
+                  }
+
+                  if (emojiValue) {
+                    return (
+                      <View style={styles.profileImage}>
+                        <Text style={styles.emojiAvatar}>{emojiValue}</Text>
+                      </View>
+                    );
+                  }
+
+                  return (
+                    <Ionicons name="person-circle-outline" size={44} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
+                  );
+                })()
               ) : (
                 <Ionicons name="person-circle-outline" size={44} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
               )}

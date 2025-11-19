@@ -97,11 +97,20 @@ export class UserStorage {
 
       return null;
     } catch (error: any) {
-      console.error('Login error:', error.message);
+      const errorMessage = error?.message || 'Unknown error';
+      console.error('Login error:', errorMessage);
       
-      // Check if it's a network error and provide helpful message
-      if (error.message.includes('Network error') || error.message.includes('Connection')) {
+      // Network / connection errors - run diagnostics
+      if (errorMessage.includes('Network error') || errorMessage.includes('Connection')) {
         const diagnostic = await NetworkDiagnostics.testConnection();
+        
+        // If CloudFront works, tell the user to use production URL
+        if (diagnostic.success && diagnostic.message.includes('https://')) {
+          throw new Error(
+            'Backend is reachable via CloudFront. Please update the API configuration or disable EXPO_PUBLIC_ENABLE_LOCAL.'
+          );
+        }
+        
         throw new Error(`Backend connection failed: ${diagnostic.message}. Please check if the backend server is running and accessible.`);
       }
       

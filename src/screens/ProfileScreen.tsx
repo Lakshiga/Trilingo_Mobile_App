@@ -106,6 +106,9 @@ export default function ProfileScreen() {
       const stored = await AsyncStorage.getItem(getProfileStorageKey(currentUser));
       if (stored && isValidProfileImage(stored)) {
         setProfileImage(stored);
+        if (currentUser && currentUser.profileImageUrl !== stored) {
+          await updateUser({ profileImageUrl: stored });
+        }
         return true;
       }
     } catch (error) {

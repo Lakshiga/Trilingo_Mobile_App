@@ -91,34 +91,33 @@ const deriveHostFromRuntime = (): string | null => {
 };
 
 export const getApiBaseUrl = (): string => {
-  // Check for production environment variable
-  const isProduction = (process as any)?.env?.EXPO_PUBLIC_ENV === 'production' || 
-                       (process as any)?.env?.NODE_ENV === 'production';
-  
-  // Option 1: Use CloudFront (Production)
-  // return API_CONFIG.PRODUCTION;
-  
-  // Option 2: Use EC2 directly (For testing if CloudFront not working)
-  // Uncomment below to use EC2 directly:
-  return 'http://13.250.26.7:5166/api';
-  
-  // Option 3: Use CloudFront (Uncomment if EC2 direct works)
-  // return API_CONFIG.PRODUCTION;
-  
-  /* Uncomment below to use local backend for development:
-  if (isProduction) {
-    return API_CONFIG.PRODUCTION;
-  }
-  */
+  const env = (process as any)?.env ?? {};
+  const isProduction =
+    env.EXPO_PUBLIC_ENV === 'production' ||
+    env.NODE_ENV === 'production' ||
+    env.EXPO_PUBLIC_FORCE_PROD === 'true';
+  const enableLocalDev = env.EXPO_PUBLIC_ENABLE_LOCAL === 'true';
 
-  const fromEnv = (process as any)?.env?.EXPO_PUBLIC_API_URL || (process as any)?.env?.API_URL;
-  if (fromEnv && typeof fromEnv === 'string') {
-    return normalizeApiUrl(fromEnv);
+  const manualOverride =
+    (env.EXPO_PUBLIC_API_URL as string | undefined) ??
+    (env.API_URL as string | undefined);
+  if (manualOverride) {
+    return normalizeApiUrl(manualOverride);
+  }
+
+  const manualDirect = env.EXPO_PUBLIC_API_DIRECT as string | undefined;
+  if (manualDirect) {
+    return normalizeApiUrl(manualDirect);
   }
 
   const configured = getConfiguredApiUrl();
   if (configured) {
     return configured;
+  }
+
+  // Default to CloudFront unless local development is explicitly enabled
+  if (isProduction || !enableLocalDev) {
+    return API_CONFIG.PRODUCTION;
   }
 
   const host = deriveHostFromRuntime();
@@ -130,23 +129,31 @@ export const getApiBaseUrl = (): string => {
     return `http://${resolvedHost}:5166/api`;
   }
 
-  if (Platform.OS === 'android') return API_CONFIG.ANDROID_EMULATOR;
-  if (Platform.OS === 'ios') return API_CONFIG.IOS_SIMULATOR;
+  if (Platform.OS === 'android' && enableLocalDev) return API_CONFIG.ANDROID_EMULATOR;
+  if (Platform.OS === 'ios' && enableLocalDev) return API_CONFIG.IOS_SIMULATOR;
 
-  // Default to physical device configuration (Expo Go / LAN)
-  return API_CONFIG.PHYSICAL_DEVICE;
+  return API_CONFIG.PRODUCTION;
 };
 
 // Fallback URLs for testing
 const derivedHost = deriveHostFromRuntime();
 const configuredUrl = getConfiguredApiUrl();
 export const FALLBACK_URLS = [
+  API_CONFIG.PRODUCTION,
+  configuredUrl ? configuredUrl : '',
   API_CONFIG.PHYSICAL_DEVICE,
   API_CONFIG.ANDROID_EMULATOR,
   API_CONFIG.IOS_SIMULATOR,
-  configuredUrl ? configuredUrl : '',
-  derivedHost ? `http://${derivedHost === 'localhost' || derivedHost === '127.0.0.1' ? (Platform.OS === 'android' ? '10.0.2.2' : 'localhost') : derivedHost}:5166/api` : '',
-].filter(Boolean) as string[];
+  derivedHost
+    ? `http://${
+        derivedHost === 'localhost' || derivedHost === '127.0.0.1'
+          ? Platform.OS === 'android'
+            ? '10.0.2.2'
+            : 'localhost'
+          : derivedHost
+      }:5166/api`
+    : '',
+].filter((value) => typeof value === 'string' && value.length > 0) as string[];
 
 // Current API base URL
 export const API_BASE_URL = getApiBaseUrl();

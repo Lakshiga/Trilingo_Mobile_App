@@ -1,4 +1,4 @@
-import { API_BASE_URL, FALLBACK_URLS } from '../config/apiConfig';
+import { API_BASE_URL, FALLBACK_URLS, API_CONFIG } from '../config/apiConfig';
 import axios from 'axios';
 
 export class NetworkDiagnostics {
@@ -36,10 +36,41 @@ export class NetworkDiagnostics {
         };
       }
       
-      // Try fallback URLs
+      // Try CloudFront first (most reliable in production)
       console.log('Trying fallback URLs...');
+      const cloudFrontUrl = API_CONFIG.PRODUCTION;
+      if (cloudFrontUrl !== API_BASE_URL) {
+        try {
+          console.log(`Testing fallback URL: ${cloudFrontUrl}`);
+          const response = await axios.post(
+            `${cloudFrontUrl}/auth/login`,
+            { identifier: 'test', password: 'test' },
+            {
+              timeout: 5000,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          
+          return {
+            success: true,
+            message: `CloudFront URL works! Use: ${cloudFrontUrl} (Status: ${response.status})`,
+          };
+        } catch (fallbackError: any) {
+          if (fallbackError.response && fallbackError.response.status === 401) {
+            return {
+              success: true,
+              message: `CloudFront URL works! Use: ${cloudFrontUrl} (401 = expected for invalid credentials)`,
+            };
+          }
+          console.log(`CloudFront ${cloudFrontUrl} failed:`, fallbackError.message);
+        }
+      }
+      
+      // Try remaining fallback URLs
       for (const url of FALLBACK_URLS) {
-        if (url === API_BASE_URL) continue; // Skip the one we already tried
+        if (url === API_BASE_URL || url === cloudFrontUrl) continue; // Skip ones we already tried
         
         try {
           console.log(`Testing fallback URL: ${url}`);

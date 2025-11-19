@@ -28,7 +28,6 @@ export const getCloudFrontUrl = (path: string | null | undefined): string | null
     return null;
   }
 
-  // Normalize the path: remove leading slash if present, then add it back
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   
   // Construct full CloudFront URL
