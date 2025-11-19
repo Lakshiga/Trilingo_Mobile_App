@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,12 +7,16 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
+import { getTranslation, Language } from '../utils/translations';
+
+const { width, height } = Dimensions.get('window');
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { theme, isDarkMode } = useTheme();
-  const { currentUser, login } = useUser();
+  const { isDarkMode } = useTheme();
+  const { currentUser } = useUser();
   const isGuest = currentUser?.isGuest || !currentUser;
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
   
   // Button data with vibrant, child-friendly colors and images
   const buttons = [
@@ -25,7 +29,7 @@ const HomeScreen: React.FC = () => {
     { 
       id: 'activities', 
       title: 'Activities', 
-      image: require('../../assets/Gemini_Generated_Image_uhk48suhk48suhk4.png'), // Using Stories picture
+      image: require('../../assets/Gemini_Generated_Image_8d6bgu8d6bgu8d6b (1).png'), // Using Stories picture
       color: ['#43BCCD', '#5DD3A1'] 
     },
     { 
@@ -41,6 +45,38 @@ const HomeScreen: React.FC = () => {
       color: ['#FFB366', '#FF8C42'] 
     },
   ];
+
+  type StatCard = {
+    id: string;
+    label: string;
+    value: string;
+    colors: [string, string];
+    icon: string;
+  };
+
+  const statsCards: StatCard[] = React.useMemo(() => [
+    {
+      id: 'lessons',
+      label: getTranslation(nativeLanguage, 'lessons'),
+      value: '24',
+      colors: ['#FF6B9D', '#FF8FAB'],
+      icon: '📚',
+    },
+    {
+      id: 'points',
+      label: getTranslation(nativeLanguage, 'points'),
+      value: '156',
+      colors: ['#FFD700', '#FFA500'],
+      icon: '🏆',
+    },
+    {
+      id: 'days',
+      label: getTranslation(nativeLanguage, 'days'),
+      value: '12',
+      colors: ['#667EEA', '#7A8EFC'],
+      icon: '🔥',
+    },
+  ], [nativeLanguage]);
 
   const handleSongsPress = () => {
     if (isGuest) {
@@ -93,7 +129,7 @@ const HomeScreen: React.FC = () => {
         {!isGuest ? (
           <TouchableOpacity 
             style={styles.rightIconContainer}
-            onPress={() => navigation.navigate('Profile' as never)}
+            onPress={() => navigation.navigate('EditProfile' as never)}
           >
             <View style={styles.profileSection}>
               {currentUser?.profileImageUrl ? (
@@ -156,11 +192,28 @@ const HomeScreen: React.FC = () => {
             <View style={styles.welcomeContainer}>
               <Text style={styles.welcomeText}>
                 {currentUser && !currentUser.isGuest 
-                  ? `Welcome to ${currentUser.name || currentUser.username}!` 
-                  : 'Welcome to Trilingo!'}
+                  ? `${getTranslation(nativeLanguage, 'welcomeTo')} ${currentUser.name || currentUser.username}!` 
+                  : getTranslation(nativeLanguage, 'welcome')}
               </Text>
-              <Text style={styles.subtitleText}>Learn with Fun & Creativity</Text>
+              <Text style={styles.subtitleText}>{getTranslation(nativeLanguage, 'learnWithFun')}</Text>
             </View>
+          </View>
+
+          <View style={styles.statsRow}>
+            {statsCards.map((card) => (
+              <View key={card.id} style={styles.statCard}>
+                <LinearGradient
+                  colors={card.colors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statGradient}
+                >
+                  <Text style={styles.statIcon}>{card.icon}</Text>
+                  <Text style={styles.statValue}>{card.value}</Text>
+                  <Text style={styles.statLabel}>{card.label}</Text>
+                </LinearGradient>
+              </View>
+            ))}
           </View>
           
           <View style={styles.buttonRow}>
@@ -232,7 +285,7 @@ const HomeScreen: React.FC = () => {
           </View>
           
           <View style={styles.bottomSection}>
-            <Text style={styles.bottomText}>🌟 Start your learning adventure today! 🌟</Text>
+            <Text style={styles.bottomText}>{getTranslation(nativeLanguage, 'startLearningAdventure')}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -250,8 +303,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: Math.max(16, width * 0.04),
+    paddingVertical: Math.max(12, height * 0.018),
     backgroundColor: 'white',
     borderBottomWidth: 2,
     borderBottomColor: '#EDEDED',
@@ -261,6 +314,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     zIndex: 1,
+    minHeight: Math.max(50, height * 0.07),
   },
   leftIcon: {
     flex: 1,
@@ -272,7 +326,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   animationPlaceholder: {
-    fontSize: 25,
+    fontSize: Math.max(20, width * 0.065),
     fontWeight: 'bold',
     color: '#FF6B6B',
     textAlign: 'center',
@@ -292,9 +346,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   profileImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: Math.max(40, width * 0.11),
+    height: Math.max(40, width * 0.11),
+    borderRadius: Math.max(20, width * 0.055),
     borderWidth: 2,
     borderColor: '#4ECDC4',
     justifyContent: 'center',
@@ -306,9 +360,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   profileName: {
-    fontSize: 12,
+    fontSize: Math.max(10, width * 0.03),
     fontWeight: '600',
-    maxWidth: 80,
+    maxWidth: Math.max(70, width * 0.2),
     textAlign: 'center',
     marginTop: 2,
   },
@@ -331,12 +385,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 5,
+    paddingHorizontal: Math.max(16, width * 0.04),
+    paddingTop: Math.max(16, height * 0.02),
+    paddingBottom: Math.max(8, height * 0.01),
   },
   headerText: {
-    marginBottom: 30,
+    marginBottom: Math.max(16, height * 0.02),
+    width: '100%',
   },
   welcomeContainer: {
     alignItems: 'center',
@@ -347,7 +402,7 @@ const styles = StyleSheet.create({
     fontWeight: 'normal',
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: Math.max(22, width * 0.07),
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 5,
@@ -355,34 +410,80 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
+    paddingHorizontal: Math.max(8, width * 0.02),
   },
   subtitleText: {
-    fontSize: 18,
+    fontSize: Math.max(14, width * 0.045),
     color: '#FFFFFF',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
+    paddingHorizontal: Math.max(8, width * 0.02),
+  },
+  statsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    marginBottom: Math.max(20, height * 0.025),
+    paddingHorizontal: Math.max(4, width * 0.01),
+  },
+  statCard: {
+    flex: 1,
+    marginHorizontal: Math.max(3, width * 0.008),
+    maxWidth: '32%',
+  },
+  statGradient: {
+    borderRadius: Math.max(16, width * 0.04),
+    paddingVertical: Math.max(10, height * 0.012),
+    paddingHorizontal: Math.max(4, width * 0.015),
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
+    minHeight: Math.max(70, height * 0.09),
+  },
+  statIcon: {
+    fontSize: Math.max(18, width * 0.05),
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: Math.max(18, width * 0.05),
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: Math.max(10, width * 0.03),
+    color: 'rgba(255,255,255,0.95)',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
-    marginBottom: 10,
+    marginBottom: Math.max(8, height * 0.01),
+    gap: Math.max(8, width * 0.02),
   },
   buttonWrapper: {
     width: '45%',
+    maxWidth: Math.min(width * 0.45, 200),
     aspectRatio: 1,
+    minHeight: Math.max(120, height * 0.15),
   },
   button: {
     flex: 1,
-    borderRadius: 25,
+    borderRadius: Math.max(20, width * 0.06),
     overflow: 'hidden',
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
+    minHeight: Math.max(120, height * 0.15),
   },
   fullButtonImage: {
     width: '100%',
@@ -390,17 +491,18 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   bottomSection: {
-    marginTop: 15,
-    marginBottom: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 15,
+    marginTop: Math.max(12, height * 0.015),
+    marginBottom: Math.max(20, height * 0.025),
+    paddingVertical: Math.max(10, height * 0.012),
+    paddingHorizontal: Math.max(12, width * 0.03),
     backgroundColor: 'rgba(19, 206, 29, 0.9)',
-    borderRadius: 20,
+    borderRadius: Math.max(18, width * 0.05),
     borderWidth: 2,
     borderColor: '#FFFFFF',
+    width: '100%',
   },
   bottomText: {
-    fontSize: 16,
+    fontSize: Math.max(14, width * 0.04),
     fontWeight: '600',
     color: '#2C3E50',
     textAlign: 'center',

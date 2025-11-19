@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
   Image,
   Animated,
@@ -12,7 +11,6 @@ import {
   Switch,
   Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService from '../services/api';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
+import { getTranslation, Language } from '../utils/translations';
 
 interface SettingItem {
   id: string;
@@ -82,9 +81,9 @@ const isValidProfileImage = (imageUrl: string): boolean => {
 };
 
 export default function ProfileScreen() {
-  const navigation = useNavigation();
   const { isDarkMode, theme, setDarkMode } = useTheme();
   const { currentUser, logout, updateUser } = useUser();
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
   const [notifications, setNotifications] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
@@ -305,36 +304,29 @@ export default function ProfileScreen() {
 
   const settingsData: SettingItem[] = [
     {
-      id: '0',
-      title: 'Edit Profile',
-      icon: 'edit',
-      type: 'navigate',
-      subtitle: 'Update your information',
-    },
-    {
-      id: '1',
-      title: 'Change Language',
+      id: 'language',
+      title: getTranslation(nativeLanguage, 'changeLanguage'),
       icon: 'language',
       type: 'navigate',
-      subtitle: 'English',
+      subtitle: nativeLanguage,
     },
     {
-      id: '2',
-      title: 'Dark Mode',
+      id: 'dark-mode',
+      title: getTranslation(nativeLanguage, 'darkMode'),
       icon: 'dark-mode',
       type: 'toggle',
       value: isDarkMode,
     },
     {
-      id: '3',
-      title: 'Notifications',
+      id: 'notifications',
+      title: getTranslation(nativeLanguage, 'notifications'),
       icon: 'notifications',
       type: 'toggle',
       value: notifications,
     },
     {
-      id: '4',
-      title: 'Change Password',
+      id: 'change-password',
+      title: getTranslation(nativeLanguage, 'changePassword'),
       icon: 'lock',
       type: 'navigate',
     },
@@ -381,12 +373,7 @@ export default function ProfileScreen() {
 
   const handleSettingPress = (item: SettingItem) => {
     if (item.type === 'navigate') {
-      if (item.id === '0') {
-        // Navigate to Edit Profile screen
-        navigation.navigate('EditProfile' as never);
-      } else {
-        console.log(`Navigate to ${item.title}`);
-      }
+      console.log(`Navigate to ${item.title}`);
     } else if (item.type === 'action') {
       handleLogout();
     }
@@ -438,8 +425,8 @@ export default function ProfileScreen() {
             <Switch
               value={item.value}
               onValueChange={(value) => {
-                if (item.id === '2') setDarkMode(value);
-                if (item.id === '3') setNotifications(value);
+                if (item.id === 'dark-mode') setDarkMode(value);
+                if (item.id === 'notifications') setNotifications(value);
               }}
               trackColor={{ false: '#D1D5DB', true: '#43BCCD' }}
               thumbColor={item.value ? '#fff' : '#f4f3f4'}
@@ -489,21 +476,18 @@ export default function ProfileScreen() {
           <Text style={styles.starText}>✨</Text>
         </View>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Profile Header */}
-          <Animated.View
-            style={[
-              styles.profileHeader,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
+        <View style={styles.contentWrapper}>
+          <View style={styles.scrollableContent}>
+            {/* Profile Header */}
+            <Animated.View
+              style={[
+                styles.profileHeader,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }],
+                },
+              ]}
+            >
             <LinearGradient
               colors={theme.profileGradient}
               start={{ x: 0, y: 0 }}
@@ -565,39 +549,6 @@ export default function ProfileScreen() {
                 {currentUser?.email || 'user@example.com'}
               </Text>
 
-              {/* Stats */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statItem}>
-                  <LinearGradient
-                    colors={['#FF6B9D', '#FF8FAB']}
-                    style={styles.statBubble}
-                  >
-                    <Text style={styles.statEmoji}>📚</Text>
-                    <Text style={styles.statValue}>24</Text>
-                    <Text style={styles.statLabel}>Lessons</Text>
-                  </LinearGradient>
-                </View>
-                <View style={styles.statItem}>
-                  <LinearGradient
-                    colors={['#FFD700', '#FFA500']}
-                    style={styles.statBubble}
-                  >
-                    <Text style={styles.statEmoji}>🏆</Text>
-                    <Text style={styles.statValue}>156</Text>
-                    <Text style={styles.statLabel}>Points</Text>
-                  </LinearGradient>
-                </View>
-                <View style={styles.statItem}>
-                  <LinearGradient
-                    colors={['#667EEA', '#7A8EFC']}
-                    style={styles.statBubble}
-                  >
-                    <Text style={styles.statEmoji}>🔥</Text>
-                    <Text style={styles.statValue}>12</Text>
-                    <Text style={styles.statLabel}>Days</Text>
-                  </LinearGradient>
-                </View>
-              </View>
             </LinearGradient>
           </Animated.View>
 
@@ -618,7 +569,7 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Settings</Text>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{getTranslation(nativeLanguage, 'settings')}</Text>
             <View style={[styles.settingsCard, { backgroundColor: theme.settingsCard }]}>
               {settingsData.map((item, index) => (
                 <View key={item.id}>
@@ -628,8 +579,9 @@ export default function ProfileScreen() {
               ))}
             </View>
           </Animated.View>
+          </View>
 
-          {/* Logout Button */}
+          {/* Logout Button - Fixed at bottom */}
           <Animated.View
             style={[
               styles.logoutContainer,
@@ -640,13 +592,10 @@ export default function ProfileScreen() {
           >
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
               <MaterialIcons name="logout" size={20} color="#EF4444" />
-              <Text style={styles.logoutText}>Logout</Text>
+              <Text style={styles.logoutText}>{getTranslation(nativeLanguage, 'logout')}</Text>
             </TouchableOpacity>
           </Animated.View>
-
-          {/* Version */}
-          <Text style={styles.versionText}>Version 1.0.0</Text>
-        </ScrollView>
+        </View>
       </LinearGradient>
 
       <Modal
@@ -726,20 +675,22 @@ const styles = StyleSheet.create({
   starText: {
     fontSize: 24,
   },
-  scrollView: {
+  contentWrapper: {
     flex: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 20,
   },
-  scrollContent: {
-    paddingBottom: 100,
+  scrollableContent: {
+    flex: 1,
   },
   profileHeader: {
     paddingHorizontal: 20,
-    paddingTop: 60,
-    marginBottom: 20,
+    paddingTop: 40,
+    marginBottom: 12,
   },
   profileCard: {
     borderRadius: 28,
-    padding: 28,
+    padding: 20,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -749,7 +700,7 @@ const styles = StyleSheet.create({
   },
   profilePictureContainer: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   profilePicture: {
     width: 110,
@@ -820,60 +771,20 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 15,
     color: 'rgba(255, 255, 255, 0.95)',
-    marginBottom: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 12,
-  },
-  statItem: {
-    flex: 1,
-  },
-  statBubble: {
-    borderRadius: 20,
-    padding: 16,
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
-  statEmoji: {
-    fontSize: 28,
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.95)',
+    marginBottom: 0,
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
   settingsSection: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2C3E50',
-    marginBottom: 16,
+    marginBottom: 10,
     textShadowColor: 'rgba(0, 0, 0, 0.1)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
@@ -892,7 +803,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 18,
+    paddingVertical: 12,
     paddingHorizontal: 18,
   },
   settingLeft: {
@@ -936,7 +847,7 @@ const styles = StyleSheet.create({
   },
   logoutContainer: {
     paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingBottom: 10,
   },
   logoutButton: {
     flexDirection: 'row',

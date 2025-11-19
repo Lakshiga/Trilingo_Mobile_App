@@ -14,9 +14,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
+import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
+import { getTranslation, Language } from '../utils/translations';
+import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 interface Activity {
   id: number;
@@ -80,7 +83,11 @@ const defaultActivities: Activity[] = [
 ];
 
 // Map backend ActivityDto to mobile Activity interface
-const mapActivityDtoToActivity = (dto: ActivityDto, index: number): Activity => {
+const mapActivityDtoToActivity = (
+  dto: ActivityDto,
+  index: number,
+  learningLanguage: Language
+): Activity => {
   // Icon mapping based on activity type or name
   const iconMap: { [key: string]: keyof typeof MaterialIcons.glyphMap } = {
     'puzzle': 'extension',
@@ -112,29 +119,49 @@ const mapActivityDtoToActivity = (dto: ActivityDto, index: number): Activity => 
     ['#FFDAB9', '#FFC09F'] as const,
   ];
 
+  // Get title in learning language
+  const title = getLearningLanguageField(learningLanguage, dto);
+  
+  // Get description in learning language
+  let description = 'Fun activity';
+  try {
+    if (dto.details_JSON) {
+      const parsed = JSON.parse(dto.details_JSON);
+      // Check if description is multilingual object
+      if (parsed.description) {
+        if (typeof parsed.description === 'object') {
+          const langKey = getLanguageKey(learningLanguage);
+          description = parsed.description[langKey] || 
+                        parsed.description.en || 
+                        'Fun activity';
+        } else {
+          description = parsed.description;
+        }
+      } else {
+        description = 'Fun activity';
+      }
+    }
+  } catch (e) {
+    description = 'Fun activity';
+  }
+
   return {
     id: dto.id,
-    title: dto.name_en || dto.name_ta || dto.name_si || 'Activity',
+    title: title || 'Activity',
     icon: icon,
     color: gradients[index % gradients.length][0],
     gradient: gradients[index % gradients.length],
-    description: (() => {
-      try {
-        if (dto.details_JSON) {
-          const parsed = JSON.parse(dto.details_JSON);
-          return parsed.description || 'Fun activity';
-        }
-        return 'Fun activity';
-      } catch (e) {
-        return 'Fun activity';
-      }
-    })(),
+    description: description,
   };
 };
 
 const ActivitiesScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme, isDarkMode } = useTheme();
+  const { currentUser } = useUser();
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  
   const [activities, setActivities] = useState<Activity[]>(defaultActivities);
   const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -149,9 +176,9 @@ const ActivitiesScreen: React.FC = () => {
         const backendActivities = await apiService.getAllActivities();
         
         if (backendActivities && backendActivities.length > 0) {
-          // Map backend activities to mobile format
+          // Map backend activities to mobile format using learning language
           const mappedActivities = backendActivities.map((dto, index) => 
-            mapActivityDtoToActivity(dto, index)
+            mapActivityDtoToActivity(dto, index, learningLanguage)
           );
           setActivities(mappedActivities);
         } else {
@@ -173,7 +200,7 @@ const ActivitiesScreen: React.FC = () => {
     };
 
     fetchActivities();
-  }, []);
+  }, [learningLanguage]);
 
   // Update card animations when activities change
   useEffect(() => {
@@ -268,13 +295,32 @@ const ActivitiesScreen: React.FC = () => {
             end={{ x: 1, y: 1 }}
             style={styles.card}
           >
-            <View style={styles.iconContainer}>
-              <MaterialIcons name={activity.icon} size={40} color="#fff" />
+            <View style={styles.cardHeader}>
+              <View style={styles.cardIconWrapper}>
+                <MaterialIcons name={activity.icon} size={36} color="#fff" />
+              </View>
+              <View style={styles.cardTextContent}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {activity.title}
+                </Text>
+                <Text style={styles.cardDescription} numberOfLines={2}>
+                  {activity.description || getTranslation(nativeLanguage, 'funActivityLabel')}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.cardTitle}>{activity.title}</Text>
-            <Text style={styles.cardDescription}>{activity.description}</Text>
-            <View style={styles.arrowContainer}>
-              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+
+            <View style={styles.cardFooter}>
+              <View style={styles.cardTag}>
+                <Text style={styles.cardTagText}>
+                  {getTranslation(nativeLanguage, 'funActivityLabel')}
+                </Text>
+              </View>
+              <View style={styles.cardAction}>
+                <Text style={styles.cardActionText}>
+                  {getTranslation(nativeLanguage, 'start')}
+                </Text>
+                <MaterialIcons name="arrow-forward" size={22} color="#fff" />
+              </View>
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -309,8 +355,12 @@ const ActivitiesScreen: React.FC = () => {
             ]}
           >
             <Text style={styles.emoji}>🎯</Text>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Fun Activities!</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Choose your adventure</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>
+              {getTranslation(nativeLanguage, 'funActivities')}
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              {getTranslation(nativeLanguage, 'chooseYourAdventure')}
+            </Text>
           </Animated.View>
 
           {/* Loading Indicator */}
@@ -318,7 +368,7 @@ const ActivitiesScreen: React.FC = () => {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={theme.textPrimary || '#4ECDC4'} />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-                Loading activities...
+                {getTranslation(nativeLanguage, 'loadingActivities')}
               </Text>
             </View>
           )}
@@ -333,7 +383,7 @@ const ActivitiesScreen: React.FC = () => {
               ) : (
                 <View style={styles.emptyContainer}>
                   <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                    No activities available
+                    {getTranslation(nativeLanguage, 'noActivitiesAvailable')}
                   </Text>
                 </View>
               )}
@@ -354,12 +404,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 45,
-    left: 16,
+    top: Math.max(40, height * 0.05),
+    left: Math.max(12, width * 0.04),
     zIndex: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 25,
-    padding: 10,
+    padding: Math.max(8, width * 0.025),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -370,8 +420,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 100,
-    paddingBottom: 30,
+    paddingTop: Math.max(80, height * 0.1),
+    paddingBottom: Math.max(20, height * 0.03),
+    paddingHorizontal: Math.max(12, width * 0.03),
   },
   header: {
     alignItems: 'center',
@@ -383,31 +434,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   title: {
-    fontSize: 32,
+    fontSize: Math.max(24, width * 0.08),
     fontWeight: 'bold',
     color: '#2C3E50',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: Math.max(14, width * 0.04),
     color: '#5D6D7E',
     textAlign: 'center',
   },
   cardsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    width: '100%',
+    paddingHorizontal: Math.max(12, width * 0.04),
   },
   cardWrapper: {
-    width: (width - 48) / 2,
-    marginBottom: 16,
+    width: '100%',
+    marginBottom: Math.max(14, height * 0.015),
   },
   card: {
-    borderRadius: 20,
-    padding: 20,
-    height: 180,
+    borderRadius: Math.max(20, width * 0.045),
+    paddingVertical: Math.max(18, height * 0.022),
+    paddingHorizontal: Math.max(18, width * 0.045),
+    minHeight: Math.max(130, height * 0.16),
     justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -415,36 +465,58 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Math.max(12, height * 0.015),
+  },
+  cardIconWrapper: {
+    width: Math.max(56, width * 0.13),
+    height: Math.max(56, width * 0.13),
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginRight: Math.max(14, width * 0.035),
+  },
+  cardTextContent: {
+    flex: 1,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: Math.max(18, width * 0.05),
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 4,
   },
   cardDescription: {
-    fontSize: 12,
-    color: '#fff',
-    opacity: 0.9,
+    fontSize: Math.max(13, width * 0.035),
+    color: 'rgba(255, 255, 255, 0.9)',
   },
-  arrowContainer: {
-    position: 'absolute',
-    bottom: 15,
-    right: 15,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
+  cardFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTag: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  cardTagText: {
+    color: '#fff',
+    fontSize: Math.max(12, width * 0.032),
+    fontWeight: '600',
+  },
+  cardAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardActionText: {
+    color: '#fff',
+    fontSize: Math.max(13, width * 0.035),
+    fontWeight: '700',
   },
   loadingContainer: {
     flex: 1,

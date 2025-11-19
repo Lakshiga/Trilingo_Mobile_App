@@ -4,8 +4,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
+import { getTranslation, Language } from '../utils/translations';
+import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
+import { Dimensions } from 'react-native';
+
+const { width, height } = Dimensions.get('window');
 
 type Video = {
   id: string;
@@ -21,6 +27,10 @@ type Video = {
 const VideosScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme } = useTheme();
+  const { currentUser } = useUser();
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,22 +89,23 @@ const VideosScreen: React.FC = () => {
             }
           }
 
-          // Get title (multilingual)
+          // Get title in learning language
           const title = videoData.title 
             ? (typeof videoData.title === 'object' 
-                ? (videoData.title.en || videoData.title.ta || videoData.title.si || activity.name_en)
+                ? (videoData.title[getLanguageKey(learningLanguage)] || 
+                   videoData.title.en || 
+                   getLearningLanguageField(learningLanguage, activity))
                 : videoData.title)
-            : activity.name_en || activity.name_ta || activity.name_si || 'Video';
+            : getLearningLanguageField(learningLanguage, activity) || 'Video';
 
-          // Get description (multilingual)
+          // Get description in learning language
           const description = videoData.instruction || videoData.description
             ? (typeof (videoData.instruction || videoData.description) === 'object'
-                ? ((videoData.instruction || videoData.description).en || 
-                   (videoData.instruction || videoData.description).ta || 
-                   (videoData.instruction || videoData.description).si || 
-                   'Educational video')
+                ? ((videoData.instruction || videoData.description)[getLanguageKey(learningLanguage)] || 
+                   (videoData.instruction || videoData.description).en || 
+                   getTranslation(learningLanguage, 'educationalVideo'))
                 : (videoData.instruction || videoData.description))
-            : 'Educational video';
+            : getTranslation(learningLanguage, 'educationalVideo');
 
           // Gradients for videos
           const gradients: readonly [string, string][] = [
@@ -134,7 +145,7 @@ const VideosScreen: React.FC = () => {
     };
 
     fetchVideos();
-  }, []);
+  }, [learningLanguage]);
 
   return (
     <LinearGradient colors={theme.videosBackground} style={styles.container}>
@@ -152,10 +163,10 @@ const VideosScreen: React.FC = () => {
         <View style={styles.headerContent}>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerEmoji}>📹</Text>
-            <Text style={styles.headerTitle}>Educational Videos</Text>
+            <Text style={styles.headerTitle}>{getTranslation(nativeLanguage, 'educationalVideos')}</Text>
             <Text style={styles.headerEmoji}>🎬</Text>
           </View>
-          <Text style={styles.headerSubtitle}>Learn through engaging content</Text>
+          <Text style={styles.headerSubtitle}>{getTranslation(nativeLanguage, 'learnThroughEngagingContent')}</Text>
         </View>
       </View>
 
@@ -163,7 +174,7 @@ const VideosScreen: React.FC = () => {
       {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Loading videos...</Text>
+          <Text style={styles.loadingText}>{getTranslation(nativeLanguage, 'loadingVideos')}</Text>
         </View>
       )}
 
@@ -218,8 +229,8 @@ const VideosScreen: React.FC = () => {
             ))
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No videos available yet.</Text>
-              <Text style={styles.emptySubtext}>Check back later!</Text>
+              <Text style={styles.emptyText}>{getTranslation(nativeLanguage, 'noVideosAvailable')}</Text>
+              <Text style={styles.emptySubtext}>{getTranslation(nativeLanguage, 'checkBackLater')}</Text>
             </View>
           )}
           
@@ -259,19 +270,19 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
+    paddingTop: Math.max(45, height * 0.06),
+    paddingBottom: Math.max(20, height * 0.025),
+    paddingHorizontal: Math.max(16, width * 0.04),
     backgroundColor: 'transparent',
   },
   backButton: {
     position: 'absolute',
-    top: 45,
-    left: 20,
+    top: Math.max(40, height * 0.05),
+    left: Math.max(16, width * 0.04),
     zIndex: 10,
     backgroundColor: 'rgba(67, 188, 205, 0.9)',
     borderRadius: 25,
-    padding: 12,
+    padding: Math.max(10, width * 0.03),
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -291,7 +302,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: Math.max(22, width * 0.07),
     fontWeight: 'bold',
     color: '#fff',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -299,7 +310,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: Math.max(14, width * 0.04),
     color: '#fff',
     fontWeight: '600',
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
@@ -308,13 +319,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: Math.max(16, width * 0.04),
   },
   scrollContent: {
     paddingTop: 10,
   },
   videoCard: {
-    marginBottom: 20,
+    marginBottom: Math.max(16, height * 0.02),
   },
   videoGradient: {
     borderRadius: 20,
@@ -326,7 +337,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumbnail: {
-    height: 180,
+    height: Math.max(160, height * 0.22),
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -386,15 +397,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
   },
   videoTitle: {
-    fontSize: 20,
+    fontSize: Math.max(18, width * 0.05),
     fontWeight: 'bold',
     color: '#2C3E50',
     marginBottom: 6,
   },
   videoDescription: {
-    fontSize: 14,
+    fontSize: Math.max(13, width * 0.035),
     color: '#7F8C8D',
-    lineHeight: 20,
+    lineHeight: Math.max(18, width * 0.05),
   },
   bottomSpacing: {
     height: 20,

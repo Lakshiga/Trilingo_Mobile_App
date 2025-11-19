@@ -16,10 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { useUser } from '../context/UserContext';
+import { getTranslation, Language } from '../utils/translations';
 import apiService, { ExerciseDto, ActivityDto } from '../services/api';
 import { extractExerciseMediaInfo, parseExerciseJson } from '../utils/exerciseHelpers';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const ITEMS_PER_PAGE = 5;
 
 type ExerciseScreenRouteParams = {
   activity: {
@@ -33,17 +36,20 @@ const ExerciseScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: ExerciseScreenRouteParams }, 'params'>>();
   const { theme, isDarkMode } = useTheme();
+  const { currentUser } = useUser();
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const { activity } = route.params || { activity: { id: 0, title: 'Activity', description: '' } };
 
   const [exercises, setExercises] = useState<ExerciseDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     fetchExercises();
     
-    // Header animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -58,6 +64,10 @@ const ExerciseScreen: React.FC = () => {
     ]).start();
   }, [activity.id]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activity.id]);
+
   const fetchExercises = async () => {
     try {
       setLoading(true);
@@ -66,6 +76,7 @@ const ExerciseScreen: React.FC = () => {
       // Sort by sequence order
       const sortedExercises = fetchedExercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
       setExercises(sortedExercises);
+      setCurrentPage(1);
     } catch (error: any) {
       console.error('Error fetching exercises:', error);
       Alert.alert(
@@ -84,6 +95,25 @@ const ExerciseScreen: React.FC = () => {
       exercises,
       startIndex,
     } as never);
+  };
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(exercises.length / ITEMS_PER_PAGE));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [exercises, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(exercises.length / ITEMS_PER_PAGE));
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedExercises = exercises.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
+  const handlePrevPage = () => {
+    setCurrentPage((prev) => Math.max(prev - 1, 1));
   };
 
   const ExerciseCard = ({ exercise, index }: { exercise: ExerciseDto; index: number }) => {
@@ -263,7 +293,7 @@ const ExerciseScreen: React.FC = () => {
             <Text style={styles.emoji}>📝</Text>
             <Text style={[styles.title, { color: theme.textPrimary }]}>{activity.title}</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {activity.description || 'Complete the exercises below'}
+              {activity.description || getTranslation(nativeLanguage, 'completeExercisesBelow')}
             </Text>
           </Animated.View>
 
@@ -281,8 +311,12 @@ const ExerciseScreen: React.FC = () => {
           {!loading && (
             <View style={styles.exercisesContainer}>
               {exercises.length > 0 ? (
-                exercises.map((exercise, index) => (
-                  <ExerciseCard key={exercise.id} exercise={exercise} index={index} />
+                paginatedExercises.map((exercise, index) => (
+                  <ExerciseCard
+                    key={exercise.id}
+                    exercise={exercise}
+                    index={startIndex + index}
+                  />
                 ))
               ) : (
                 <View style={styles.emptyContainer}>
@@ -294,6 +328,45 @@ const ExerciseScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
+            </View>
+          )}
+
+          {!loading && totalPages > 1 && (
+            <View style={styles.paginationContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.paginationButton,
+                  currentPage === 1 && styles.paginationButtonDisabled,
+                ]}
+                onPress={handlePrevPage}
+                disabled={currentPage === 1}
+              >
+                <MaterialIcons name="chevron-left" size={20} color="#fff" />
+                <Text style={styles.paginationButtonText}>
+                  {getTranslation(nativeLanguage, 'previousPage')}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.paginationText}>
+                {`${getTranslation(nativeLanguage, 'pageLabel')} ${currentPage} ${getTranslation(
+                  nativeLanguage,
+                  'of'
+                )} ${totalPages}`}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.paginationButton,
+                  currentPage === totalPages && styles.paginationButtonDisabled,
+                ]}
+                onPress={handleNextPage}
+                disabled={currentPage === totalPages}
+              >
+                <Text style={styles.paginationButtonText}>
+                  {getTranslation(nativeLanguage, 'nextPage')}
+                </Text>
+                <MaterialIcons name="chevron-right" size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
@@ -311,12 +384,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 45,
-    left: 16,
+    top: Math.max(40, height * 0.05),
+    left: Math.max(12, width * 0.04),
     zIndex: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 25,
-    padding: 10,
+    padding: Math.max(8, width * 0.025),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -327,8 +400,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 100,
+    paddingTop: Math.max(70, height * 0.08),
     paddingBottom: 30,
+    paddingHorizontal: Math.max(12, width * 0.04),
   },
   header: {
     alignItems: 'center',
@@ -340,13 +414,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   title: {
-    fontSize: 32,
+    fontSize: Math.max(26, width * 0.075),
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: Math.max(14, width * 0.04),
     textAlign: 'center',
   },
   loadingContainer: {
@@ -360,7 +434,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   exercisesContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
   },
   exerciseCard: {
     marginBottom: 16,
@@ -423,6 +497,36 @@ const styles = StyleSheet.create({
   },
   audioButton: {
     padding: 4,
+    marginLeft: 8,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingHorizontal: Math.max(4, width * 0.01),
+  },
+  paginationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4ECDC4',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  paginationButtonDisabled: {
+    opacity: 0.5,
+  },
+  paginationButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+    marginHorizontal: 4,
+  },
+  paginationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
   },
   emptyContainer: {
     flex: 1,

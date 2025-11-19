@@ -82,7 +82,7 @@ function TabNavigator() {
                 />
               </Animated.View>
             );
-          } else if (route.name === 'Lessons') {
+          } else if (route.name === 'Activity') {
             return (
               <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
                 <Image 
@@ -201,7 +201,7 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Lessons" component={LessonScreen} />
+      <Tab.Screen name="Activity" component={LessonScreen} />
       {isGuest ? (
         <Tab.Screen 
           name="Login" 

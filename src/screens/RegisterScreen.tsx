@@ -15,6 +15,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useUser } from '../context/UserContext';
+import { getTranslation, Language } from '../utils/translations';
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,6 +36,8 @@ interface UserData {
 }
 
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onBack }) => {
+  const { currentUser } = useUser();
+  
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState<UserData>({
@@ -46,44 +50,75 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     learningLanguage: '',
   });
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
 
-  const questions = [
+  // Get current language - use selected native language if available, otherwise default to English
+  const getCurrentLanguage = (): Language => {
+    if (userData.nativeLanguage) {
+      return userData.nativeLanguage as Language;
+    }
+    return (currentUser?.nativeLanguage as Language) || 'English';
+  };
+
+  const currentLanguage = getCurrentLanguage();
+
+  const validatePassword = (password: string): string[] => {
+    const errors: string[] = [];
+    if (password.length < 8) {
+      errors.push(getTranslation(currentLanguage, 'passwordMinLength'));
+    }
+    if (!/[A-Z]/.test(password)) {
+      errors.push(getTranslation(currentLanguage, 'passwordUppercase'));
+    }
+    if (!/[a-z]/.test(password)) {
+      errors.push(getTranslation(currentLanguage, 'passwordLowercase'));
+    }
+    if (!/[0-9]/.test(password)) {
+      errors.push(getTranslation(currentLanguage, 'passwordNumber'));
+    }
+    if (!/[^a-zA-Z0-9]/.test(password)) {
+      errors.push(getTranslation(currentLanguage, 'passwordSpecialChar'));
+    }
+    return errors;
+  };
+
+  const questions = React.useMemo(() => [
     {
       key: 'name',
-      question: 'What is your name?',
-      placeholder: 'Enter your full name',
+      question: getTranslation(currentLanguage, 'whatIsYourName'),
+      placeholder: getTranslation(currentLanguage, 'enterYourFullName'),
       keyboardType: 'default',
     },
     {
       key: 'age',
-      question: 'What is your age?',
-      placeholder: 'Enter your age',
+      question: getTranslation(currentLanguage, 'whatIsYourAge'),
+      placeholder: getTranslation(currentLanguage, 'enterYourAge'),
       keyboardType: 'numeric',
     },
     {
       key: 'email',
-      question: 'What is your email address?',
-      placeholder: 'Enter your email',
+      question: getTranslation(currentLanguage, 'whatIsYourEmail'),
+      placeholder: getTranslation(currentLanguage, 'enterYourEmail'),
       keyboardType: 'email-address',
     },
     {
       key: 'username',
-      question: 'Create an account — please enter:',
-      subquestion: 'Username',
-      placeholder: 'Choose a username',
+      question: getTranslation(currentLanguage, 'createAccount'),
+      subquestion: getTranslation(currentLanguage, 'username'),
+      placeholder: getTranslation(currentLanguage, 'chooseUsername'),
       keyboardType: 'default',
     },
     {
       key: 'password',
-      question: 'Create an account — please enter:',
-      subquestion: 'Password',
-      placeholder: 'Choose a password',
+      question: getTranslation(currentLanguage, 'createAccount'),
+      subquestion: getTranslation(currentLanguage, 'password'),
+      placeholder: getTranslation(currentLanguage, 'choosePassword'),
       keyboardType: 'default',
       secure: true,
     },
     {
       key: 'nativeLanguage',
-      question: 'What is your native language?',
+      question: getTranslation(currentLanguage, 'whatIsYourNativeLanguage'),
       placeholder: '',
       keyboardType: 'default',
       isLanguageSelection: true,
@@ -91,13 +126,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     },
     {
       key: 'learningLanguage',
-      question: 'Which language would you like to learn?',
+      question: getTranslation(currentLanguage, 'whichLanguageToLearn'),
       placeholder: '',
       keyboardType: 'default',
       isLanguageSelection: true,
       options: ['Tamil', 'Sinhala', 'English'],
     },
-  ];
+  ], [currentLanguage]);
 
   useEffect(() => {
     // Fade in animation for each question
@@ -113,8 +148,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     
     // Validation
     if (!userData[currentQuestion.key as keyof UserData]) {
-      Alert.alert('Error', 'Please answer the question');
+      Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'pleaseAnswer'));
       return;
+    }
+
+    // Password validation
+    if (currentQuestion.key === 'password') {
+      const errors = validatePassword(userData.password);
+      if (errors.length > 0) {
+        setPasswordErrors(errors);
+        Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'pleaseAnswer'));
+        return;
+      }
     }
 
     // Check if it's the last question
@@ -232,7 +277,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
               {/* Progress indicator */}
               <View style={styles.progressContainer}>
                 <Text style={styles.progressText}>
-                  Step {currentStep + 1} of {questions.length}
+                  {getTranslation(currentLanguage, 'step')} {currentStep + 1} {getTranslation(currentLanguage, 'of')} {questions.length}
                 </Text>
                 <View style={styles.progressBar}>
                   <View 
@@ -277,21 +322,40 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                     ))}
                   </View>
                 ) : (
-                  <TextInput
-                    style={styles.input}
-                    value={userData[currentQuestion.key as keyof UserData]}
-                    onChangeText={(text) =>
-                      setUserData({
-                        ...userData,
-                        [currentQuestion.key]: text,
-                      })
-                    }
-                    placeholder={currentQuestion.placeholder}
-                    placeholderTextColor="#999"
-                    keyboardType={currentQuestion.keyboardType as any}
-                    secureTextEntry={currentQuestion.secure}
-                    autoCapitalize="none"
-                  />
+                  <View>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
+                      ]}
+                      value={userData[currentQuestion.key as keyof UserData]}
+                      onChangeText={(text) => {
+                        setUserData({
+                          ...userData,
+                          [currentQuestion.key]: text,
+                        });
+                        // Validate password in real-time
+                        if (currentQuestion.key === 'password') {
+                          const errors = validatePassword(text);
+                          setPasswordErrors(errors);
+                        }
+                      }}
+                      placeholder={currentQuestion.placeholder}
+                      placeholderTextColor="#999"
+                      keyboardType={currentQuestion.keyboardType as any}
+                      secureTextEntry={currentQuestion.secure}
+                      autoCapitalize="none"
+                    />
+                    {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
+                      <View style={styles.errorContainer}>
+                        {passwordErrors.map((error, index) => (
+                          <Text key={index} style={styles.errorText}>
+                            • {error}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 )}
               </Animated.View>
 
@@ -302,7 +366,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                   onPress={handleBack}
                   disabled={isLoading}
                 >
-                  <Text style={styles.backButtonText}>Back</Text>
+                  <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -314,7 +378,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
                     <Text style={styles.nextButtonText}>
-                      {currentStep === questions.length - 1 ? 'Complete' : 'Next'}
+                      {currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -465,6 +529,21 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 2,
+  },
+  errorContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginBottom: 4,
   },
 });
 

@@ -16,12 +16,46 @@ interface UserData {
 }
 
 const USER_DATA_KEY = '@trilingo_user_data';
+const USER_PREFERENCES_PREFIX = '@trilingo_user_prefs_';
+
+interface UserLanguagePreferences {
+  nativeLanguage: string;
+  learningLanguage: string;
+}
 
 export class UserStorage {
+  // Save user language preferences by username
+  static async saveUserLanguagePreferences(username: string, preferences: UserLanguagePreferences): Promise<void> {
+    try {
+      const key = `${USER_PREFERENCES_PREFIX}${username}`;
+      await AsyncStorage.setItem(key, JSON.stringify(preferences));
+    } catch (error) {
+      console.error('Error saving user language preferences:', error);
+    }
+  }
+
+  // Get user language preferences by username
+  static async getUserLanguagePreferences(username: string): Promise<UserLanguagePreferences | null> {
+    try {
+      const key = `${USER_PREFERENCES_PREFIX}${username}`;
+      const prefs = await AsyncStorage.getItem(key);
+      return prefs ? JSON.parse(prefs) : null;
+    } catch (error) {
+      console.error('Error getting user language preferences:', error);
+      return null;
+    }
+  }
   // Save current user session
   static async saveCurrentUser(userData: UserData): Promise<void> {
     try {
       await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+      // Also save language preferences separately for persistence across logouts
+      if (userData.username && !userData.isGuest) {
+        await this.saveUserLanguagePreferences(userData.username, {
+          nativeLanguage: userData.nativeLanguage,
+          learningLanguage: userData.learningLanguage,
+        });
+      }
     } catch (error) {
       console.error('Error saving user data:', error);
     }
@@ -54,14 +88,17 @@ export class UserStorage {
           console.error('Failed to load admin profile image:', error);
         }
 
+        // Try to restore saved language preferences for admin
+        const savedPreferences = await this.getUserLanguagePreferences('Admin');
+        
         const adminUser: UserData = {
           username: 'Admin',
           name: 'Administrator',
           age: '',
           email: 'admin@trilingo.com',
           password: 'Admin@123',
-          nativeLanguage: 'English',
-          learningLanguage: 'All',
+          nativeLanguage: savedPreferences?.nativeLanguage || 'English',
+          learningLanguage: savedPreferences?.learningLanguage || 'All',
           isAdmin: true,
           isGuest: false,
           profileImageUrl: adminProfileImage,
@@ -79,14 +116,40 @@ export class UserStorage {
       const response = await apiService.login(loginRequest);
       
       if (response.isSuccess) {
+        const username = response.username || identifier;
+        
+        // Try to restore saved language preferences for this user
+        let savedPreferences = await this.getUserLanguagePreferences(username);
+        
+        // If no saved preferences, try to fetch from backend profile
+        if (!savedPreferences) {
+          try {
+            const profileResponse = await apiService.getUserProfile();
+            if (profileResponse.isSuccess && profileResponse.data) {
+              const profileData = profileResponse.data;
+              if (profileData.nativeLanguage && profileData.learningLanguage) {
+                savedPreferences = {
+                  nativeLanguage: profileData.nativeLanguage,
+                  learningLanguage: profileData.learningLanguage,
+                };
+                // Save the preferences for future logins
+                await this.saveUserLanguagePreferences(username, savedPreferences);
+              }
+            }
+          } catch (error) {
+            // If profile fetch fails, continue with defaults
+            console.warn('Could not fetch user profile:', error);
+          }
+        }
+        
         const userData: UserData = {
-          username: response.username || identifier,
+          username: username,
           name: response.username || identifier, // Use username as name
           age: '',
           email: response.email || '',
           password: '',
-          nativeLanguage: 'English', // Default values
-          learningLanguage: 'Tamil',
+          nativeLanguage: savedPreferences?.nativeLanguage || 'English', // Use saved preferences or defaults
+          learningLanguage: savedPreferences?.learningLanguage || 'Tamil',
           isAdmin: response.role === 'Admin',
           isGuest: false,
           profileImageUrl: response.profileImageUrl,
@@ -132,14 +195,24 @@ export class UserStorage {
       
       // Primary success check - API indicates success
       if (response.isSuccess) {
+        const username = response.username || userData.username;
+        const nativeLanguage = userData.nativeLanguage || 'English';
+        const learningLanguage = userData.learningLanguage || 'Tamil';
+        
+        // Save language preferences for this user
+        await this.saveUserLanguagePreferences(username, {
+          nativeLanguage,
+          learningLanguage,
+        });
+        
         const newUserData: UserData = {
-          username: response.username || userData.username,
+          username: username,
           name: userData.name || response.username || userData.username,
           age: userData.age || '',
           email: response.email || userData.email,
           password: userData.password,
-          nativeLanguage: userData.nativeLanguage || 'English',
-          learningLanguage: userData.learningLanguage || 'Tamil',
+          nativeLanguage: nativeLanguage,
+          learningLanguage: learningLanguage,
           isAdmin: false,
           isGuest: false,
           profileImageUrl: response.profileImageUrl,
@@ -156,14 +229,24 @@ export class UserStorage {
         response.message.includes('Account created')
       )) {
         // Registration was successful despite the confusing message format
+        const username = userData.username;
+        const nativeLanguage = userData.nativeLanguage || 'English';
+        const learningLanguage = userData.learningLanguage || 'Tamil';
+        
+        // Save language preferences for this user
+        await this.saveUserLanguagePreferences(username, {
+          nativeLanguage,
+          learningLanguage,
+        });
+        
         const newUserData: UserData = {
-          username: userData.username,
+          username: username,
           name: userData.name || userData.username,
           age: userData.age || '',
           email: userData.email,
           password: userData.password,
-          nativeLanguage: userData.nativeLanguage || 'English',
-          learningLanguage: userData.learningLanguage || 'Tamil',
+          nativeLanguage: nativeLanguage,
+          learningLanguage: learningLanguage,
           isAdmin: false,
           isGuest: false,
         };
