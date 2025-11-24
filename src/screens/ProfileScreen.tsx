@@ -10,6 +10,7 @@ import {
   Platform,
   Switch,
   Modal,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
+import { useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { getTranslation, Language } from '../utils/translations';
@@ -43,15 +45,12 @@ const getProfileStorageKey = (user?: ProfileUserLike | null) => {
   if (!user) {
     return 'guest_profile_image';
   }
-
   if (user.isGuest) {
     return 'guest_profile_image';
   }
-
   if (user.isAdmin) {
     return `admin_profile_image_${user.id || 'admin'}`;
   }
-
   return `profile_image_${user.id || user.username || 'user'}`;
 };
 
@@ -83,6 +82,7 @@ const isValidProfileImage = (imageUrl: string): boolean => {
 export default function ProfileScreen() {
   const { isDarkMode, theme, setDarkMode } = useTheme();
   const { currentUser, logout, updateUser } = useUser();
+  const navigation = useNavigation();
   const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
   const [notifications, setNotifications] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -150,7 +150,6 @@ export default function ProfileScreen() {
   const handleAvatarSave = async (avatar: string) => {
     setProfileImage(avatar);
     await saveImageToStorage(avatar);
-
     if (currentUser && !currentUser.isGuest) {
       try {
         const response = await apiService.updateProfile({ profileImageUrl: avatar });
@@ -192,7 +191,6 @@ export default function ProfileScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
     (async () => {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -203,7 +201,6 @@ export default function ProfileScreen() {
           );
         }
       }
-
       await initializeProfileImage();
     })();
   }, [currentUser]);
@@ -229,7 +226,6 @@ export default function ProfileScreen() {
           Alert.alert('Error', 'Invalid image selected. Please try again.');
           return;
         }
-
         setProfileImage(imageUri);
         await uploadProfileImageToServer(imageUri);
       }
@@ -249,7 +245,6 @@ export default function ProfileScreen() {
         );
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
@@ -303,6 +298,12 @@ export default function ProfileScreen() {
   };
 
   const settingsData: SettingItem[] = [
+    {
+      id: 'edit-profile',
+      title: 'Edit Profile',
+      icon: 'edit',
+      type: 'navigate',
+    },
     {
       id: 'language',
       title: getTranslation(nativeLanguage, 'changeLanguage'),
@@ -373,7 +374,11 @@ export default function ProfileScreen() {
 
   const handleSettingPress = (item: SettingItem) => {
     if (item.type === 'navigate') {
-      console.log(`Navigate to ${item.title}`);
+      if (item.id === 'edit-profile') {
+        (navigation as any).navigate('EditProfile');
+      } else {
+        console.log(`Navigate to ${item.title}`);
+      }
     } else if (item.type === 'action') {
       handleLogout();
     }
@@ -441,6 +446,7 @@ export default function ProfileScreen() {
 
   const getIconColor = (icon: string) => {
     const colors: { [key: string]: string } = {
+      edit: '#3B82F6',
       language: '#3B82F6',
       'dark-mode': '#6366F1',
       notifications: '#8B5CF6',
@@ -451,6 +457,7 @@ export default function ProfileScreen() {
 
   const getIconEmoji = (icon: string) => {
     const emojis: { [key: string]: string } = {
+      edit: '✏️',
       language: '🌍',
       'dark-mode': '🌙',
       notifications: '🔔',
@@ -475,9 +482,12 @@ export default function ProfileScreen() {
         <View style={styles.decorativeStar2}>
           <Text style={styles.starText}>✨</Text>
         </View>
-
         <View style={styles.contentWrapper}>
-          <View style={styles.scrollableContent}>
+          <ScrollView 
+            style={styles.scrollableContent}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Profile Header */}
             <Animated.View
               style={[
@@ -537,7 +547,6 @@ export default function ProfileScreen() {
                   <MaterialIcons name="camera-alt" size={18} color="#fff" />
                 </TouchableOpacity>
               </Animated.View>
-
               {/* User Info */}
               <View style={styles.userInfoContainer}>
                 <Text style={styles.userName}>
@@ -548,7 +557,6 @@ export default function ProfileScreen() {
               <Text style={styles.userEmail}>
                 {currentUser?.email || 'user@example.com'}
               </Text>
-
             </LinearGradient>
           </Animated.View>
 
@@ -579,8 +587,7 @@ export default function ProfileScreen() {
               ))}
             </View>
           </Animated.View>
-          </View>
-
+          </ScrollView>
           {/* Logout Button - Fixed at bottom */}
           <Animated.View
             style={[
@@ -682,6 +689,9 @@ const styles = StyleSheet.create({
   },
   scrollableContent: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   profileHeader: {
     paddingHorizontal: 20,

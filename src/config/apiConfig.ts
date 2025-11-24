@@ -9,7 +9,7 @@ export const API_CONFIG = {
   ANDROID_EMULATOR: 'http://10.0.2.2:5166/api',
 
   // For iOS Simulator
-  IOS_SIMULATOR: 'http://localhost:5166/api',
+  IOS_SIMULATOR: 'https://d3v81eez8ecmto.cloudfront.net/api',
 
   // For Physical Device (use your computer's IP address)
   PHYSICAL_DEVICE: 'http://172.22.126.148:5166/api', // TODO: replace with your local machine IPv4

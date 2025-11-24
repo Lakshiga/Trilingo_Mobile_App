@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,18 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
+import { useUser } from '../context/UserContext';
+import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
+import { getLearningLanguageField } from '../utils/languageUtils';
+import { Language } from '../utils/translations';
+import { CLOUDFRONT_URL } from '../config/apiConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -24,82 +31,119 @@ interface Story {
   gradient: readonly [string, string, ...string[]];
   pages: number;
   difficulty: 'easy' | 'medium' | 'hard';
+  activityId: number;
+  storyData?: any;
 }
-
-const stories: Story[] = [
-  {
-    id: 1,
-    title: 'The Lion and the Mouse',
-    emoji: '🦁',
-    duration: '5 min',
-    category: 'Fables',
-    gradient: ['#FFA17F', '#FF6B6B'] as const,
-    pages: 8,
-    difficulty: 'easy',
-  },
-  {
-    id: 2,
-    title: 'Space Adventure',
-    emoji: '🚀',
-    duration: '7 min',
-    category: 'Science',
-    gradient: ['#667EEA', '#764BA2'] as const,
-    pages: 12,
-    difficulty: 'medium',
-  },
-  {
-    id: 3,
-    title: 'Under the Sea',
-    emoji: '🐠',
-    duration: '6 min',
-    category: 'Nature',
-    gradient: ['#38B2AC', '#2B6CB0'] as const,
-    pages: 10,
-    difficulty: 'easy',
-  },
-  {
-    id: 4,
-    title: 'Magic Forest',
-    emoji: '🌳',
-    duration: '8 min',
-    category: 'Fantasy',
-    gradient: ['#48BB78', '#38A169'] as const,
-    pages: 15,
-    difficulty: 'medium',
-  },
-  {
-    id: 5,
-    title: 'Princess and the Dragon',
-    emoji: '🐉',
-    duration: '10 min',
-    category: 'Adventure',
-    gradient: ['#ED64A6', '#9F7AEA'] as const,
-    pages: 18,
-    difficulty: 'hard',
-  },
-  {
-    id: 6,
-    title: 'The Brave Little Ant',
-    emoji: '🐜',
-    duration: '5 min',
-    category: 'Values',
-    gradient: ['#F6AD55', '#DD6B20'] as const,
-    pages: 7,
-    difficulty: 'easy',
-  },
-];
 
 const StoriesScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme, isDarkMode } = useTheme();
+  const { currentUser } = useUser();
+  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  const cardAnimations = useRef(
-    stories.map(() => new Animated.Value(0))
-  ).current;
+  const cardAnimations = useRef<Animated.Value[]>([]).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    const fetchStories = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch all activities and activity types
+        const [allActivities, activityTypes] = await Promise.all([
+          apiService.getAllActivities(),
+          apiService.getAllActivityTypes(),
+        ]);
+        
+        // Find Story Player activity type
+        const storyPlayerType = activityTypes.find(type => 
+          type.name_en.toLowerCase().includes('story player') ||
+          type.name_en.toLowerCase() === 'story player'
+        );
+        
+        if (!storyPlayerType) {
+          console.warn('Story Player activity type not found');
+          setStories([]);
+          return;
+        }
+        
+        // Filter activities with Story Player activity type
+        const storyActivities = allActivities.filter(activity => 
+          activity.activityTypeId === storyPlayerType.id
+        );
+        
+        // Map activities to stories
+        const mappedStories: Story[] = storyActivities.map((activity, index) => {
+          let storyData: any = {};
+          
+          // Parse Details_JSON
+          if (activity.details_JSON) {
+            try {
+              storyData = JSON.parse(activity.details_JSON);
+            } catch (e) {
+              console.error('Error parsing story JSON:', e);
+            }
+          }
+          
+          // Get title in learning language
+          const title = getLearningLanguageField(learningLanguage, activity) || activity.name_en || 'Story';
+          
+          // Get category from story data or default
+          const category = storyData.category || storyData.type || 'Story';
+          
+          // Get pages count
+          const pages = storyData.pages || storyData.pageCount || 10;
+          
+          // Gradients
+          const gradients: readonly [string, string, ...string[]][] = [
+            ['#FFA17F', '#FF6B6B'] as const,
+            ['#667EEA', '#764BA2'] as const,
+            ['#38B2AC', '#2B6CB0'] as const,
+            ['#48BB78', '#38A169'] as const,
+            ['#ED64A6', '#9F7AEA'] as const,
+            ['#F6AD55', '#DD6B20'] as const,
+          ];
+          
+          return {
+            id: activity.id,
+            activityId: activity.id,
+            title,
+            emoji: '📖',
+            duration: '5 min',
+            category,
+            gradient: gradients[index % gradients.length],
+            pages,
+            difficulty: 'easy' as const,
+            storyData,
+          };
+        });
+        
+        setStories(mappedStories);
+        cardAnimations.length = mappedStories.length;
+        for (let i = 0; i < mappedStories.length; i++) {
+          if (!cardAnimations[i]) {
+            cardAnimations[i] = new Animated.Value(0);
+          }
+        }
+      } catch (error: any) {
+        console.error('Error fetching stories:', error);
+        Alert.alert('Error', 'Failed to load stories. Please try again.');
+        setStories([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchStories();
+  }, [learningLanguage]);
+
+  useEffect(() => {
+    if (stories.length === 0) return;
+    
     // Header animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -124,7 +168,9 @@ const StoriesScreen: React.FC = () => {
       })
     );
 
-    Animated.stagger(120, animations).start();
+    if (animations.length > 0) {
+      Animated.stagger(120, animations).start();
+    }
 
     // Continuous floating animation
     Animated.loop(
@@ -141,7 +187,7 @@ const StoriesScreen: React.FC = () => {
         }),
       ])
     ).start();
-  }, []);
+  }, [stories]);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -318,12 +364,35 @@ const StoriesScreen: React.FC = () => {
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Pick a story to read</Text>
           </Animated.View>
 
+          {/* Loading Indicator */}
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+              <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+                Loading stories...
+              </Text>
+            </View>
+          )}
+
           {/* Stories List */}
-          <View style={styles.storiesContainer}>
-            {stories.map((story, index) => (
-              <StoryCard key={story.id} story={story} index={index} />
-            ))}
-          </View>
+          {!loading && (
+            <View style={styles.storiesContainer}>
+              {stories.length > 0 ? (
+                stories.map((story, index) => (
+                  <StoryCard key={story.id} story={story} index={index} />
+                ))
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                    No stories available yet.
+                  </Text>
+                  <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                    Check back later!
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
       </LinearGradient>
     </View>
@@ -490,6 +559,32 @@ const styles = StyleSheet.create({
     borderRightWidth: 40,
     borderTopColor: 'rgba(255, 255, 255, 0.2)',
     borderRightColor: 'transparent',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.8,
   },
 });
 

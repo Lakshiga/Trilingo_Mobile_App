@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
-  Dimensions,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -14,8 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../utils/responsive';
 
 type LoginScreenProps = {
   onLogin: (userData: any) => void;
@@ -24,6 +22,7 @@ type LoginScreenProps = {
 };
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest }) => {
+  const responsive = useResponsive();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +62,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
     }
   };
 
+  const styles = getStyles(responsive);
+
   return (
     <ImageBackground
       source={require('../../assets/BDnamed.jpg')}
@@ -77,7 +78,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
           <ScrollView contentContainerStyle={styles.scrollContainer}>
             <View style={styles.container}>
               {/* Title */}
-              <Text style={styles.title}>Welcome to Trilingo</Text>
+              <Text style={styles.title}>Welcome to Q-Bit</Text>
               <Text style={styles.subtitle}>Learning Languages Made Fun</Text>
 
               {/* Login Form */}
@@ -144,11 +145,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   backgroundImage: {
     flex: 1,
-    width: width,
-    height: height,
+    width: responsive.width,
+    height: responsive.height,
   },
   blurContainer: {
     flex: 1,
@@ -164,75 +165,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 40,
+    paddingHorizontal: responsive.wp(8),
+    paddingVertical: responsive.hp(5),
   },
   title: {
-    fontSize: 32,
+    fontSize: responsive.wp(8.5),
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: responsive.hp(1.2),
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: responsive.hp(0.25) },
+    textShadowRadius: responsive.wp(1),
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: responsive.wp(4.2),
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: responsive.hp(5),
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowOffset: { width: 0, height: responsive.hp(0.12) },
+    textShadowRadius: responsive.wp(0.5),
   },
   formContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 20,
-    padding: 30,
+    borderRadius: responsive.wp(5),
+    padding: responsive.wp(8),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: responsive.hp(1.2) },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowRadius: responsive.wp(5),
     elevation: 10,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: responsive.hp(2.5),
   },
   label: {
-    fontSize: 14,
+    fontSize: responsive.wp(3.7),
     fontWeight: '600',
     color: '#2C3E50',
-    marginBottom: 8,
+    marginBottom: responsive.hp(1),
   },
   input: {
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4),
+    fontSize: responsive.wp(4.2),
     color: '#2C3E50',
   },
   loginButton: {
     backgroundColor: '#43BCCD',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4.2),
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: responsive.hp(1.2),
+    marginBottom: responsive.hp(2.5),
   },
   loginButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: responsive.wp(4.8),
     fontWeight: 'bold',
   },
   registerLink: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: responsive.hp(2.5),
   },
   registerText: {
-    fontSize: 14,
+    fontSize: responsive.wp(3.7),
     color: '#666',
   },
   registerHighlight: {
@@ -243,19 +244,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#43BCCD',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(3.2),
     alignItems: 'center',
   },
   guestButtonText: {
     color: '#43BCCD',
-    fontSize: 16,
+    fontSize: responsive.wp(4.2),
     fontWeight: 'bold',
   },
   guestSubtext: {
     color: '#666',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: responsive.wp(3.2),
+    marginTop: responsive.hp(0.25),
   },
   loginButtonDisabled: {
     backgroundColor: '#CCCCCC',

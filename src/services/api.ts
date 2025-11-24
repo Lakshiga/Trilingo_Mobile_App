@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_TIMEOUT } from '../config/apiConfig';
+import { API_BASE_URL, API_TIMEOUT, API_CONFIG } from '../config/apiConfig';
+import { UserStorage } from '../utils/UserStorage';
 
 // API Response Types
 export interface ApiResponse<T> {
@@ -65,6 +66,16 @@ export interface ActivityDto {
   sequenceOrder: number;
 }
 
+// ActivityType DTO from backend
+export interface ActivityTypeDto {
+  id: number;
+  name_en: string;
+  name_ta: string;
+  name_si: string;
+  jsonMethod?: string;
+  mainActivityId: number;
+}
+
 // Exercise DTO from backend
 export interface ExerciseDto {
   id: number;
@@ -83,12 +94,41 @@ export interface MainActivityDto {
   name_si: string;
 }
 
+// Level DTO from backend
+export interface LevelDto {
+  id: number;
+  name_en: string;
+  name_ta: string;
+  name_si: string;
+  levelId?: number;
+}
+
+// Stage/Lesson DTO from backend
+export interface StageDto {
+  id: number;
+  name_en: string;
+  name_ta: string;
+  name_si: string;
+  levelId: number;
+  sequenceOrder?: number;
+}
+
 class ApiService {
   private api: AxiosInstance;
+  private publicApi: AxiosInstance; // Separate instance for public endpoints without auth
 
   constructor() {
     console.log('Initializing API Service with base URL:', API_BASE_URL);
     this.api = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: API_TIMEOUT,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    // Create a separate axios instance for public endpoints (no auth token)
+    this.publicApi = axios.create({
       baseURL: API_BASE_URL,
       timeout: API_TIMEOUT,
       headers: {
@@ -132,6 +172,23 @@ class ApiService {
     );
   }
 
+  // Helper method to determine if we should use public or authenticated API
+  private async shouldUsePublicApi(): Promise<boolean> {
+    try {
+      // Check if user is logged in
+      const currentUser = await UserStorage.getCurrentUser();
+      console.log('Current user:', currentUser);
+      // Use public API for guest users or when no user is logged in
+      const usePublic = !currentUser || currentUser.isGuest === true;
+      console.log('Using public API:', usePublic);
+      return usePublic;
+    } catch (error) {
+      console.error('Error checking user status:', error);
+      // If we can't determine user status, default to authenticated API
+      return false;
+    }
+  }
+
   // Token Management
   private getAuthToken(): Promise<string | null> {
     return AsyncStorage.getItem('authToken');
@@ -148,13 +205,13 @@ class ApiService {
   // Authentication Methods
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     try {
-      const response = await this.api.post<AuthResponse>('/auth/login', credentials);
+      const response = await this.makeApiPostCall<AuthResponse>('/auth/login', credentials);
       
-      if (response.data.isSuccess && response.data.token) {
-        await this.setAuthToken(response.data.token);
+      if (response.isSuccess && response.token) {
+        await this.setAuthToken(response.token);
       }
       
-      return response.data;
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -168,13 +225,13 @@ class ApiService {
         password: userData.password,
       };
       
-      const response = await this.api.post<AuthResponse>('/auth/register', registerData);
+      const response = await this.makeApiPostCall<AuthResponse>('/auth/register', registerData);
       
-      if (response.data.isSuccess && response.data.token) {
-        await this.setAuthToken(response.data.token);
+      if (response.isSuccess && response.token) {
+        await this.setAuthToken(response.token);
       }
       
-      return response.data;
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -183,7 +240,7 @@ class ApiService {
   async logout(): Promise<void> {
     try {
       // Call backend logout if available
-      await this.api.post('/auth/logout');
+      await this.makeApiPostCall<any>('/auth/logout', {});
     } catch (error) {
       // Continue with local logout even if backend call fails
       console.warn('Backend logout failed:', error);
@@ -204,8 +261,8 @@ class ApiService {
 
   async checkAdmin(): Promise<ApiResponse<boolean>> {
     try {
-      const response = await this.api.get<ApiResponse<boolean>>('/auth/check-admin');
-      return response.data;
+      const response = await this.makeApiCall<ApiResponse<boolean>>('/auth/check-admin');
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -229,8 +286,8 @@ class ApiService {
   // Generic API Methods for other endpoints
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await this.api.get<ApiResponse<T>>(endpoint);
-      return response.data;
+      const response = await this.makeApiCall<ApiResponse<T>>(endpoint);
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -238,8 +295,8 @@ class ApiService {
 
   async post<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
     try {
-      const response = await this.api.post<ApiResponse<T>>(endpoint, data);
-      return response.data;
+      const response = await this.makeApiPostCall<ApiResponse<T>>(endpoint, data);
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -247,29 +304,107 @@ class ApiService {
 
   async put<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
     try {
+      console.log(`Trying authenticated API for PUT ${endpoint}`);
       const response = await this.api.put<ApiResponse<T>>(endpoint, data);
       return response.data;
     } catch (error: any) {
+      console.error(`PUT API failed for ${endpoint}:`, error.message);
       throw this.handleError(error);
     }
   }
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
+      console.log(`Trying authenticated API for DELETE ${endpoint}`);
       const response = await this.api.delete<ApiResponse<T>>(endpoint);
       return response.data;
     } catch (error: any) {
+      console.error(`DELETE API failed for ${endpoint}:`, error.message);
       throw this.handleError(error);
+    }
+  }
+
+  // Helper method to make API calls with fallback from public to authenticated API
+  private async makeApiCall<T>(endpoint: string, usePublicFirst: boolean = true): Promise<T> {
+    // Try public API first if requested
+    if (usePublicFirst) {
+      try {
+        const response = await this.publicApi.get<T>(endpoint);
+        return response.data;
+      } catch (publicError: any) {
+        // If it's a 401 or 403 error, try the authenticated API
+        if (publicError.response?.status === 401 || publicError.response?.status === 403) {
+          try {
+            const response = await this.api.get<T>(endpoint);
+            return response.data;
+          } catch (authError: any) {
+            // If authenticated API also fails with 403, this is a permissions issue
+            // Don't log as error - silently throw permission error
+            if (authError.response?.status === 403) {
+              const permissionError = new Error(`PERMISSION_DENIED: You do not have permission to access ${endpoint}`);
+              permissionError.name = 'PermissionDeniedError';
+              throw permissionError;
+            }
+            // For other errors, re-throw the authenticated API error
+            throw authError;
+          }
+        }
+        // If it's not a 401 or 403, re-throw the error
+        throw publicError;
+      }
+    } else {
+      // Use authenticated API directly
+      const response = await this.api.get<T>(endpoint);
+      return response.data;
+    }
+  }
+
+  // Helper method to make API calls with fallback from public to authenticated API for POST requests
+  private async makeApiPostCall<T>(endpoint: string, data: any): Promise<T> {
+    try {
+      console.log(`Trying authenticated API for POST ${endpoint}`);
+      const response = await this.api.post<T>(endpoint, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`POST API failed for ${endpoint}:`, error.message);
+      throw error;
     }
   }
 
   // Upload profile image
   async uploadProfileImage(imageUri: string): Promise<AuthResponse> {
     try {
-      // Log the API base URL being used
-      console.log('API Base URL:', this.api.defaults.baseURL);
-      console.log('Upload endpoint:', '/auth/upload-profile-image');
-      console.log('Full URL:', `${this.api.defaults.baseURL}/auth/upload-profile-image`);
+      // For file uploads, ALWAYS use direct backend URL (CloudFront doesn't support uploads)
+      const currentBaseUrl = this.api.defaults.baseURL || '';
+      let uploadBaseUrl = currentBaseUrl;
+      
+      // If using CloudFront, switch to direct backend URL
+      if (currentBaseUrl.includes('cloudfront.net')) {
+        // Try to get the direct backend URL from config
+        // Priority: PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > localhost
+        if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
+          uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
+        } else if (API_CONFIG.ANDROID_EMULATOR) {
+          uploadBaseUrl = API_CONFIG.ANDROID_EMULATOR;
+        } else if (API_CONFIG.IOS_SIMULATOR) {
+          uploadBaseUrl = API_CONFIG.IOS_SIMULATOR;
+        } else {
+          // Fallback to localhost
+          uploadBaseUrl = 'https://d3v81eez8ecmto.cloudfront.net/api';
+        }
+        
+        console.log('Using direct backend URL for upload (CloudFront detected):', uploadBaseUrl);
+      } else {
+        // Already using direct backend, use as is
+        console.log('Using current API URL for upload:', uploadBaseUrl);
+      }
+      
+      // Construct the full upload URL
+      const uploadEndpoint = '/auth/upload-profile-image';
+      const fullUploadUrl = uploadBaseUrl.replace(/\/$/, '') + uploadEndpoint;
+      
+      console.log('Upload endpoint:', uploadEndpoint);
+      console.log('Full upload URL:', fullUploadUrl);
       
       // Get file extension from URI
       let fileExtension = 'jpg';
@@ -324,31 +459,29 @@ class ApiService {
       const token = await this.getAuthToken();
       console.log('Auth token present:', !!token);
       
-      // Make the request - interceptor will handle auth token and Content-Type
-      const response = await this.api.post<AuthResponse>(
-        '/auth/upload-profile-image',
-        formData,
-        {
-          headers: {
-            'Accept': 'application/json',
-            // Don't set Content-Type - let axios set it automatically for FormData
-          },
-          // Increase timeout for file uploads
-          timeout: 30000, // 30 seconds
-          // Add transform request to handle FormData properly
-          transformRequest: (data, headers) => {
-            // Remove Content-Type to let axios set it with boundary
-            if (data instanceof FormData) {
-              delete headers['Content-Type'];
-            }
-            return data;
-          },
-        }
+      // Create a separate axios instance for upload with the direct URL
+      const uploadApi = axios.create({
+        baseURL: uploadBaseUrl,
+        timeout: 30000, // Longer timeout for uploads
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      // Add auth token to upload instance
+      if (token) {
+        uploadApi.defaults.headers.Authorization = `Bearer ${token}`;
+      }
+      
+      // Make the request
+      const response = await uploadApi.post<AuthResponse>(
+        uploadEndpoint,
+        formData
       );
       
-      console.log('Upload successful:', response.data);
       return response.data;
     } catch (error: any) {
+      console.error('Upload error:', error);
       console.error('Upload error details:', {
         message: error.message,
         code: error.code,
@@ -361,9 +494,27 @@ class ApiService {
       
       // Provide more specific error message
       if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
+        // Recalculate uploadBaseUrl for error message
+        const currentBaseUrl = this.api.defaults.baseURL || '';
+        let uploadBaseUrl = currentBaseUrl;
+        
+        if (currentBaseUrl.includes('cloudfront.net')) {
+          const directBackendUrl = process.env.EXPO_PUBLIC_API_DIRECT || 
+                                  (process.env as any).API_DIRECT ||
+                                  'https://d3v81eez8ecmto.cloudfront.net/api';
+          
+          if (API_CONFIG.PHYSICAL_DEVICE) {
+            uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
+          } else {
+            uploadBaseUrl = directBackendUrl;
+          }
+        }
+        
         throw new Error(
-          `Network error: Cannot connect to ${this.api.defaults.baseURL}. ` +
-          `Please check your internet connection and ensure the backend is accessible.`
+          `Network error: Cannot connect to upload service. ` +
+          `Please check your internet connection and ensure the backend server is running.\n\n` +
+          `Current API URL: ${this.api.defaults.baseURL}\n` +
+          `Upload URL: ${uploadBaseUrl}`
         );
       }
       
@@ -374,8 +525,8 @@ class ApiService {
   // Get user profile
   async getUserProfile(): Promise<ApiResponse<any>> {
     try {
-      const response = await this.api.get<ApiResponse<any>>('/auth/profile');
-      return response.data;
+      const response = await this.makeApiCall<ApiResponse<any>>('/auth/profile');
+      return response;
     } catch (error: any) {
       throw this.handleError(error);
     }
@@ -394,32 +545,93 @@ class ApiService {
   // Activity Methods
   async getAllActivities(): Promise<ActivityDto[]> {
     try {
-      // Backend returns activities directly, not wrapped in ApiResponse
-      const response = await this.api.get<ActivityDto[]>('/activities');
-      // Backend returns Ok(activities) which becomes response.data
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await this.makeApiCall<ActivityDto[]>('/Activities');
+      return Array.isArray(response) ? response : [];
     } catch (error: any) {
       console.error('Failed to fetch activities:', error);
+      // Check if it's a permissions error - don't wrap it with handleError
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        console.log('User does not have permission to access activities');
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
 
   async getActivityById(id: number): Promise<ActivityDto | null> {
     try {
-      const response = await this.api.get<ActivityDto>(`/activities/${id}`);
-      return response.data || null;
+      const response = await this.makeApiCall<ActivityDto>(`/Activities/${id}`);
+      return response || null;
     } catch (error: any) {
       console.error(`Failed to fetch activity ${id}:`, error);
+      // Check if it's a permissions error - don't wrap it with handleError
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        console.log(`User does not have permission to access activity ${id}`);
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
 
   async getActivitiesByStage(stageId: number): Promise<ActivityDto[]> {
     try {
-      const response = await this.api.get<ActivityDto[]>(`/activities/stage/${stageId}`);
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await this.makeApiCall<ActivityDto[]>(`/Activities/stage/${stageId}`);
+      return Array.isArray(response) ? response : [];
     } catch (error: any) {
       console.error(`Failed to fetch activities for stage ${stageId}:`, error);
+      // Check if it's a permissions error - don't wrap it with handleError
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        console.log(`User does not have permission to access activities for stage ${stageId}`);
+        throw error;
+      }
+      throw this.handleError(error);
+    }
+  }
+
+  // ActivityType Methods
+  async getAllActivityTypes(): Promise<ActivityTypeDto[]> {
+    try {
+      const response = await this.makeApiCall<ActivityTypeDto[]>('/activitytypes');
+      return Array.isArray(response) ? response : [];
+    } catch (error: any) {
+      console.error('Failed to fetch activity types:', error);
+      throw this.handleError(error);
+    }
+  }
+
+  async getActivityTypeById(id: number): Promise<ActivityTypeDto | null> {
+    try {
+      const response = await this.makeApiCall<ActivityTypeDto>(`/activitytypes/${id}`);
+      return response || null;
+    } catch (error: any) {
+      console.error(`Failed to fetch activity type ${id}:`, error);
+      throw this.handleError(error);
+    }
+  }
+
+  // MainActivity Methods (for Songs/Videos)
+  async getAllMainActivities(): Promise<MainActivityDto[]> {
+    try {
+      const response = await this.makeApiCall<MainActivityDto[]>('/mainactivities');
+      return Array.isArray(response) ? response : [];
+    } catch (error: any) {
+      console.error('Failed to fetch main activities:', error);
+      throw this.handleError(error);
+    }
+  }
+
+  async getMainActivityById(id: number): Promise<MainActivityDto | null> {
+    try {
+      const response = await this.makeApiCall<MainActivityDto>(`/mainactivities/${id}`);
+      return response || null;
+    } catch (error: any) {
+      console.error(`Failed to fetch main activity ${id}:`, error);
       throw this.handleError(error);
     }
   }
@@ -447,7 +659,7 @@ class ApiService {
 
   async getExercisesByActivityId(activityId: number): Promise<ExerciseDto[]> {
     try {
-      const response = await this.api.get<ExerciseDto[]>(`/activities/${activityId}/exercises`);
+      const response = await this.api.get<ExerciseDto[]>(`/Activities/${activityId}/exercises`);
       return Array.isArray(response.data) ? response.data : [];
     } catch (error: any) {
       console.error(`Failed to fetch exercises for activity ${activityId}:`, error);
@@ -455,24 +667,155 @@ class ApiService {
     }
   }
 
-  // MainActivity Methods (for Songs/Videos)
-  async getAllMainActivities(): Promise<MainActivityDto[]> {
+  // Level Methods
+  async getAllLevels(): Promise<LevelDto[]> {
     try {
-      const response = await this.api.get<MainActivityDto[]>('/mainactivities');
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await this.makeApiCall<LevelDto[]>('/Levels');
+      return Array.isArray(response) ? response : [];
     } catch (error: any) {
-      console.error('Failed to fetch main activities:', error);
+      console.error('Failed to fetch levels:', error);
+      // Check if it's a permissions error - don't wrap it with handleError
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        console.log('User does not have permission to access levels');
+        throw error;
+      }
       throw this.handleError(error);
     }
   }
 
-  async getMainActivityById(id: number): Promise<MainActivityDto | null> {
+  async getLevelById(id: number): Promise<LevelDto | null> {
     try {
-      const response = await this.api.get<MainActivityDto>(`/mainactivities/${id}`);
-      return response.data || null;
+      const response = await this.makeApiCall<LevelDto>(`/Levels/${id}`);
+      return response || null;
     } catch (error: any) {
-      console.error(`Failed to fetch main activity ${id}:`, error);
+      console.error(`Failed to fetch level ${id}:`, error);
+      // Check if it's a permissions error - don't wrap it with handleError
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        console.log(`User does not have permission to access level ${id}`);
+        throw error;
+      }
       throw this.handleError(error);
+    }
+  }
+
+  // Stage/Lesson Methods
+  async getAllStages(): Promise<StageDto[]> {
+    try {
+      const response = await this.makeApiCall<StageDto[]>('/Stages');
+      return Array.isArray(response) ? response : [];
+    } catch (error: any) {
+      // Silently return empty array for permission errors - we'll use fallback
+      if (error.name === 'PermissionDeniedError' || 
+          (error.response?.status === 403) ||
+          (error.message && error.message.includes('PERMISSION_DENIED'))) {
+        // Silently fail - fallback will handle it
+        return [];
+      }
+      // Only log non-permission errors
+      console.error('Failed to fetch stages:', error);
+      return [];
+    }
+  }
+
+  async getStageById(id: number): Promise<StageDto | null> {
+    try {
+      // Try public API first
+      try {
+        const response = await this.publicApi.get<StageDto>(`/Stages/${id}`);
+        return response.data || null;
+      } catch (publicError: any) {
+        // If public API fails with 401/403, try authenticated API
+        if (publicError.response?.status === 401 || publicError.response?.status === 403) {
+          try {
+            const response = await this.api.get<StageDto>(`/Stages/${id}`);
+            return response.data || null;
+          } catch (authError: any) {
+            // If both fail, return null silently
+            return null;
+          }
+        }
+        // For other errors, return null
+        return null;
+      }
+    } catch (error: any) {
+      // Silently return null for any error
+      return null;
+    }
+  }
+
+  async getStagesByLevelId(levelId: number): Promise<StageDto[]> {
+    try {
+      console.log(`Fetching stages for levelId: ${levelId}`);
+      
+      // First, try to fetch stages directly (silently fail if permission denied)
+      const allStages = await this.getAllStages();
+      
+      if (allStages.length > 0) {
+        // Filter by levelId
+        const filteredStages = allStages.filter(stage => stage.levelId === levelId);
+        console.log(`Found ${filteredStages.length} stages directly for level ${levelId}`);
+        
+        if (filteredStages.length > 0) {
+          return filteredStages;
+        }
+      }
+      
+      // Fallback: Get stages from activities
+      // Use activities to find which stages exist, then fetch actual stage data from database
+      console.log('Finding stages from activities...');
+      const allActivities = await this.getAllActivities();
+      console.log(`Total activities fetched: ${allActivities.length}`);
+      
+      // Group activities by stageId to find all unique stages
+      const uniqueStageIds = new Set<number>();
+      
+      allActivities.forEach(activity => {
+        if (activity.stageId) {
+          uniqueStageIds.add(activity.stageId);
+        }
+      });
+      
+      console.log(`Found ${uniqueStageIds.size} unique stage IDs from activities`);
+      
+      // Fetch actual stage data from database for each stageId
+      // Only return stages that we can actually fetch (with real database names)
+      const validStages: StageDto[] = [];
+      const stagePromises: Promise<void>[] = [];
+      
+      for (const stageId of uniqueStageIds) {
+        stagePromises.push(
+          (async () => {
+            // Try to fetch actual stage from database - will return null if can't fetch
+            const stage = await this.getStageById(stageId);
+            if (stage) {
+              // Only include if it belongs to the requested level AND has actual database names
+              if (stage.levelId === levelId && stage.name_en && stage.name_ta && stage.name_si) {
+                validStages.push(stage);
+              }
+            }
+            // If we can't fetch the stage, we don't create inferred stages
+            // Only show stages with actual database names
+          })()
+        );
+      }
+      
+      // Wait for all stage fetches to complete
+      await Promise.all(stagePromises);
+      
+      // Sort by ID to maintain order (matching database order)
+      validStages.sort((a, b) => a.id - b.id);
+      
+      console.log(`Found ${validStages.length} stages with database names for level ${levelId}`);
+      
+      return validStages;
+    } catch (error: any) {
+      // Silently handle errors - don't crash the app
+      console.log(`Error fetching stages for level ${levelId}, returning empty array`);
+      return [];
     }
   }
 }

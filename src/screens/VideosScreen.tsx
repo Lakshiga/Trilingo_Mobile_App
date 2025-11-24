@@ -34,22 +34,43 @@ const VideosScreen: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch videos from backend (Activities with ActivityTypeId = 7 for Story Player or video content)
+  // Fetch videos from backend (Activities with Video main activity or YouTube links)
   useEffect(() => {
     const fetchVideos = async () => {
       try {
         setLoading(true);
-        const allActivities = await apiService.getAllActivities();
         
-        // Filter activities with ActivityTypeId = 7 (Story Player) or activities with videoUrl in Details_JSON
+        // Fetch all activities, activity types, and main activities
+        const [allActivities, activityTypes, mainActivities] = await Promise.all([
+          apiService.getAllActivities(),
+          apiService.getAllActivityTypes(),
+          apiService.getAllMainActivities(),
+        ]);
+        
+        // Find Video main activity
+        const videoMainActivity = mainActivities.find(ma => 
+          ma.name_en.toLowerCase() === 'video' || ma.name_en.toLowerCase() === 'videos'
+        );
+        
+        if (!videoMainActivity) {
+          console.warn('Video main activity not found');
+          setVideos([]);
+          return;
+        }
+        
+        // Filter activities with Video main activity or activities with YouTube links in Details_JSON
         const videoActivities = allActivities.filter(activity => {
-          if (activity.activityTypeId === 7) return true; // Story Player
+          // Check if activity belongs to Video main activity
+          if (activity.mainActivityId === videoMainActivity.id) return true;
           
-          // Check if Details_JSON contains videoUrl
+          // Check if Details_JSON contains YouTube videoUrl
           if (activity.details_JSON) {
             try {
               const parsed = JSON.parse(activity.details_JSON);
-              return parsed.videoUrl || parsed.mediaUrl;
+              const videoUrl = parsed.videoUrl || parsed.mediaUrl || parsed.youtubeUrl;
+              if (videoUrl && (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be'))) {
+                return true;
+              }
             } catch (e) {
               return false;
             }
@@ -71,18 +92,13 @@ const VideosScreen: React.FC = () => {
             }
           }
 
-          // Get video URL from AWS (CloudFront)
+          // Get video URL (YouTube or CloudFront)
           let videoUrl = '';
-          if (videoData.videoUrl) {
-            videoUrl = videoData.videoUrl;
-            if (!videoUrl.startsWith('http')) {
-              videoUrl = videoUrl.startsWith('/')
-                ? `${CLOUDFRONT_URL}${videoUrl}`
-                : `${CLOUDFRONT_URL}/${videoUrl}`;
-            }
-          } else if (videoData.mediaUrl) {
-            videoUrl = videoData.mediaUrl;
-            if (!videoUrl.startsWith('http')) {
+          const urlSource = videoData.videoUrl || videoData.mediaUrl || videoData.youtubeUrl;
+          if (urlSource) {
+            videoUrl = urlSource;
+            // If it's not a YouTube URL and doesn't start with http, prepend CloudFront URL
+            if (!videoUrl.includes('youtube.com') && !videoUrl.includes('youtu.be') && !videoUrl.startsWith('http')) {
               videoUrl = videoUrl.startsWith('/')
                 ? `${CLOUDFRONT_URL}${videoUrl}`
                 : `${CLOUDFRONT_URL}/${videoUrl}`;

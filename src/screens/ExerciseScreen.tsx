@@ -25,11 +25,14 @@ const { width, height } = Dimensions.get('window');
 const ITEMS_PER_PAGE = 5;
 
 type ExerciseScreenRouteParams = {
-  activity: {
+  activityId?: number;
+  activity?: {
     id: number;
     title: string;
     description: string;
   };
+  activityTypeId?: number;
+  jsonMethod?: string;
 };
 
 const ExerciseScreen: React.FC = () => {
@@ -39,15 +42,20 @@ const ExerciseScreen: React.FC = () => {
   const { currentUser } = useUser();
   const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
-  const { activity } = route.params || { activity: { id: 0, title: 'Activity', description: '' } };
+  
+  // Extract parameters from route
+  const { activityId, activityTypeId, jsonMethod } = route.params || {};
+  const activity = route.params?.activity || { id: activityId || 0, title: 'Activity', description: '' };
 
   const [exercises, setExercises] = useState<ExerciseDto[]>([]);
+  const [activityData, setActivityData] = useState<ActivityDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
+    fetchActivityData();
     fetchExercises();
     
     Animated.parallel([
@@ -62,16 +70,32 @@ const ExerciseScreen: React.FC = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [activity.id]);
+  }, [activity.id, activityId]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activity.id]);
+  }, [activity.id, activityId]);
+
+  const fetchActivityData = async () => {
+    try {
+      if (activityId) {
+        const fetchedActivity = await apiService.getActivityById(activityId);
+        setActivityData(fetchedActivity);
+      }
+    } catch (error: any) {
+      console.error('Error fetching activity data:', error);
+    }
+  };
 
   const fetchExercises = async () => {
     try {
       setLoading(true);
-      const fetchedExercises = await apiService.getExercisesByActivityId(activity.id);
+      const activityIdToUse = activity.id || activityId;
+      if (!activityIdToUse) {
+        throw new Error('No activity ID provided');
+      }
+      
+      const fetchedExercises = await apiService.getExercisesByActivityId(activityIdToUse);
       
       // Sort by sequence order
       const sortedExercises = fetchedExercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
@@ -94,6 +118,8 @@ const ExerciseScreen: React.FC = () => {
       activity,
       exercises,
       startIndex,
+      activityTypeId,
+      jsonMethod,
     } as never);
   };
 
@@ -114,6 +140,18 @@ const ExerciseScreen: React.FC = () => {
 
   const handlePrevPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
+  };
+
+  // Handle different activity types based on JSON method
+  const handleActivityTypeNavigation = () => {
+    if (jsonMethod) {
+      // Navigate to a dynamic screen based on the JSON method
+      // For now, we'll still go to the exercise detail but pass the JSON method
+      openExerciseDetail(0);
+    } else {
+      // Default behavior
+      openExerciseDetail(0);
+    }
   };
 
   const ExerciseCard = ({ exercise, index }: { exercise: ExerciseDto; index: number }) => {
@@ -201,61 +239,54 @@ const ExerciseScreen: React.FC = () => {
               {
                 translateY: cardAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [50, 0],
+                  outputRange: [20, 0],
                 }),
               },
             ],
           },
         ]}
       >
-        <TouchableOpacity activeOpacity={0.9} onPress={() => openExerciseDetail(index)}>
-          <LinearGradient
-            colors={gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.exerciseGradient}
-          >
-            <View style={styles.exerciseContent}>
-              <View style={styles.exerciseNumber}>
-                <Text style={styles.exerciseNumberText}>{index + 1}</Text>
-              </View>
-              
-              {/* Image Display */}
-              {imageUrl && !imageError && (
-                <View style={styles.exerciseImageContainer}>
-                  <Image
-                    source={{ uri: imageUrl }}
-                    style={styles.exerciseImage}
-                    resizeMode="cover"
-                    onError={() => setImageError(true)}
-                  />
+        <TouchableOpacity
+          onPress={() => openExerciseDetail(startIndex + index)}
+          activeOpacity={0.8}
+        >
+          <LinearGradient colors={gradient} style={styles.cardGradient}>
+            <View style={styles.cardContent}>
+              {imageUrl && !imageError ? (
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.exerciseImage}
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <View style={styles.placeholderIcon}>
+                  <MaterialIcons name="image" size={40} color="rgba(255,255,255,0.7)" />
                 </View>
               )}
               
-              <View style={styles.exerciseTextContainer}>
-                <Text style={styles.exerciseTitle}>
-                  {title || `Exercise ${index + 1}`}
+              <View style={styles.textContainer}>
+                <Text style={styles.exerciseTitle} numberOfLines={2}>
+                  {title || `Exercise ${startIndex + index + 1}`}
                 </Text>
-                <Text style={styles.exerciseDescription} numberOfLines={2}>
-                  {description || 'Complete this exercise to continue'}
-                </Text>
+                {description ? (
+                  <Text style={styles.exerciseDescription} numberOfLines={2}>
+                    {description}
+                  </Text>
+                ) : null}
               </View>
               
-              {/* Audio Play Button */}
-              {audioUrl ? (
+              {audioUrl && (
                 <TouchableOpacity
-                  onPress={handlePlayAudio}
                   style={styles.audioButton}
-                  activeOpacity={0.7}
+                  onPress={handlePlayAudio}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <MaterialIcons
-                    name={isPlaying ? 'pause' : 'play-arrow'}
-                    size={32}
-                    color="#fff"
+                    name={isPlaying ? "pause" : "play-arrow"}
+                    size={24}
+                    color="#FFFFFF"
                   />
                 </TouchableOpacity>
-              ) : (
-                <MaterialIcons name="play-arrow" size={32} color="#fff" />
               )}
             </View>
           </LinearGradient>
@@ -264,287 +295,298 @@ const ExerciseScreen: React.FC = () => {
     );
   };
 
-  return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={isDarkMode ? ['#1F2937', '#111827', '#0F172A'] : ['#E8F5E9', '#F1F8E9', '#FFF9C4']}
-        style={styles.gradient}
-      >
-        {/* Back Button */}
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
-        </TouchableOpacity>
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <Animated.View
-            style={[
-              styles.header,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background[0] }]}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
           >
-            <Text style={styles.emoji}>📝</Text>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>{activity.title}</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {activity.description || getTranslation(nativeLanguage, 'completeExercisesBelow')}
-            </Text>
-          </Animated.View>
+            <MaterialIcons name="arrow-back" size={24} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
+            Loading...
+          </Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.headerGradient[0]} />
+        </View>
+      </View>
+    );
+  }
 
-          {/* Loading Indicator */}
-          {loading && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.textPrimary || '#4ECDC4'} />
-              <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-                Loading exercises...
-              </Text>
-            </View>
-          )}
-
-          {/* Exercises List */}
-          {!loading && (
-            <View style={styles.exercisesContainer}>
-              {exercises.length > 0 ? (
-                paginatedExercises.map((exercise, index) => (
-                  <ExerciseCard
-                    key={exercise.id}
-                    exercise={exercise}
-                    index={startIndex + index}
-                  />
-                ))
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                    No exercises available for this activity yet.
-                  </Text>
-                  <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                    Check back later!
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {!loading && totalPages > 1 && (
-            <View style={styles.paginationContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.paginationButton,
-                  currentPage === 1 && styles.paginationButtonDisabled,
-                ]}
-                onPress={handlePrevPage}
-                disabled={currentPage === 1}
-              >
-                <MaterialIcons name="chevron-left" size={20} color="#fff" />
-                <Text style={styles.paginationButtonText}>
-                  {getTranslation(nativeLanguage, 'previousPage')}
-                </Text>
-              </TouchableOpacity>
-
-              <Text style={styles.paginationText}>
-                {`${getTranslation(nativeLanguage, 'pageLabel')} ${currentPage} ${getTranslation(
-                  nativeLanguage,
-                  'of'
-                )} ${totalPages}`}
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.paginationButton,
-                  currentPage === totalPages && styles.paginationButtonDisabled,
-                ]}
-                onPress={handleNextPage}
-                disabled={currentPage === totalPages}
-              >
-                <Text style={styles.paginationButtonText}>
-                  {getTranslation(nativeLanguage, 'nextPage')}
-                </Text>
-                <MaterialIcons name="chevron-right" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background[0] }]}>
+      {/* Header */}
+      <LinearGradient
+        colors={theme.headerGradient}
+        style={styles.header}
+      >
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={[styles.headerTitle, { color: '#FFFFFF' }]} numberOfLines={1}>
+            {activity.title || (activityData ? activityData.name_en : 'Activity')}
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>
+            {activity.description || (activityData ? (activityData.name_en || activityData.name_ta || activityData.name_si) : '')}
+          </Text>
+        </View>
       </LinearGradient>
+
+      {/* Special Activity Type Handling */}
+      {jsonMethod && (
+        <View style={styles.activityTypeBanner}>
+          <Text style={styles.activityTypeText}>
+            Activity Type: {jsonMethod}
+          </Text>
+          <TouchableOpacity 
+            style={styles.startActivityButton}
+            onPress={handleActivityTypeNavigation}
+          >
+            <Text style={styles.startActivityButtonText}>Start Activity</Text>
+            <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Exercises List */}
+      <Animated.View 
+        style={[
+          styles.content, 
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
+      >
+        {exercises.length > 0 ? (
+          <>
+            <ScrollView 
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {paginatedExercises.map((exercise, index) => (
+                <ExerciseCard 
+                  key={exercise.id} 
+                  exercise={exercise} 
+                  index={index} 
+                />
+              ))}
+            </ScrollView>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <View style={styles.paginationContainer}>
+                <TouchableOpacity
+                  style={[styles.paginationButton, currentPage === 1 && styles.disabledButton]}
+                  onPress={handlePrevPage}
+                  disabled={currentPage === 1}
+                >
+                  <MaterialIcons 
+                    name="chevron-left" 
+                    size={24} 
+                    color={currentPage === 1 ? '#CCCCCC' : theme.headerGradient[0]} 
+                  />
+                </TouchableOpacity>
+                
+                <Text style={[styles.pageIndicator, { color: theme.textPrimary }]}>
+                  {currentPage} of {totalPages}
+                </Text>
+                
+                <TouchableOpacity
+                  style={[styles.paginationButton, currentPage === totalPages && styles.disabledButton]}
+                  onPress={handleNextPage}
+                  disabled={currentPage === totalPages}
+                >
+                  <MaterialIcons 
+                    name="chevron-right" 
+                    size={24} 
+                    color={currentPage === totalPages ? '#CCCCCC' : theme.headerGradient[0]} 
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="library-books" size={64} color={theme.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
+              No Exercises Available
+            </Text>
+            <Text style={[styles.emptyDescription, { color: theme.textSecondary }]}>
+              This activity doesn't have any exercises yet.
+            </Text>
+          </View>
+        )}
+      </Animated.View>
     </View>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
-    flex: 1,
-  },
-  backButton: {
-    position: 'absolute',
-    top: Math.max(40, height * 0.05),
-    left: Math.max(12, width * 0.04),
-    zIndex: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 25,
-    padding: Math.max(8, width * 0.025),
+  header: {
+    paddingTop: 15,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    zIndex: 10,
   },
-  scrollView: {
-    flex: 1,
+  backButton: {
+    position: 'absolute',
+    top: 30,
+    left: 20,
+    zIndex: 20,
   },
-  scrollContent: {
-    paddingTop: Math.max(70, height * 0.08),
-    paddingBottom: 30,
-    paddingHorizontal: Math.max(12, width * 0.04),
-  },
-  header: {
+  headerContent: {
     alignItems: 'center',
-    marginBottom: 30,
-    paddingHorizontal: 20,
+    marginTop: 10,
   },
-  emoji: {
-    fontSize: 50,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  activityTypeBanner: {
+    backgroundColor: '#43BCCD',
+    padding: 15,
+    margin: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  activityTypeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
     marginBottom: 10,
   },
-  title: {
-    fontSize: Math.max(26, width * 0.075),
-    fontWeight: 'bold',
-    marginBottom: 6,
-    textAlign: 'center',
+  startActivityButton: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: 'center',
   },
-  subtitle: {
-    fontSize: Math.max(14, width * 0.04),
-    textAlign: 'center',
+  startActivityButtonText: {
+    color: '#43BCCD',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 5,
+  },
+  content: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-  },
-  exercisesContainer: {
-    paddingHorizontal: 0,
-  },
-  exerciseCard: {
-    marginBottom: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  exerciseGradient: {
+  scrollContent: {
     padding: 20,
   },
-  exerciseContent: {
+  exerciseCard: {
+    marginBottom: 20,
+    borderRadius: 15,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardGradient: {
+    padding: 17,
+  },
+  cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  exerciseNumber: {
-    width: 50,
-    height: 50,
+  exerciseImage: {
+    width: 65,
+    height: 65,
     borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginRight: 25,
+  },
+  placeholderIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
   },
-  exerciseNumberText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  exerciseImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  exerciseImage: {
-    width: '100%',
-    height: '100%',
-  },
-  exerciseTextContainer: {
+  textContainer: {
     flex: 1,
   },
   exerciseTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+    color: '#FFFFFF',
+    marginBottom: 20,
   },
   exerciseDescription: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.9,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
   },
   audioButton: {
-    padding: 4,
-    marginLeft: 8,
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
   },
   paginationContainer: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingHorizontal: Math.max(4, width * 0.01),
+    paddingVertical: 15,
   },
   paginationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#4ECDC4',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    padding: 2,
   },
-  paginationButtonDisabled: {
+  disabledButton: {
     opacity: 0.5,
   },
-  paginationButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-    marginHorizontal: 4,
+  pageIndicator: {
+    marginHorizontal: 15,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  paginationText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  emptyContainer: {
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingHorizontal: 40,
   },
-  emptyText: {
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  emptyDescription: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: 'center',
+    lineHeight: 22,
   },
 });
 
 export default ExerciseScreen;
-
-

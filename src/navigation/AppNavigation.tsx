@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Image, TouchableOpacity, Animated, StyleSheet, View, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,7 +9,6 @@ import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 import HomeScreen from '../screens/HomeScreen';
 import ExerciseScreen from '../screens/ExerciseScreen';
-import LessonScreen from '../screens/LessonScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -19,211 +17,19 @@ import VideosScreen from '../screens/VideosScreen';
 import SongsScreen from '../screens/SongsScreen';
 import StoriesScreen from '../screens/StoriesScreen';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
+import DynamicActivityScreen from '../screens/DynamicActivityScreen';
+import LevelsScreen from '../screens/LevelsScreen';
+import LessonsScreen from '../screens/LessonsScreen';
+import LessonActivitiesScreen from '../screens/LessonActivitiesScreen';
+import SongsStoriesScreen from '../screens/SongsStoriesScreen';
+import ConversationScreen from '../screens/ConversationScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
+import StepsAnimationScreen from '../screens/StepsAnimationScreen';
 
-// Create both tab and stack navigators
-const Tab = createBottomTabNavigator();
+// Create stack navigator
 const Stack = createStackNavigator();
 
-// Custom Tab Button with Press Effect
-const CustomTabButton = ({ children, onPress }: any) => {
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.85,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 3,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      activeOpacity={0.7}
-      style={tabStyles.tabButton}
-    >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        {children}
-      </Animated.View>
-    </TouchableOpacity>
-  );
-};
-
-// Tab Navigator - includes only Home, Lessons, and Profile (or Login for guests)
-function TabNavigator() {
-  const { currentUser } = useUser();
-  const isGuest = currentUser?.isGuest || !currentUser;
-
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          if (route.name === 'Home') {
-            return (
-              <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
-                <Image 
-                  source={require('../../assets/home.webp')} 
-                  style={{ 
-                    width: size, 
-                    height: size,
-                    opacity: focused ? 1 : 0.6,
-                  }} 
-                />
-              </Animated.View>
-            );
-          } else if (route.name === 'Activity') {
-            return (
-              <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
-                <Image 
-                  source={require('../../assets/lessons.png')} 
-                  style={{ 
-                    width: size, 
-                    height: size,
-                    opacity: focused ? 1 : 0.6,
-                  }} 
-                />
-              </Animated.View>
-            );
-          } else if (route.name === 'Profile' || route.name === 'Login') {
-            if (isGuest) {
-              // Show login arrow for guest users
-              return (
-                <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
-                  <MaterialIcons 
-                    name="login" 
-                    size={size} 
-                    color={focused ? '#43BCCD' : 'gray'}
-                  />
-                </Animated.View>
-              );
-            } else {
-              // Show profile image or default icon for logged-in users
-              return (
-                <Animated.View style={focused ? tabStyles.focusedIcon : tabStyles.icon}>
-                  {currentUser?.profileImageUrl ? (
-                    (() => {
-                      const profileImageUri = resolveImageUri(currentUser.profileImageUrl);
-                      const isEmoji = isEmojiLike(currentUser.profileImageUrl);
-
-                      if (profileImageUri) {
-                        return (
-                          <Image 
-                            source={{ uri: profileImageUri }} 
-                            style={{ 
-                              width: size, 
-                              height: size,
-                              borderRadius: size / 2,
-                              borderWidth: focused ? 2 : 0,
-                              borderColor: '#43BCCD',
-                              opacity: focused ? 1 : 0.6,
-                              backgroundColor: '#f0f0f0',
-                            }}
-                            resizeMode="cover"
-                          />
-                        );
-                      }
-
-                      if (isEmoji) {
-                        return (
-                          <View style={{ 
-                            width: size, 
-                            height: size,
-                            borderRadius: size / 2,
-                            backgroundColor: '#FFD700',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            borderWidth: focused ? 2 : 0,
-                            borderColor: '#43BCCD',
-                            opacity: focused ? 1 : 0.6,
-                          }}>
-                            <Text style={{ fontSize: size * 0.6 }}>{currentUser.profileImageUrl}</Text>
-                          </View>
-                        );
-                      }
-
-                      return (
-                        <Image 
-                          source={require('../../assets/profile.png')} 
-                          style={{ 
-                            width: size, 
-                            height: size,
-                            opacity: focused ? 1 : 0.6,
-                          }} 
-                        />
-                      );
-                    })()
-                  ) : (
-                    <Image 
-                      source={require('../../assets/profile.png')} 
-                      style={{ 
-                        width: size, 
-                        height: size,
-                        opacity: focused ? 1 : 0.6,
-                      }} 
-                    />
-                  )}
-                </Animated.View>
-              );
-            }
-          }
-        },
-        tabBarActiveTintColor: '#43BCCD',
-        tabBarInactiveTintColor: 'gray',
-        tabBarButton: (props) => <CustomTabButton {...props} />,
-        tabBarStyle: {
-          height: 65,
-          paddingBottom: 10,
-          paddingTop: 5,
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
-          elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
-      })}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Activity" component={LessonScreen} />
-      {isGuest ? (
-        <Tab.Screen 
-          name="Login" 
-          component={LoginScreenWrapper}
-          options={{
-            tabBarLabel: 'Login',
-          }}
-        />
-      ) : (
-        <Tab.Screen 
-          name="Profile" 
-          component={ProfileScreen}
-          options={{
-            tabBarLabel: 'Profile',
-          }}
-        />
-      )}
-    </Tab.Navigator>
-  );
-}
-
-// Login Screen wrapper for tab navigation
+// Login Screen wrapper for stack navigation
 const LoginScreenWrapper = () => {
   const { login } = useUser();
   const navigation = useNavigation<any>();
@@ -231,7 +37,8 @@ const LoginScreenWrapper = () => {
   const handleLogin = async (userData: any) => {
     try {
       await login(userData);
-      // Navigation will automatically update due to user context change
+      // Navigate to home after login
+      navigation.navigate('Home');
     } catch (error) {
       console.error('Login error:', error);
     }
@@ -267,7 +74,8 @@ const RegisterScreenWrapper = () => {
   const handleRegisterComplete = async (userData: any) => {
     try {
       await register(userData);
-      // Navigation will automatically update due to user context change
+      // Navigate to home after registration
+      navigation.navigate('Home');
     } catch (error) {
       console.error('Registration error:', error);
       throw error; // Let the RegisterScreen handle the error display
@@ -284,20 +92,30 @@ const RegisterScreenWrapper = () => {
   });
 };
 
-// Main App Navigator - combines tab navigator with all feature screens
+// Main App Navigator - stack-based navigation without bottom tabs
 export default function AppNavigator() {
   return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="MainTabs" component={TabNavigator} />
-        <Stack.Screen name="Register" component={RegisterScreenWrapper} />
-        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-        <Stack.Screen name="Videos" component={VideosScreen} />
-        <Stack.Screen name="Songs" component={SongsScreen} />
-        <Stack.Screen name="Stories" component={StoriesScreen} />
-        <Stack.Screen name="Activities" component={ActivitiesScreen} />
-        <Stack.Screen name="Exercise" component={ExerciseScreen} />
-        <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
-      </Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Welcome">
+      <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Login" component={LoginScreenWrapper} />
+      <Stack.Screen name="Register" component={RegisterScreenWrapper} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="Videos" component={VideosScreen} />
+      <Stack.Screen name="Songs" component={SongsScreen} />
+      <Stack.Screen name="Stories" component={StoriesScreen} />
+      <Stack.Screen name="Activities" component={ActivitiesScreen} />
+      <Stack.Screen name="Exercise" component={ExerciseScreen} />
+      <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
+      <Stack.Screen name="DynamicActivity" component={DynamicActivityScreen} />
+      <Stack.Screen name="Levels" component={LevelsScreen} />
+      <Stack.Screen name="Lessons" component={LessonsScreen} />
+      <Stack.Screen name="LessonActivities" component={LessonActivitiesScreen} />
+      <Stack.Screen name="SongsStories" component={SongsStoriesScreen} />
+      <Stack.Screen name="Conversation" component={ConversationScreen} />
+      <Stack.Screen name="StepsAnimation" component={StepsAnimationScreen} />
+    </Stack.Navigator>
   );
 }
 

@@ -56,6 +56,11 @@ export class UserStorage {
           learningLanguage: userData.learningLanguage,
         });
       }
+      
+      // Special handling for admin user profile image
+      if (userData.username === 'Admin' && userData.profileImageUrl) {
+        await AsyncStorage.setItem('admin_profile_image', userData.profileImageUrl);
+      }
     } catch (error) {
       console.error('Error saving user data:', error);
     }

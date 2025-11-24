@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
-  Dimensions,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -17,8 +16,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { useUser } from '../context/UserContext';
 import { getTranslation, Language } from '../utils/translations';
-
-const { width, height } = Dimensions.get('window');
+import { useResponsive } from '../utils/responsive';
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
@@ -37,6 +35,7 @@ interface UserData {
 
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onBack }) => {
   const { currentUser } = useUser();
+  const responsive = useResponsive();
   
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -260,6 +259,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   };
 
   const currentQuestion = questions[currentStep];
+  const styles = getStyles(responsive);
 
   return (
     <ImageBackground
@@ -391,11 +391,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   backgroundImage: {
     flex: 1,
-    width: width,
-    height: height,
+    width: responsive.width,
+    height: responsive.height,
   },
   blurContainer: {
     flex: 1,
@@ -411,76 +411,76 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 40,
+    paddingHorizontal: responsive.wp(8),
+    paddingVertical: responsive.hp(5),
   },
   progressContainer: {
-    marginBottom: 30,
+    marginBottom: responsive.hp(3.5),
   },
   progressText: {
-    fontSize: 14,
+    fontSize: responsive.wp(3.7),
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: responsive.hp(1.2),
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowOffset: { width: 0, height: responsive.hp(0.12) },
+    textShadowRadius: responsive.wp(0.5),
   },
   progressBar: {
-    height: 4,
+    height: responsive.hp(0.5),
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
+    borderRadius: responsive.wp(0.5),
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 2,
+    borderRadius: responsive.wp(0.5),
   },
   questionContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 20,
-    padding: 30,
-    marginBottom: 30,
+    borderRadius: responsive.wp(5),
+    padding: responsive.wp(8),
+    marginBottom: responsive.hp(3.5),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: responsive.hp(1.2) },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowRadius: responsive.wp(5),
     elevation: 10,
   },
   question: {
-    fontSize: 24,
+    fontSize: responsive.wp(6.4),
     fontWeight: 'bold',
     color: '#2C3E50',
-    marginBottom: 10,
+    marginBottom: responsive.hp(1.2),
     textAlign: 'center',
   },
   subquestion: {
-    fontSize: 18,
+    fontSize: responsive.wp(4.8),
     fontWeight: '600',
     color: '#43BCCD',
-    marginBottom: 20,
+    marginBottom: responsive.hp(2.5),
     textAlign: 'center',
   },
   input: {
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4),
+    fontSize: responsive.wp(4.2),
     color: '#2C3E50',
-    marginTop: 10,
+    marginTop: responsive.hp(1.2),
   },
   languageContainer: {
-    marginTop: 20,
+    marginTop: responsive.hp(2.5),
   },
   languageButton: {
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4),
+    marginBottom: responsive.hp(1.2),
     alignItems: 'center',
   },
   languageButtonSelected: {
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     borderColor: '#43BCCD',
   },
   languageButtonText: {
-    fontSize: 16,
+    fontSize: responsive.wp(4.2),
     color: '#2C3E50',
     fontWeight: '500',
   },
@@ -499,32 +499,32 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
+    paddingHorizontal: responsive.wp(2.5),
   },
   backButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4.2),
     alignItems: 'center',
     flex: 1,
-    marginRight: 10,
+    marginRight: responsive.wp(2.5),
   },
   backButtonText: {
     color: '#2C3E50',
-    fontSize: 16,
+    fontSize: responsive.wp(4.2),
     fontWeight: 'bold',
   },
   nextButton: {
     backgroundColor: '#43BCCD',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4.2),
     alignItems: 'center',
     flex: 1,
-    marginLeft: 10,
+    marginLeft: responsive.wp(2.5),
   },
   nextButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: responsive.wp(4.2),
     fontWeight: 'bold',
   },
   buttonDisabled: {
@@ -535,15 +535,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   errorContainer: {
-    marginTop: 8,
-    padding: 8,
+    marginTop: responsive.hp(1),
+    padding: responsive.wp(2),
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 8,
+    borderRadius: responsive.wp(2),
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
-    marginBottom: 4,
+    fontSize: responsive.wp(3.2),
+    marginBottom: responsive.hp(0.5),
   },
 });
 

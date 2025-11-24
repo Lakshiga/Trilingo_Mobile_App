@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 
-function LessonScreen() {
+const LessonScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme } = useTheme();
 
@@ -321,6 +321,7 @@ const styles = StyleSheet.create({
   levelText: {
     fontSize: 13,
     fontWeight: 'bold',
+    color: '#fff',
   },
   arrowContainer: {
     marginLeft: 12,

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  Dimensions,
   StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,22 +18,25 @@ import {
   parseExerciseJson,
   SupportedLanguage,
 } from '../utils/exerciseHelpers';
+import { useResponsive } from '../utils/responsive';
 
 type ExerciseDetailRouteParams = {
   params: {
     activity: ActivityDto;
     exercises: ExerciseDto[];
     startIndex: number;
+    activityTypeId?: number;
+    jsonMethod?: string;
   };
 };
 
 const languages: SupportedLanguage[] = ['ta', 'en', 'si'];
-const { width } = Dimensions.get('window');
 
 const ExerciseDetailScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<ExerciseDetailRouteParams, 'params'>>();
-  const { activity, exercises, startIndex } = route.params || {
+  const responsive = useResponsive();
+  const { activity, exercises, startIndex, activityTypeId, jsonMethod } = route.params || {
     activity: {
       id: 0,
       name_en: 'Activity',
@@ -47,6 +49,8 @@ const ExerciseDetailScreen: React.FC = () => {
     },
     exercises: [],
     startIndex: 0,
+    activityTypeId: undefined,
+    jsonMethod: undefined,
   };
 
   const [currentIndex, setCurrentIndex] = useState(startIndex || 0);
@@ -131,11 +135,12 @@ const ExerciseDetailScreen: React.FC = () => {
   };
 
   if (!currentExercise || !mediaInfo) {
+    const emptyStyles = getStyles(responsive);
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No exercises available</Text>
-        <TouchableOpacity style={styles.emptyButton} onPress={closeScreen}>
-          <Text style={styles.emptyButtonText}>Back</Text>
+      <View style={emptyStyles.emptyState}>
+        <Text style={emptyStyles.emptyText}>No exercises available</Text>
+        <TouchableOpacity style={emptyStyles.emptyButton} onPress={closeScreen}>
+          <Text style={emptyStyles.emptyButtonText}>Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -150,12 +155,14 @@ const ExerciseDetailScreen: React.FC = () => {
     getLocalizedValue(mediaInfo?.instruction, selectedLanguage) ||
     mediaInfo.description;
 
+  const styles = getStyles(responsive);
+
   return (
     <LinearGradient colors={['#F7FFF7', '#E0F7FA']} style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.navButton} onPress={closeScreen}>
-          <MaterialIcons name="arrow-back" size={26} color="#1F2937" />
+          <MaterialIcons name="arrow-back" size={responsive.wp(6.5)} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.progressContainer}>
           <Text style={styles.progressText}>
@@ -163,7 +170,7 @@ const ExerciseDetailScreen: React.FC = () => {
           </Text>
         </View>
         <TouchableOpacity style={styles.navButton} onPress={closeScreen}>
-          <MaterialIcons name="close" size={26} color="#1F2937" />
+          <MaterialIcons name="close" size={responsive.wp(6.5)} color="#1F2937" />
         </TouchableOpacity>
       </View>
 
@@ -202,10 +209,12 @@ const ExerciseDetailScreen: React.FC = () => {
             <Image
               source={{ uri: mediaInfo.imageUrl }}
               style={styles.exerciseImage}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : (
-            <Text style={styles.placeholderEmoji}>🎨</Text>
+            <View style={styles.placeholderContainer}>
+              <Text style={styles.placeholderEmoji}>🎨</Text>
+            </View>
           )}
         </View>
 
@@ -218,7 +227,7 @@ const ExerciseDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.audioButton} onPress={playAudio}>
             <MaterialIcons
               name={isPlaying ? 'pause-circle-filled' : 'volume-up'}
-              size={36}
+              size={responsive.wp(9)}
               color="#1F2937"
             />
             <Text style={styles.audioButtonText}>
@@ -230,91 +239,91 @@ const ExerciseDetailScreen: React.FC = () => {
 
       <View style={styles.navigationRow}>
         <TouchableOpacity style={styles.navAction} onPress={goToPrev}>
-          <MaterialIcons name="chevron-left" size={24} color="#1F2937" />
+          <MaterialIcons name="chevron-left" size={responsive.wp(6)} color="#1F2937" />
           <Text style={styles.navActionText}>Back</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navAction} onPress={goToNext}>
           <Text style={styles.navActionText}>Next</Text>
-          <MaterialIcons name="chevron-right" size={24} color="#1F2937" />
+          <MaterialIcons name="chevron-right" size={responsive.wp(6)} color="#1F2937" />
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 30,
+    paddingHorizontal: responsive.wp(5),
+    paddingTop: responsive.hp(6),
+    paddingBottom: responsive.hp(4),
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: responsive.hp(2.5),
   },
   navButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: responsive.wp(12),
+    height: responsive.wp(12),
+    borderRadius: responsive.wp(6),
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: responsive.hp(0.25) },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: responsive.wp(1),
     elevation: 4,
   },
   progressContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: responsive.wp(5),
+    paddingVertical: responsive.hp(1),
+    borderRadius: responsive.wp(5),
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: responsive.hp(0.1) },
     shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowRadius: responsive.wp(0.8),
     elevation: 2,
   },
   progressText: {
-    fontSize: 16,
+    fontSize: responsive.wp(4),
     fontWeight: '600',
     color: '#1F2937',
   },
   headerText: {
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: responsive.hp(1.2),
   },
   activityTitle: {
-    fontSize: 22,
+    fontSize: responsive.wp(5.5),
     fontWeight: '700',
     color: '#1F2937',
   },
   activitySubtitle: {
-    fontSize: 14,
+    fontSize: responsive.wp(3.5),
     color: '#6B7280',
-    marginTop: 4,
+    marginTop: responsive.hp(0.5),
   },
   languageRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 16,
-    gap: 10,
+    marginBottom: responsive.hp(2),
+    gap: responsive.wp(2.5),
   },
   languageChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: responsive.wp(4),
+    paddingVertical: responsive.hp(1),
+    borderRadius: responsive.wp(5),
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   languageChipActive: {
     backgroundColor: '#1F2937',
   },
   languageChipText: {
-    fontSize: 14,
+    fontSize: responsive.wp(3.5),
     fontWeight: '600',
     color: '#1F2937',
   },
@@ -324,57 +333,64 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 24,
+    borderRadius: responsive.wp(7),
+    padding: responsive.wp(6),
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: responsive.hp(0.75) },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowRadius: responsive.wp(3),
     elevation: 6,
   },
   imageWrapper: {
-    width: width * 0.55,
-    height: width * 0.55,
-    borderRadius: (width * 0.55) / 2,
+    width: responsive.wp(50),
+    height: responsive.wp(50),
+    borderRadius: responsive.wp(25),
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 6,
+    marginBottom: responsive.hp(3),
+    borderWidth: responsive.wp(1.5),
     borderColor: '#E0F2FE',
+    overflow: 'hidden',
   },
   exerciseImage: {
-    width: '85%',
-    height: '85%',
+    width: '100%',
+    height: '100%',
+  },
+  placeholderContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   placeholderEmoji: {
-    fontSize: 64,
+    fontSize: responsive.wp(16),
   },
   wordText: {
-    fontSize: 36,
+    fontSize: responsive.wp(9),
     fontWeight: '700',
     color: '#1F2937',
     textAlign: 'center',
   },
   translationText: {
-    fontSize: 16,
+    fontSize: responsive.wp(4),
     color: '#4B5563',
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 20,
+    marginTop: responsive.hp(1),
+    marginBottom: responsive.hp(2.5),
   },
   audioButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    gap: responsive.wp(2),
+    paddingHorizontal: responsive.wp(4.5),
+    paddingVertical: responsive.hp(1.2),
     backgroundColor: '#E0F2FE',
-    borderRadius: 30,
+    borderRadius: responsive.wp(7.5),
   },
   audioButtonText: {
-    fontSize: 16,
+    fontSize: responsive.wp(4),
     fontWeight: '600',
     color: '#1F2937',
   },
@@ -382,24 +398,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: responsive.hp(3),
   },
   navAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    gap: responsive.wp(1.5),
+    paddingHorizontal: responsive.wp(5),
+    paddingVertical: responsive.hp(1.5),
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: responsive.wp(6),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: responsive.hp(0.25) },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: responsive.wp(1),
     elevation: 4,
   },
   navActionText: {
-    fontSize: 16,
+    fontSize: responsive.wp(4),
     fontWeight: '600',
     color: '#1F2937',
   },
@@ -410,20 +426,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7FFF7',
   },
   emptyText: {
-    fontSize: 18,
-    marginBottom: 16,
+    fontSize: responsive.wp(4.5),
+    marginBottom: responsive.hp(2),
     color: '#1F2937',
   },
   emptyButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingHorizontal: responsive.wp(6),
+    paddingVertical: responsive.hp(1.5),
+    borderRadius: responsive.wp(6),
     backgroundColor: '#1F2937',
   },
   emptyButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: responsive.wp(4),
   },
 });
 
