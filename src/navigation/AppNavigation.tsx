@@ -1,29 +1,50 @@
 import * as React from 'react';
+
 import { createStackNavigator } from '@react-navigation/stack';
+
 import { Image, TouchableOpacity, Animated, StyleSheet, View, Text } from 'react-native';
+
 import { MaterialIcons } from '@expo/vector-icons';
+
 import { useUser } from '../context/UserContext';
+
 import { useNavigation } from '@react-navigation/native';
+
 import ExerciseDetailScreen from '../screens/ExerciseDetailScreen';
+
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 import HomeScreen from '../screens/HomeScreen';
+
 import ExerciseScreen from '../screens/ExerciseScreen';
+
 import ProfileScreen from '../screens/ProfileScreen';
+
 import EditProfileScreen from '../screens/EditProfileScreen';
+
 import LoginScreen from '../screens/LoginScreen';
+
 import RegisterScreen from '../screens/RegisterScreen';
+
 import VideosScreen from '../screens/VideosScreen';
+
 import SongsScreen from '../screens/SongsScreen';
+
 import StoriesScreen from '../screens/StoriesScreen';
+
 import ActivitiesScreen from '../screens/ActivitiesScreen';
+
 import DynamicActivityScreen from '../screens/DynamicActivityScreen';
+
 import LevelsScreen from '../screens/LevelsScreen';
+
 import LessonsScreen from '../screens/LessonsScreen';
+
 import LessonActivitiesScreen from '../screens/LessonActivitiesScreen';
-import SongsStoriesScreen from '../screens/SongsStoriesScreen';
-import ConversationScreen from '../screens/ConversationScreen';
+
 import WelcomeScreen from '../screens/WelcomeScreen';
+
+import ConversationScreen from '../screens/ConversationScreen';
 import StepsAnimationScreen from '../screens/StepsAnimationScreen';
 
 // Create stack navigator
@@ -86,10 +107,12 @@ const RegisterScreenWrapper = () => {
     navigation.goBack();
   };
 
-  return React.createElement(RegisterScreen, {
-    onRegisterComplete: handleRegisterComplete,
-    onBack: handleBack,
-  });
+  return (
+    <RegisterScreen
+      onRegisterComplete={handleRegisterComplete}
+      onBack={handleBack}
+    />
+  );
 };
 
 // Main App Navigator - stack-based navigation without bottom tabs
@@ -112,7 +135,6 @@ export default function AppNavigator() {
       <Stack.Screen name="Levels" component={LevelsScreen} />
       <Stack.Screen name="Lessons" component={LessonsScreen} />
       <Stack.Screen name="LessonActivities" component={LessonActivitiesScreen} />
-      <Stack.Screen name="SongsStories" component={SongsStoriesScreen} />
       <Stack.Screen name="Conversation" component={ConversationScreen} />
       <Stack.Screen name="StepsAnimation" component={StepsAnimationScreen} />
     </Stack.Navigator>

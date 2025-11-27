@@ -6,16 +6,16 @@ export const API_CONFIG = {
   // Update these URLs based on your development setup
 
   // For Android Emulator (most common)
-  ANDROID_EMULATOR: 'http://10.0.2.2:5166/api',
+  ANDROID_EMULATOR: 'https://d3v81eez8ecmto.cloudfront.net/api',
 
   // For iOS Simulator
   IOS_SIMULATOR: 'https://d3v81eez8ecmto.cloudfront.net/api',
 
   // For Physical Device (use your computer's IP address)
-  PHYSICAL_DEVICE: 'http://172.22.126.148:5166/api', // TODO: replace with your local machine IPv4
+  PHYSICAL_DEVICE: 'https://d3v81eez8ecmto.cloudfront.net/api', // TODO: replace with your local machine IPv4
 
   // For Web/Expo Go
-  WEB: 'http://localhost:5166/api',
+  WEB: 'https://d3v81eez8ecmto.cloudfront.net/api',
 
   // Production URL (CloudFront)
   PRODUCTION: 'https://d3v81eez8ecmto.cloudfront.net/api',
@@ -91,48 +91,55 @@ const deriveHostFromRuntime = (): string | null => {
 };
 
 export const getApiBaseUrl = (): string => {
-  const env = (process as any)?.env ?? {};
-  const isProduction =
-    env.EXPO_PUBLIC_ENV === 'production' ||
-    env.NODE_ENV === 'production' ||
-    env.EXPO_PUBLIC_FORCE_PROD === 'true';
-  const enableLocalDev = env.EXPO_PUBLIC_ENABLE_LOCAL === 'true';
+  try {
+    const env = (process as any)?.env ?? {};
+    const isProduction =
+      env.EXPO_PUBLIC_ENV === 'production' ||
+      env.NODE_ENV === 'production' ||
+      env.EXPO_PUBLIC_FORCE_PROD === 'true';
+    const enableLocalDev = env.EXPO_PUBLIC_ENABLE_LOCAL === 'true';
 
-  const manualOverride =
-    (env.EXPO_PUBLIC_API_URL as string | undefined) ??
-    (env.API_URL as string | undefined);
-  if (manualOverride) {
-    return normalizeApiUrl(manualOverride);
-  }
+    const manualOverride =
+      (env.EXPO_PUBLIC_API_URL as string | undefined) ??
+      (env.API_URL as string | undefined);
+    if (manualOverride && typeof manualOverride === 'string' && manualOverride.trim()) {
+      return normalizeApiUrl(manualOverride);
+    }
 
-  const manualDirect = env.EXPO_PUBLIC_API_DIRECT as string | undefined;
-  if (manualDirect) {
-    return normalizeApiUrl(manualDirect);
-  }
+    const manualDirect = env.EXPO_PUBLIC_API_DIRECT as string | undefined;
+    if (manualDirect && typeof manualDirect === 'string' && manualDirect.trim()) {
+      return normalizeApiUrl(manualDirect);
+    }
 
-  const configured = getConfiguredApiUrl();
-  if (configured) {
-    return configured;
-  }
+    const configured = getConfiguredApiUrl();
+    if (configured && typeof configured === 'string' && configured.trim()) {
+      return configured;
+    }
 
-  // Default to CloudFront unless local development is explicitly enabled
-  if (isProduction || !enableLocalDev) {
+    // Default to CloudFront unless local development is explicitly enabled
+    if (isProduction || !enableLocalDev) {
+      return API_CONFIG.PRODUCTION;
+    }
+
+    const host = deriveHostFromRuntime();
+    if (host && typeof host === 'string' && host.trim()) {
+      let resolvedHost = host;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        resolvedHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+      }
+      return `http://${resolvedHost}:5166/api`;
+    }
+
+    if (Platform.OS === 'android' && enableLocalDev) return API_CONFIG.ANDROID_EMULATOR;
+    if (Platform.OS === 'ios' && enableLocalDev) return API_CONFIG.IOS_SIMULATOR;
+
+    // Always return a valid URL - fallback to production
+    return API_CONFIG.PRODUCTION;
+  } catch (error) {
+    console.error('Error getting API base URL:', error);
+    // Always return a fallback URL
     return API_CONFIG.PRODUCTION;
   }
-
-  const host = deriveHostFromRuntime();
-  if (host) {
-    let resolvedHost = host;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      resolvedHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-    }
-    return `http://${resolvedHost}:5166/api`;
-  }
-
-  if (Platform.OS === 'android' && enableLocalDev) return API_CONFIG.ANDROID_EMULATOR;
-  if (Platform.OS === 'ios' && enableLocalDev) return API_CONFIG.IOS_SIMULATOR;
-
-  return API_CONFIG.PRODUCTION;
 };
 
 // Fallback URLs for testing
@@ -155,9 +162,9 @@ export const FALLBACK_URLS = [
     : '',
 ].filter((value) => typeof value === 'string' && value.length > 0) as string[];
 
-// Current API base URL
-export const API_BASE_URL = getApiBaseUrl();
-export const API_TIMEOUT = 10000; // 10 seconds
+// Current API base URL - ensure it's never undefined
+export const API_BASE_URL = getApiBaseUrl() || API_CONFIG.PRODUCTION;
+export const API_TIMEOUT = 30000; // 30 seconds (increased for CloudFront)
 
 // CloudFront URL for static assets (images, etc.)
 export const CLOUDFRONT_URL = API_CONFIG.CLOUDFRONT;

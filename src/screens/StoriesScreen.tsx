@@ -236,6 +236,16 @@ const StoriesScreen: React.FC = () => {
       ]).start();
     };
 
+    // Handler for when the story card is pressed
+    const handleStoryPress = () => {
+      // Navigate to the DynamicActivityScreen with the story's activity data
+      (navigation as any).navigate('DynamicActivity', {
+        activityTypeId: story.activityId,
+        activityTitle: 'Stories', // This will show "Stories" as the title
+        storyData: story.storyData,
+      });
+    };
+
     const cardStyle = {
       opacity: cardAnimations[index],
       transform: [
@@ -261,6 +271,7 @@ const StoriesScreen: React.FC = () => {
           activeOpacity={0.9}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
+          onPress={handleStoryPress} // Add onPress handler
         >
           <LinearGradient
             colors={story.gradient}

@@ -1,7 +1,14 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, API_TIMEOUT, API_CONFIG } from '../config/apiConfig';
-import { UserStorage } from '../utils/UserStorage';
+// Lazy import to avoid circular dependency with UserStorage
+let UserStorage: any = null;
+const getUserStorage = async () => {
+  if (!UserStorage) {
+    UserStorage = (await import('../utils/UserStorage')).UserStorage;
+  }
+  return UserStorage;
+};
 
 // API Response Types
 export interface ApiResponse<T> {
@@ -118,9 +125,16 @@ class ApiService {
   private publicApi: AxiosInstance; // Separate instance for public endpoints without auth
 
   constructor() {
-    console.log('Initializing API Service with base URL:', API_BASE_URL);
+    // Ensure API_BASE_URL is never undefined
+    const baseUrl = API_BASE_URL || API_CONFIG.PRODUCTION;
+    console.log('Initializing API Service with base URL:', baseUrl);
+    
+    if (!baseUrl) {
+      console.error('API_BASE_URL is undefined! Using fallback:', API_CONFIG.PRODUCTION);
+    }
+    
     this.api = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: baseUrl || API_CONFIG.PRODUCTION,
       timeout: API_TIMEOUT,
       headers: {
         'Content-Type': 'application/json',
@@ -129,7 +143,7 @@ class ApiService {
     
     // Create a separate axios instance for public endpoints (no auth token)
     this.publicApi = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: baseUrl || API_CONFIG.PRODUCTION,
       timeout: API_TIMEOUT,
       headers: {
         'Content-Type': 'application/json',
@@ -175,8 +189,9 @@ class ApiService {
   // Helper method to determine if we should use public or authenticated API
   private async shouldUsePublicApi(): Promise<boolean> {
     try {
-      // Check if user is logged in
-      const currentUser = await UserStorage.getCurrentUser();
+      // Check if user is logged in (lazy import to avoid circular dependency)
+      const UserStorageClass = await getUserStorage();
+      const currentUser = await UserStorageClass.getCurrentUser();
       console.log('Current user:', currentUser);
       // Use public API for guest users or when no user is logged in
       const usePublic = !currentUser || currentUser.isGuest === true;
@@ -213,6 +228,14 @@ class ApiService {
       
       return response;
     } catch (error: any) {
+      // For login, provide better error messages
+      if (error.response?.status === 401) {
+        // Backend returns 401 with response body containing error message
+        const errorMessage = error.response?.data?.message || 'Invalid username or password. Please try again.';
+        const loginError = new Error(errorMessage);
+        loginError.name = 'LoginError';
+        throw loginError;
+      }
       throw this.handleError(error);
     }
   }
@@ -272,11 +295,36 @@ class ApiService {
   private handleError(error: any): Error {
     if (error.response) {
       // Backend responded with error status
-      const message = error.response.data?.message || 'Server error occurred';
+      const status = error.response.status;
+      const message = error.response.data?.message || error.message || 'Server error occurred';
+      
+      // Provide specific error messages for common status codes
+      if (status === 504) {
+        return new Error(
+          'Backend connection failed: Server responded with error: 504. ' +
+          'Please check if the backend server is running and accessible.'
+        );
+      } else if (status === 503) {
+        return new Error('Service temporarily unavailable. Please try again later.');
+      } else if (status === 502) {
+        return new Error('Bad gateway. The server is not responding correctly.');
+      } else if (status === 500) {
+        return new Error('Internal server error. Please try again later.');
+      } else if (status === 401) {
+        return new Error('Authentication failed. Please login again.');
+      } else if (status === 403) {
+        return new Error('You do not have permission to perform this action.');
+      } else if (status === 404) {
+        return new Error('The requested resource was not found.');
+      }
+      
       return new Error(message);
     } else if (error.request) {
-      // Network error
-      return new Error('Network error. Please check your connection.');
+      // Network error - no response received
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        return new Error('Request timeout. The server took too long to respond. Please try again.');
+      }
+      return new Error('Network error. Please check your internet connection.');
     } else {
       // Other error
       return new Error(error.message || 'An unexpected error occurred');
@@ -329,13 +377,21 @@ class ApiService {
     // Try public API first if requested
     if (usePublicFirst) {
       try {
-        const response = await this.publicApi.get<T>(endpoint);
+        const response = await this.retryRequest(
+          () => this.publicApi.get<T>(endpoint),
+          2, // max 2 retries for GET requests
+          1000
+        );
         return response.data;
       } catch (publicError: any) {
         // If it's a 401 or 403 error, try the authenticated API
         if (publicError.response?.status === 401 || publicError.response?.status === 403) {
           try {
-            const response = await this.api.get<T>(endpoint);
+            const response = await this.retryRequest(
+              () => this.api.get<T>(endpoint),
+              2,
+              1000
+            );
             return response.data;
           } catch (authError: any) {
             // If authenticated API also fails with 403, this is a permissions issue
@@ -353,21 +409,117 @@ class ApiService {
         throw publicError;
       }
     } else {
-      // Use authenticated API directly
-      const response = await this.api.get<T>(endpoint);
+      // Use authenticated API directly with retry
+      const response = await this.retryRequest(
+        () => this.api.get<T>(endpoint),
+        2,
+        1000
+      );
       return response.data;
     }
   }
 
+  // Retry logic with exponential backoff for 504 errors
+  private async retryRequest<T>(
+    requestFn: () => Promise<AxiosResponse<T>>,
+    maxRetries: number = 3,
+    retryDelay: number = 1000
+  ): Promise<AxiosResponse<T>> {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await requestFn();
+      } catch (error: any) {
+        lastError = error;
+        const status = error.response?.status;
+        const isRetryable = status === 504 || status === 503 || status === 502 || 
+                           error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+        
+        if (isRetryable && attempt < maxRetries) {
+          const delay = retryDelay * Math.pow(2, attempt); // Exponential backoff
+          console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms for status ${status}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // Not retryable or max retries reached
+        throw error;
+      }
+    }
+    
+    throw lastError;
+  }
+
   // Helper method to make API calls with fallback from public to authenticated API for POST requests
-  private async makeApiPostCall<T>(endpoint: string, data: any): Promise<T> {
-    try {
-      console.log(`Trying authenticated API for POST ${endpoint}`);
-      const response = await this.api.post<T>(endpoint, data);
-      return response.data;
-    } catch (error: any) {
-      console.error(`POST API failed for ${endpoint}:`, error.message);
-      throw error;
+  private async makeApiPostCall<T>(endpoint: string, data: any, usePublicFirst: boolean = false): Promise<T> {
+    // For login and register, always use public API ONLY (user not authenticated yet)
+    const isPublicEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register');
+    
+    if (usePublicFirst || isPublicEndpoint) {
+      try {
+        console.log(`Trying public API for POST ${endpoint}`);
+        
+        const response = await this.retryRequest(
+          () => this.publicApi.post<T>(endpoint, data),
+          3, // max 3 retries
+          1000 // initial delay 1 second
+        );
+        
+        return response.data;
+      } catch (publicError: any) {
+        // For login/register endpoints, NEVER fallback to authenticated API
+        // 401 is a valid response for invalid credentials - just throw it
+        if (isPublicEndpoint) {
+          console.error(`Public API failed for POST ${endpoint}:`, publicError.message);
+          throw publicError;
+        }
+        
+        // For other endpoints, try authenticated API if public fails with 401/403
+        console.log(`Public API failed for POST ${endpoint}, trying authenticated API...`);
+        if (publicError.response?.status === 401 || publicError.response?.status === 403) {
+          try {
+            const response = await this.retryRequest(
+              () => this.api.post<T>(endpoint, data),
+              3,
+              1000
+            );
+            return response.data;
+          } catch (authError: any) {
+            console.error(`POST API failed for ${endpoint}:`, authError.message);
+            throw authError;
+          }
+        }
+        
+        // For other errors, throw the public error
+        console.error(`POST API failed for ${endpoint}:`, publicError.message);
+        throw publicError;
+      }
+    } else {
+      // Use authenticated API directly
+      try {
+        console.log(`Trying authenticated API for POST ${endpoint}`);
+        
+        const response = await this.retryRequest(
+          () => this.api.post<T>(endpoint, data),
+          3, // max 3 retries
+          1000 // initial delay 1 second
+        );
+        
+        return response.data;
+      } catch (error: any) {
+        console.error(`POST API failed for ${endpoint}:`, error.message);
+        
+        // Provide better error messages
+        if (error.response?.status === 504) {
+          throw new Error(
+            'Backend connection failed: Server responded with error: 504. ' +
+            'Please check if the backend server is running and accessible.'
+          );
+        }
+        
+        throw error;
+      }
     }
   }
 

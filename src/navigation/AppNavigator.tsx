@@ -42,8 +42,6 @@ import LessonsScreen from '../screens/LessonsScreen';
 
 import LessonActivitiesScreen from '../screens/LessonActivitiesScreen';
 
-import SongsStoriesScreen from '../screens/SongsStoriesScreen';
-
 import ConversationScreen from '../screens/ConversationScreen';
 import StepsAnimationScreen from '../screens/StepsAnimationScreen';
 
@@ -134,7 +132,6 @@ export default function AppNavigator() {
       <Stack.Screen name="Levels" component={LevelsScreen} />
       <Stack.Screen name="Lessons" component={LessonsScreen} />
       <Stack.Screen name="LessonActivities" component={LessonActivitiesScreen} />
-      <Stack.Screen name="SongsStories" component={SongsStoriesScreen} />
       <Stack.Screen name="Conversation" component={ConversationScreen} />
       <Stack.Screen name="StepsAnimation" component={StepsAnimationScreen} />
     </Stack.Navigator>

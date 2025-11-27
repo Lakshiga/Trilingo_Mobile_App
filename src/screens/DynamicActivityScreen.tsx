@@ -3,21 +3,28 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { StoryPlayer } from '../components/activity-types'; // Import StoryPlayer component
 
 type DynamicActivityRouteParams = {
   activityTypeId?: number;
   jsonMethod?: string;
   activityTitle?: string;
+  storyData?: any; // Add storyData property
 };
 
 const DynamicActivityScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<{ params: DynamicActivityRouteParams }, 'params'>>();
   const { theme } = useTheme();
-  const { activityTypeId, jsonMethod, activityTitle } = route.params || {};
+  const { activityTypeId, jsonMethod, activityTitle, storyData } = route.params || {};
 
   // Handle different activity types based on JSON method
   const renderActivityContent = () => {
+    // Check if this is a story activity
+    if (storyData) {
+      return renderStoryActivity();
+    }
+    
     if (!jsonMethod) {
       return (
         <View style={styles.emptyState}>
@@ -52,6 +59,24 @@ const DynamicActivityScreen: React.FC = () => {
       console.error('Error parsing JSON method:', error);
       return renderGenericActivity();
     }
+  };
+
+  // Render story activity using StoryPlayer component
+  const renderStoryActivity = () => {
+    // Create content object for StoryPlayer
+    const storyContent = {
+      title: { en: activityTitle || 'Story' },
+      instruction: { en: 'Enjoy the story!' },
+      storyData: storyData,
+    };
+
+    return (
+      <StoryPlayer 
+        content={storyContent}
+        currentLang="en"
+        onComplete={() => {}}
+      />
+    );
   };
 
   const renderMCQActivity = () => (

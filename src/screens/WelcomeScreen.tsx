@@ -8,8 +8,8 @@ import {
   StatusBar,
   Image,
   Linking,
+  SafeAreaView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useResponsive } from '../utils/responsive';
@@ -148,7 +148,7 @@ const WelcomeScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.primaryButton}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('StepsAnimation')}
+            onPress={() => navigation.navigate('Register')}
           >
             <Text style={styles.primaryButtonText}>Get started</Text>
           </TouchableOpacity>
@@ -214,8 +214,8 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       width: '100%',
     },
     characterWrapper: {
-      width: responsive.wp(80),
-      height: responsive.wp(80),
+      width: responsive.wp(75),
+      height: responsive.wp(75),
       borderRadius: responsive.wp(27.5),
       alignItems: 'center',
       justifyContent: 'center',
