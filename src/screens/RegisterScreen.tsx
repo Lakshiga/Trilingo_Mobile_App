@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Image,
   ImageBackground,
   Alert,
   KeyboardAvoidingView,
@@ -17,6 +18,8 @@ import { BlurView } from 'expo-blur';
 import { useUser } from '../context/UserContext';
 import { getTranslation, Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
+import { Video,ResizeMode } from 'expo-av';
+
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
@@ -50,6 +53,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   });
   const [fadeAnim] = useState(new Animated.Value(0));
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+  const nameInputRef = useRef<TextInput | null>(null);
+  const [nameInputVisible, setNameInputVisible] = useState(false);
 
   // Get current language - use selected native language if available, otherwise default to English
   const getCurrentLanguage = (): Language => {
@@ -262,157 +267,178 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   const styles = getStyles(responsive);
 
   return (
-    <ImageBackground
-      source={require('../../assets/BDnamed.jpg')}
-      style={styles.backgroundImage}
-      resizeMode="cover"
-    >
-      <BlurView intensity={40} style={styles.blurContainer}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardContainer}
-        >
-          <ScrollView contentContainerStyle={styles.scrollContainer}>
-            <View style={styles.container}>
-              {/* Progress indicator */}
-              <View style={styles.progressContainer}>
-                <Text style={styles.progressText}>
-                  {getTranslation(currentLanguage, 'step')} {currentStep + 1} {getTranslation(currentLanguage, 'of')} {questions.length}
-                </Text>
-                <View style={styles.progressBar}>
-                  <View 
-                    style={[
-                      styles.progressFill, 
-                      { width: `${((currentStep + 1) / questions.length) * 100}%` }
-                    ]} 
-                  />
-                </View>
-              </View>
+    <View style={styles.backgroundContainer}>
+  <Video
+    source={require('../../assets/register.mp4')}
+    style={StyleSheet.absoluteFill}
+    shouldPlay
+    resizeMode={ResizeMode.COVER}
+    isLooping
+    isMuted
+  />
 
-              {/* Question */}
-              <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
-                <Text style={styles.question}>{currentQuestion.question}</Text>
-                {currentQuestion.subquestion && (
-                  <Text style={styles.subquestion}>{currentQuestion.subquestion}</Text>
+  <BlurView intensity={40} style={styles.blurContainer}>
+    <View style={styles.container}>
+      {currentQuestion.key === 'name' && (
+        <Image
+          source={
+            userData.name && userData.name.length > 0
+              ? require('../../assets/type.gif')
+              : require('../../assets/phonesee.gif')
+          }
+          style={styles.topRightGif}
+          resizeMode="contain"
+        />
+      )}
+    
+        {/* Question */}
+      <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+        <Text style={styles.question}>{currentQuestion.question}</Text>
+        {currentQuestion.subquestion && (
+          <Text style={styles.subquestion}>{currentQuestion.subquestion}</Text>
+        )}
+
+        {/* Input or Language Selection */}
+        {currentQuestion.isLanguageSelection ? (
+          <View style={styles.languageContainer}>
+            {currentQuestion.options?.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.languageButton,
+                  userData[currentQuestion.key as keyof UserData] === option &&
+                  styles.languageButtonSelected,
+                ]}
+                onPress={() => handleLanguageSelect(option)}
+              >
+                <Text
+                  style={[
+                    styles.languageButtonText,
+                    userData[currentQuestion.key as keyof UserData] === option &&
+                    styles.languageButtonTextSelected,
+                  ]}
+                >
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View>
+            {currentQuestion.key === 'name' ? (
+              // For name step: no visible input initially. Tap to show and focus.
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.nameTapArea}
+                onPress={() => {
+                  setNameInputVisible(true);
+                  setTimeout(() => nameInputRef.current?.focus(), 50);
+                }}
+              >
+                {!nameInputVisible && (
+                  <Text style={styles.namePlaceholder}>Tap to enter your first name</Text>
                 )}
 
-                {/* Input or Language Selection */}
-                {currentQuestion.isLanguageSelection ? (
-                  <View style={styles.languageContainer}>
-                    {currentQuestion.options?.map((option) => (
-                      <TouchableOpacity
-                        key={option}
-                        style={[
-                          styles.languageButton,
-                          userData[currentQuestion.key as keyof UserData] === option &&
-                          styles.languageButtonSelected,
-                        ]}
-                        onPress={() => handleLanguageSelect(option)}
-                      >
-                        <Text
-                          style={[
-                            styles.languageButtonText,
-                            userData[currentQuestion.key as keyof UserData] === option &&
-                            styles.languageButtonTextSelected,
-                          ]}
-                        >
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
+                {nameInputVisible && (
+                  <TextInput
+                    ref={(r) => { nameInputRef.current = r; }}
+                    style={[styles.inputCentered]}
+                    value={userData.name}
+                    onChangeText={(text) => setUserData({ ...userData, name: text })}
+                    placeholder={currentQuestion.placeholder}
+                    placeholderTextColor="#999"
+                    keyboardType={currentQuestion.keyboardType as any}
+                    autoCapitalize="words"
+                  />
+                )}
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TextInput
+                  style={[
+                    styles.input,
+                    currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
+                  ]}
+                  value={userData[currentQuestion.key as keyof UserData]}
+                  onChangeText={(text) => {
+                    setUserData({
+                      ...userData,
+                      [currentQuestion.key]: text,
+                    });
+                    if (currentQuestion.key === 'password') {
+                      const errors = validatePassword(text);
+                      setPasswordErrors(errors);
+                    }
+                  }}
+                  placeholder={currentQuestion.placeholder}
+                  placeholderTextColor="#999"
+                  keyboardType={currentQuestion.keyboardType as any}
+                  secureTextEntry={currentQuestion.secure}
+                  autoCapitalize="none"
+                />
+                {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
+                  <View style={styles.errorContainer}>
+                    {passwordErrors.map((error, index) => (
+                      <Text key={index} style={styles.errorText}>
+                        • {error}
+                      </Text>
                     ))}
                   </View>
-                ) : (
-                  <View>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
-                      ]}
-                      value={userData[currentQuestion.key as keyof UserData]}
-                      onChangeText={(text) => {
-                        setUserData({
-                          ...userData,
-                          [currentQuestion.key]: text,
-                        });
-                        // Validate password in real-time
-                        if (currentQuestion.key === 'password') {
-                          const errors = validatePassword(text);
-                          setPasswordErrors(errors);
-                        }
-                      }}
-                      placeholder={currentQuestion.placeholder}
-                      placeholderTextColor="#999"
-                      keyboardType={currentQuestion.keyboardType as any}
-                      secureTextEntry={currentQuestion.secure}
-                      autoCapitalize="none"
-                    />
-                    {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
-                      <View style={styles.errorContainer}>
-                        {passwordErrors.map((error, index) => (
-                          <Text key={index} style={styles.errorText}>
-                            • {error}
-                          </Text>
-                        ))}
-                      </View>
-                    )}
-                  </View>
                 )}
-              </Animated.View>
+              </>
+            )}
+          </View>
+        )}
+      </Animated.View>
 
-              {/* Navigation Buttons */}
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={[styles.backButton, isLoading && styles.buttonDisabled]} 
-                  onPress={handleBack}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
-                </TouchableOpacity>
+      {/* Navigation Buttons */}
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity 
+          style={[styles.backButton, isLoading && styles.buttonDisabled]} 
+          onPress={handleBack}
+          disabled={isLoading}
+        >
+          <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
+        </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.nextButton, isLoading && styles.buttonDisabled]} 
-                  onPress={handleNext}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.nextButtonText}>
-                      {currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next')}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </BlurView>
-    </ImageBackground>
+        <TouchableOpacity 
+          style={[styles.nextButton, isLoading && styles.buttonDisabled]} 
+          onPress={handleNext}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.nextButtonText}>
+              {currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next')}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  </BlurView>
+</View>
+
   );
 };
 
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
-  backgroundImage: {
+  backgroundContainer: {
     flex: 1,
     width: responsive.width,
     height: responsive.height,
+    overflow: 'hidden',
+    position: 'relative',
   },
   blurContainer: {
     flex: 1,
-    justifyContent: 'center',
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
+    position: 'relative',
   },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    paddingTop: responsive.hp(10),
     paddingHorizontal: responsive.wp(8),
-    paddingVertical: responsive.hp(5),
+    position: 'relative',
   },
   progressContainer: {
     marginBottom: responsive.hp(3.5),
@@ -470,6 +496,36 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontSize: responsive.wp(4.2),
     color: '#2C3E50',
     marginTop: responsive.hp(1.2),
+  },
+  // Centered input shown after tapping the screen for name entry
+  nameTapArea: {
+    width: '100%',
+    height: responsive.hp(30),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  namePlaceholder: {
+    fontSize: responsive.wp(4.6),
+    color: '#666',
+  },
+  inputCentered: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: responsive.wp(3),
+    padding: responsive.wp(4),
+    fontSize: responsive.wp(5),
+    color: '#2C3E50',
+    width: '80%',
+    textAlign: 'center',
+  },
+  topRightGif: {
+    position: 'absolute',
+    top: responsive.hp(2),
+    right: responsive.wp(4),
+    width: responsive.wp(18),
+    height: responsive.wp(18),
+    zIndex: 20,
   },
   languageContainer: {
     marginTop: responsive.hp(2.5),
@@ -546,5 +602,6 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     marginBottom: responsive.hp(0.5),
   },
 });
+
 
 export default RegisterScreen;

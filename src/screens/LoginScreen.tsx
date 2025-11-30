@@ -127,15 +127,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
                   </Text>
                 </TouchableOpacity>
 
-                {/* Try Now Button */}
-                <TouchableOpacity 
-                  style={[styles.guestButton, isLoading && styles.guestButtonDisabled]} 
-                  onPress={onGuest}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.guestButtonText}>Try Now</Text>
-                  <Text style={styles.guestSubtext}>Continue as a guest</Text>
-                </TouchableOpacity>
+
               </View>
             </View>
           </ScrollView>

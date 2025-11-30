@@ -1,60 +1,116 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from "react";
+import { View, Animated, StyleSheet } from "react-native";
 
-const { width, height } = Dimensions.get('window');
-
-type SplashScreenProps = {
+interface SplashProps {
   onFinish: () => void;
-};
+}
 
-const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+const Splash = ({ onFinish }: SplashProps) => {
+  // Flag to show the loader after logo animation finishes
+  const [loaderVisible, setLoaderVisible] = useState(false);
+
+  // Logo animation values (Scale and Opacity)
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Line Loader animation value (controls the width of the bar)
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // Configuration
+  const logoDuration = 1500;
+  const loaderDuration = 2500; // Time the progress bar takes to fill
+
+  // Logo animation (Scale In)
   useEffect(() => {
-    // Show splash screen for 2 seconds
-    const timer = setTimeout(() => {
-      onFinish();
-    }, 2000);
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: logoDuration,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: logoDuration,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Show loader only AFTER logo animation finishes
+      setLoaderVisible(true);
+      startLoaderAnimation();
+    });
+  }, []);
 
-    return () => clearTimeout(timer);
-  }, [onFinish]);
+  // Loader Animation (Line Fill)
+  const startLoaderAnimation = () => {
+    // Animate the progress value from 0 to 1
+    Animated.timing(progressAnim, {
+      toValue: 1, // 1 represents 100% of the width
+      duration: loaderDuration,
+      useNativeDriver: false, // Must be false for interpolation/width update
+    }).start();
+
+    // Finish after the loading duration
+    setTimeout(() => {
+      onFinish();
+    }, loaderDuration);
+  };
+
+  // Map the 0-1 progress value to the dynamic width percentage
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
     <View style={styles.container}>
-      {/* Welcome Image Card */}
-      <Image
-        source={require('../../assets/Gemini_Generated_Image_uhk48suhk48suhk4.png')}
-        style={styles.welcomeImage}
-        resizeMode="cover"
+      {/* Logo */}
+      <Animated.Image
+        source={require("../../assets/LOGO.png")}
+        style={{
+          width: 200,
+          height: 200,
+          transform: [{ scale: scaleAnim }],
+          opacity: opacityAnim,
+        }}
+        resizeMode="contain"
       />
-      {/* Trilingo text */}
-      <Text style={styles.title}>Trilingo!</Text>
+
+      {/* Line Loading Bar */}
+      {loaderVisible && (
+        <View style={styles.progressBarContainer}>
+          <Animated.View
+            style={[
+              styles.progressBarFiller,
+              { width: progressWidth },
+            ]}
+          />
+        </View>
+      )}
     </View>
   );
 };
 
+export default Splash;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  welcomeImage: {
-    width: width * 0.65,
-    height: height * 0.35,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 10,
+  progressBarContainer: {
+    marginTop: 35, // Increased margin for better separation from logo
+    width: '70%',
+    height: 6, // Thin line loader
+    backgroundColor: '#e0e0e0', // Light gray track
+    borderRadius: 3,
+    overflow: 'hidden',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginTop: 30,
-    letterSpacing: 0.5,
+  progressBarFiller: {
+    height: '100%',
+    // Blue color for the fill
+    backgroundColor: "#007bff", 
+    borderRadius: 3,
   },
 });
-
-export default SplashScreen;

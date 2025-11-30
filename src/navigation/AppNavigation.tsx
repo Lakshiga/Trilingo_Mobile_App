@@ -66,8 +66,8 @@ const LoginScreenWrapper = () => {
   };
 
   const handleRegister = () => {
-    // Navigate to register screen
-    navigation.navigate('Register');
+    // Navigate to the steps/welcome animation instead of register
+    navigation.navigate('Welcome');
   };
 
   const handleGuest = async () => {
