@@ -163,7 +163,7 @@ const HomeScreen: React.FC = () => {
       <View style={[styles.topBar, { backgroundColor: isDarkMode ? '#374151' : '#AEE6FF' }]}>
         <View style={styles.leftIcon}>
           <Image 
-            source={require('../../assets/Q-Bit_icon_bg.png')} 
+            source={require('../../assets/LOGO.png')} 
             style={{ 
               width: responsive.wp(20), 
               height: responsive.hp(8.5),

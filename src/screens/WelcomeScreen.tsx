@@ -1,10 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Animated,
   StatusBar,
   Image,
   Linking,
@@ -23,132 +22,39 @@ const TERMS_LINKS = {
 const WelcomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const responsive = useResponsive();
-  const headerBounce = useRef(new Animated.Value(0)).current;
-  const characterFloat = useRef(new Animated.Value(0)).current;
-  const sparklePulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(headerBounce, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(headerBounce, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(characterFloat, {
-          toValue: 1,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(characterFloat, {
-          toValue: 0,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(sparklePulse, {
-          toValue: 1,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(sparklePulse, {
-          toValue: 0,
-          duration: 1600,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [characterFloat, headerBounce, sparklePulse]);
 
   const styles = getStyles(responsive);
 
-  const headerAnimatedStyle = {
-    transform: [
-      {
-        translateY: headerBounce.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, -responsive.hp(1.5)],
-        }),
-      },
-    ],
-  };
-
-  const characterAnimatedStyle = {
-    transform: [
-      {
-        translateY: characterFloat.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, -responsive.hp(2)],
-        }),
-      },
-      {
-        scale: characterFloat.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 1.03],
-        }),
-      },
-    ],
-  };
-
-  const sparkleAnimatedStyle = {
-    opacity: sparklePulse.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.3, 1],
-    }),
-    transform: [
-      {
-        scale: sparklePulse.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.8, 1.2],
-        }),
-      },
-    ],
-  };
+  
 
   const openLink = (url: string) => {
     Linking.openURL(url).catch(console.warn);
   };
 
   return (
-    <LinearGradient colors={['#1c2e3c', '#1c2e3c']} style={styles.gradient}>
+    <LinearGradient colors={['#83dce3ff', '#0400ffff']} style={styles.gradient}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <Animated.Text style={[styles.heading, headerAnimatedStyle]}>
-          Welcome to Q-Bit
-        </Animated.Text>
+        <Text style={styles.heading}>Welcome to Q-bit</Text>
         <Text style={styles.description}>
           We help parents around the world raise children with ease
         </Text>
 
         <View style={styles.animationWrapper}>
-          <Animated.View style={[styles.characterWrapper, characterAnimatedStyle]}>
+          <View style={styles.characterWrapper}>
             <Image
-              source={require('../../assets/Lion.gif')}
+              source={require('../../assets/elephant1.gif')}
               resizeMode="contain"
               style={styles.character}
             />
-          </Animated.View>
+          </View>
         </View>
 
         <View style={styles.buttonsContainer}>
           <TouchableOpacity
             style={styles.primaryButton}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('Register')}
+            onPress={() => navigation.navigate('StepsAnimation')}
           >
             <Text style={styles.primaryButtonText}>Get started</Text>
           </TouchableOpacity>
@@ -157,7 +63,7 @@ const WelcomeScreen: React.FC = () => {
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.secondaryButtonText}>I have an account</Text>
+            <Text style={styles.secondaryButtonText}>I already have an account-<Text style={styles.registerHighlight}>Login</Text></Text>
           </TouchableOpacity>
         </View>
 
@@ -194,16 +100,17 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       paddingBottom: responsive.hp(4),
     },
     heading: {
-      fontSize: responsive.wp(8),
-      fontWeight: '700',
-      color: '#FFFFFF',
+      marginTop: responsive.hp(10),
+      fontSize: responsive.wp(10),
+      color: '#413939ff',
+      fontWeight: '900',
       textAlign: 'center',
-      marginTop: responsive.hp(6),
       marginBottom: responsive.hp(1),
     },
     description: {
+      marginTop: responsive.hp(2),
       fontSize: responsive.wp(4.2),
-      color: 'rgba(255,255,255,0.85)',
+      color: 'rgba(0, 0, 0, 0.85)',
       textAlign: 'center',
       marginBottom: responsive.hp(4),
     },
@@ -222,8 +129,8 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       backgroundColor: 'rgba(255,255,255,0.08)',
     },
     character: {
-      width: '150%',
-      height: '150%',
+      width: '200%',
+      height: '200%',
     },
     sparkle: {
       position: 'absolute',
@@ -245,7 +152,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       marginBottom: responsive.hp(3),
     },
     primaryButton: {
-      backgroundColor: '#47C268',
+      backgroundColor: '#1ac748ff',
       paddingVertical: responsive.hp(2),
       borderRadius: responsive.wp(7),
       alignItems: 'center',
@@ -288,6 +195,10 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       color: '#FFFFFF',
       textDecorationLine: 'underline',
       fontWeight: '600',
+    },
+    registerHighlight: {
+    color: '#43BCCD',
+    fontWeight: 'bold',
     },
   });
 

@@ -30,6 +30,9 @@
     "extra": {
       "apiBaseUrl": "https://d3v81eez8ecmto.cloudfront.net/api",
       "cloudFrontUrl": "https://d3v81eez8ecmto.cloudfront.net"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
