@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,21 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
-  ImageBackground,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   Animated,
   ActivityIndicator,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useUser } from '../context/UserContext';
 import { getTranslation, Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
 import { Video,ResizeMode } from 'expo-av';
 
+// Age options for adult selection
+const ADULT_AGE_OPTIONS = ['0-1', '2', '3', '4', '5', '6+'];
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
@@ -53,8 +54,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   });
   const [fadeAnim] = useState(new Animated.Value(0));
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
-  const nameInputRef = useRef<TextInput | null>(null);
-  const [nameInputVisible, setNameInputVisible] = useState(false);
+  
 
   // Get current language - use selected native language if available, otherwise default to English
   const getCurrentLanguage = (): Language => {
@@ -88,39 +88,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
 
   const questions = React.useMemo(() => [
     {
-      key: 'name',
-      question: getTranslation(currentLanguage, 'whatIsYourName'),
-      placeholder: getTranslation(currentLanguage, 'enterYourFullName'),
-      keyboardType: 'default',
-    },
-    {
-      key: 'age',
-      question: getTranslation(currentLanguage, 'whatIsYourAge'),
-      placeholder: getTranslation(currentLanguage, 'enterYourAge'),
-      keyboardType: 'numeric',
-    },
-    {
-      key: 'email',
-      question: getTranslation(currentLanguage, 'whatIsYourEmail'),
-      placeholder: getTranslation(currentLanguage, 'enterYourEmail'),
-      keyboardType: 'email-address',
-    },
-    {
-      key: 'username',
-      question: getTranslation(currentLanguage, 'createAccount'),
-      subquestion: getTranslation(currentLanguage, 'username'),
-      placeholder: getTranslation(currentLanguage, 'chooseUsername'),
-      keyboardType: 'default',
-    },
-    {
-      key: 'password',
-      question: getTranslation(currentLanguage, 'createAccount'),
-      subquestion: getTranslation(currentLanguage, 'password'),
-      placeholder: getTranslation(currentLanguage, 'choosePassword'),
-      keyboardType: 'default',
-      secure: true,
-    },
-    {
       key: 'nativeLanguage',
       question: getTranslation(currentLanguage, 'whatIsYourNativeLanguage'),
       placeholder: '',
@@ -135,6 +102,39 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       keyboardType: 'default',
       isLanguageSelection: true,
       options: ['Tamil', 'Sinhala', 'English'],
+    },
+    {
+      key: 'name',
+      question: getTranslation(currentLanguage, 'whatIsYourName'),
+      placeholder: getTranslation('English', 'enterYourFullName'),
+      keyboardType: 'default',
+    },
+    {
+      key: 'age',
+      question: getTranslation(currentLanguage, 'whatIsYourAge'),
+      placeholder: getTranslation('English', 'enterYourAge'),
+      keyboardType: 'numeric',
+    },
+    {
+      key: 'email',
+      question: getTranslation(currentLanguage, 'whatIsYourEmail'),
+      placeholder: getTranslation('English', 'enterYourEmail'),
+      keyboardType: 'email-address',
+    },
+    {
+      key: 'username',
+      question: getTranslation(currentLanguage, 'createAccount'),
+      subquestion: getTranslation(currentLanguage, 'username'),
+      placeholder: getTranslation('English', 'chooseUsername'),
+      keyboardType: 'default',
+    },
+    {
+      key: 'password',
+      question: getTranslation(currentLanguage, 'createAccount'),
+      subquestion: getTranslation(currentLanguage, 'password'),
+      placeholder: getTranslation('English', 'choosePassword'),
+      keyboardType: 'default',
+      secure: true,
     },
   ], [currentLanguage]);
 
@@ -263,161 +263,316 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     });
   };
 
+  const handleAgeSelect = (age: string) => {
+    setUserData({
+      ...userData,
+      age: age,
+    });
+  };
+
   const currentQuestion = questions[currentStep];
+  const totalSteps = questions.length;
+  const progress = (currentStep + 1) / totalSteps;
   const styles = getStyles(responsive);
+  const isPurpleScreen = currentQuestion.key === 'name' || currentQuestion.key === 'age' || currentQuestion.key === 'email' || currentQuestion.key === 'nativeLanguage' || currentQuestion.key === 'learningLanguage' || currentQuestion.key === 'username' || currentQuestion.key === 'password';
+  const showTopBarAndGif = true; // Show on all screens
 
   return (
-    <View style={styles.backgroundContainer}>
-  <Video
-    source={require('../../assets/register.mp4')}
-    style={StyleSheet.absoluteFill}
-    shouldPlay
-    resizeMode={ResizeMode.COVER}
-    isLooping
-    isMuted
-  />
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.backgroundContainer}>
+      <Video
+        source={require('../../assets/register.mp4')}
+        style={StyleSheet.absoluteFill}
+        shouldPlay
+        resizeMode={ResizeMode.COVER}
+        isLooping
+        isMuted
+      />
 
-  <BlurView intensity={40} style={styles.blurContainer}>
-    <View style={styles.container}>
-      {currentQuestion.key === 'name' && (
-        <Image
-          source={
-            userData.name && userData.name.length > 0
-              ? require('../../assets/type.gif')
-              : require('../../assets/phonesee.gif')
-          }
-          style={styles.topRightGif}
-          resizeMode="contain"
-        />
-      )}
-    
-        {/* Question */}
-      <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
-        <Text style={styles.question}>{currentQuestion.question}</Text>
-        {currentQuestion.subquestion && (
-          <Text style={styles.subquestion}>{currentQuestion.subquestion}</Text>
-        )}
-
-        {/* Input or Language Selection */}
-        {currentQuestion.isLanguageSelection ? (
-          <View style={styles.languageContainer}>
-            {currentQuestion.options?.map((option) => (
-              <TouchableOpacity
-                key={option}
-                style={[
-                  styles.languageButton,
-                  userData[currentQuestion.key as keyof UserData] === option &&
-                  styles.languageButtonSelected,
-                ]}
-                onPress={() => handleLanguageSelect(option)}
-              >
-                <Text
-                  style={[
-                    styles.languageButtonText,
-                    userData[currentQuestion.key as keyof UserData] === option &&
-                    styles.languageButtonTextSelected,
-                  ]}
-                >
-                  {option}
-                </Text>
+      <BlurView intensity={40} style={styles.blurContainer}>
+        <View style={styles.container}>
+          {/* Top Navigation Bar: Shown on All Screens */}
+          {showTopBarAndGif && (
+            <View style={styles.purpleTopBar}>
+              <TouchableOpacity onPress={handleBack} style={styles.purpleBackButton}>
+                <MaterialCommunityIcons name="chevron-left" size={responsive.wp(10)} color="#FFFFFF" />
               </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View>
-            {currentQuestion.key === 'name' ? (
-              // For name step: no visible input initially. Tap to show and focus.
-              <TouchableOpacity
-                activeOpacity={1}
-                style={styles.nameTapArea}
-                onPress={() => {
-                  setNameInputVisible(true);
-                  setTimeout(() => nameInputRef.current?.focus(), 50);
-                }}
-              >
-                {!nameInputVisible && (
-                  <Text style={styles.namePlaceholder}>Tap to enter your first name</Text>
-                )}
+              <View style={styles.purpleProgressBarWrapper}>
+                <View style={styles.purpleProgressBar}>
+                  <Animated.View
+                    style={[
+                      styles.purpleProgressFill,
+                      { width: `${progress * 100}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
 
-                {nameInputVisible && (
+          {/* Character + Speech Bubble: Shown on All Screens */}
+          {showTopBarAndGif && (
+            <View style={styles.purpleCharacterBubbleRow}>
+              <Image
+                source={
+                  (currentQuestion.key === 'name' && userData.name && userData.name.length > 0) ||
+                  (currentQuestion.key === 'age' && userData.age && userData.age.length > 0) ||
+                  (currentQuestion.key === 'email' && userData.email && userData.email.length > 0)||
+                  (currentQuestion.key === 'nativeLanguage' && userData.nativeLanguage && userData.nativeLanguage.length > 0) ||
+                  (currentQuestion.key === 'learningLanguage' && userData.learningLanguage && userData.learningLanguage.length > 0) ||
+                  (currentQuestion.key === 'username' && userData.username && userData.username.length > 0) ||
+                  (currentQuestion.key === 'password' && userData.password && userData.password.length > 0) ?
+                    require('../../assets/type.gif')
+                    : require('../../assets/phonesee.gif')
+                }
+                style={styles.purpleCharacterImage}
+                resizeMode="contain"
+              />
+              <View style={styles.purpleSpeechBubble}>
+                <Text style={styles.purpleSpeechBubbleText}>{currentQuestion.question}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* NAME Screen: Purple Design with Auto-focused Input */}
+          {currentQuestion.key === 'name' && (
+            <View style={styles.purpleInputContainer}>
+              <TextInput
+                autoFocus={true}
+                style={styles.purpleNameInput}
+                value={userData.name}
+                onChangeText={(text) => setUserData({ ...userData, name: text })}
+                placeholder={currentQuestion.placeholder}
+                placeholderTextColor="rgba(173, 197, 216, 0.62)"
+                keyboardType={currentQuestion.keyboardType as any}
+                autoCapitalize="words"
+              />
+            </View>
+          )}
+
+          {/* EMAIL Screen: Purple Design with Auto-focused Input */}
+          {currentQuestion.key === 'email' && (
+            <View style={styles.purpleInputContainer}>
+              <TextInput
+                autoFocus={true}
+                style={styles.purpleNameInput}
+                value={userData.email}
+                onChangeText={(text) => setUserData({ ...userData, email: text })}
+                placeholder={currentQuestion.placeholder}
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                keyboardType={currentQuestion.keyboardType as any}
+                autoCapitalize="none"
+              />
+            </View>
+          )}
+
+          {/* AGE Screen: Purple Design with Grid Selection */}
+          {currentQuestion.key === 'age' && (
+            <View style={styles.purpleAgeContainer}>
+              <View style={styles.ageGridContainer}>
+                {ADULT_AGE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.ageButton,
+                      userData.age === option && styles.ageButtonSelected,
+                    ]}
+                    onPress={() => handleAgeSelect(option)}
+                  >
+                    <Text
+                      style={[
+                        styles.ageButtonText,
+                        userData.age === option && styles.ageButtonTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+             
+          )}
+
+          {/* LANGUAGE SELECTION Screens: Grid Layout with Top Bar */}
+          {(currentQuestion.key === 'nativeLanguage' || currentQuestion.key === 'learningLanguage') && (
+            <View style={styles.purpleAgeContainer}>
+              <View style={styles.ageGridContainer}>
+                {currentQuestion.options?.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.ageButton,
+                      userData[currentQuestion.key as keyof UserData] === option &&
+                      styles.ageButtonSelected,
+                    ]}
+                    onPress={() => handleLanguageSelect(option)}
+                  >
+                    <Text
+                      style={[
+                        styles.ageButtonText,
+                        userData[currentQuestion.key as keyof UserData] === option &&
+                        styles.ageButtonTextSelected,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* USERNAME Screen: Purple Design with Auto-focused Input */}
+          {currentQuestion.key === 'username' && (
+            <View style={styles.purpleInputContainer}>
+              <TextInput
+                autoFocus={true}
+                style={styles.purpleNameInput}
+                value={userData.username}
+                onChangeText={(text) => setUserData({ ...userData, username: text })}
+                placeholder={currentQuestion.placeholder}
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                keyboardType={currentQuestion.keyboardType as any}
+                autoCapitalize="none"
+              />
+            </View>
+          )}
+
+          {/* PASSWORD Screen: Purple Design with Auto-focused Input */}
+          {currentQuestion.key === 'password' && (
+            <View style={styles.purpleInputContainer}>
+              <TextInput
+                autoFocus={true}
+                style={styles.purpleNameInput}
+                value={userData.password}
+                onChangeText={(text) => {
+                  setUserData({ ...userData, password: text });
+                  const errors = validatePassword(text);
+                  setPasswordErrors(errors);
+                }}
+                placeholder={currentQuestion.placeholder}
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                keyboardType={currentQuestion.keyboardType as any}
+                autoCapitalize="none"
+                secureTextEntry={true}
+              />
+              {passwordErrors.length > 0 && (
+                <View style={styles.purpleErrorContainer}>
+                  {passwordErrors.map((error, index) => (
+                    <Text key={index} style={styles.purpleErrorText}>
+                      • {error}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+          {currentQuestion.key !== 'name' && currentQuestion.key !== 'age' && currentQuestion.key !== 'email' && currentQuestion.key !== 'nativeLanguage' && currentQuestion.key !== 'learningLanguage' && currentQuestion.key !== 'username' && currentQuestion.key !== 'password' && (
+            <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
+              <Text style={styles.question}>{currentQuestion.question}</Text>
+              {currentQuestion.subquestion && (
+                <Text style={styles.subquestion}>{currentQuestion.subquestion}</Text>
+              )}
+
+              {/* Input or Language Selection */}
+              {currentQuestion.isLanguageSelection ? (
+                <View style={styles.languageContainer}>
+                  {currentQuestion.options?.map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.ageButton,
+                        userData[currentQuestion.key as keyof UserData] === option &&
+                        styles.ageButtonSelected,
+                      ]}
+                      onPress={() => handleLanguageSelect(option)}
+                    >
+                      <Text
+                        style={[
+                          styles.ageButtonText,
+                          userData[currentQuestion.key as keyof UserData] === option &&
+                          styles.ageButtonTextSelected,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <>
                   <TextInput
-                    ref={(r) => { nameInputRef.current = r; }}
-                    style={[styles.inputCentered]}
-                    value={userData.name}
-                    onChangeText={(text) => setUserData({ ...userData, name: text })}
+                    style={[
+                      styles.input,
+                      currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
+                    ]}
+                    value={userData[currentQuestion.key as keyof UserData]}
+                    onChangeText={(text) => {
+                      setUserData({
+                        ...userData,
+                        [currentQuestion.key]: text,
+                      });
+                      if (currentQuestion.key === 'password') {
+                        const errors = validatePassword(text);
+                        setPasswordErrors(errors);
+                      }
+                    }}
                     placeholder={currentQuestion.placeholder}
                     placeholderTextColor="#999"
                     keyboardType={currentQuestion.keyboardType as any}
-                    autoCapitalize="words"
+                    secureTextEntry={currentQuestion.secure}
+                    autoCapitalize="none"
                   />
-                )}
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TextInput
-                  style={[
-                    styles.input,
-                    currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
-                  ]}
-                  value={userData[currentQuestion.key as keyof UserData]}
-                  onChangeText={(text) => {
-                    setUserData({
-                      ...userData,
-                      [currentQuestion.key]: text,
-                    });
-                    if (currentQuestion.key === 'password') {
-                      const errors = validatePassword(text);
-                      setPasswordErrors(errors);
-                    }
-                  }}
-                  placeholder={currentQuestion.placeholder}
-                  placeholderTextColor="#999"
-                  keyboardType={currentQuestion.keyboardType as any}
-                  secureTextEntry={currentQuestion.secure}
-                  autoCapitalize="none"
-                />
-                {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
-                  <View style={styles.errorContainer}>
-                    {passwordErrors.map((error, index) => (
-                      <Text key={index} style={styles.errorText}>
-                        • {error}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-              </>
-            )}
-          </View>
-        )}
-      </Animated.View>
-
-      {/* Navigation Buttons */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={[styles.backButton, isLoading && styles.buttonDisabled]} 
-          onPress={handleBack}
-          disabled={isLoading}
-        >
-          <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.nextButton, isLoading && styles.buttonDisabled]} 
-          onPress={handleNext}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Text style={styles.nextButtonText}>
-              {currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next')}
-            </Text>
+                  {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
+                    <View style={styles.errorContainer}>
+                      {passwordErrors.map((error, index) => (
+                        <Text key={index} style={styles.errorText}>
+                          • {error}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+            </Animated.View>
           )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  </BlurView>
-</View>
+
+          {/* Navigation Buttons */}
+          <View style={[styles.buttonContainer, isPurpleScreen && styles.purpleButtonContainer]}>
+            {/* Back Button (Hidden on Purple Screens, shown on others) */}
+            {!isPurpleScreen && (
+              <TouchableOpacity 
+                style={[styles.backButton, isLoading && styles.buttonDisabled]} 
+                onPress={handleBack}
+                disabled={isLoading}
+              >
+                <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Continue/Next Button */}
+            <TouchableOpacity 
+              style={[
+                styles.nextButton,
+                isPurpleScreen && styles.nextButtonFullWidth,
+                isPurpleScreen && styles.purpleNextButton,
+                isLoading && styles.buttonDisabled
+              ]} 
+              onPress={handleNext}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={[styles.nextButtonText, isPurpleScreen && styles.purpleNextButtonText]}>
+                  {isPurpleScreen ? getTranslation(currentLanguage, 'continue') : (currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next'))}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </BlurView>
+    </KeyboardAvoidingView>
 
   );
 };
@@ -436,37 +591,128 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   },
   container: {
     flex: 1,
-    paddingTop: responsive.hp(10),
-    paddingHorizontal: responsive.wp(8),
+    paddingTop: responsive.hp(2),
+    paddingHorizontal: responsive.wp(6),
     position: 'relative',
+    justifyContent: 'space-between',
   },
-  progressContainer: {
-    marginBottom: responsive.hp(3.5),
+  
+  // ===== PURPLE THEME: TOP BAR =====
+  purpleTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.hp(2),
+    paddingVertical: responsive.hp(1),
   },
-  progressText: {
-    fontSize: responsive.wp(3.7),
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: responsive.hp(1.2),
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: responsive.hp(0.12) },
-    textShadowRadius: responsive.wp(0.5),
+  purpleBackButton: {
+    padding: responsive.wp(2),
+    marginRight: responsive.wp(3),
   },
-  progressBar: {
-    height: responsive.hp(0.5),
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: responsive.wp(0.5),
+  purpleProgressBarWrapper: {
+    flex: 1,
   },
-  progressFill: {
+  purpleProgressBar: {
+    height: responsive.hp(1),
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: responsive.wp(1.5),
+    overflow: 'hidden',
+  },
+  purpleProgressFill: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: responsive.wp(0.5),
+    backgroundColor: '#2196F3',
+    borderRadius: responsive.wp(1.5),
   },
+  // ===== PURPLE THEME: CHARACTER + BUBBLE =====
+  purpleCharacterBubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: responsive.hp(3),
+    marginTop: responsive.hp(1),
+  },
+  purpleCharacterImage: {
+    width: responsive.wp(28),
+    height: responsive.wp(28),
+    marginRight: responsive.wp(2),
+    flexShrink: 0,
+  },
+  purpleSpeechBubble: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: responsive.wp(5),
+    padding: responsive.wp(4),
+    flex: 1,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  purpleSpeechBubbleText: {
+    fontSize: responsive.wp(4.2),
+    fontWeight: '700',
+    color: '#0062ffff',
+    textAlign: 'center',
+  },
+  // ===== PURPLE THEME: NAME INPUT =====
+  purpleInputContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  purpleNameInput: {
+    fontSize: responsive.wp(8.5),
+    color: '#0a0ab8ff',
+    textAlign: 'center',
+    fontWeight: '700',
+    paddingHorizontal: responsive.wp(4),
+    paddingVertical: responsive.hp(1),
+  },
+  // ===== PURPLE THEME: AGE GRID =====
+  purpleAgeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ageGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: responsive.wp(3),
+    marginBottom: responsive.hp(3),
+    paddingHorizontal: responsive.wp(2),
+  },
+  ageButton: {
+    width: '30%',
+    paddingVertical: responsive.hp(2),
+    paddingHorizontal: responsive.wp(3),
+    backgroundColor: 'rgba(46, 126, 192, 0.78)',
+    borderWidth: 2,
+    borderColor: 'rgba(29, 175, 223, 0.3)',
+    borderRadius: responsive.wp(3),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ageButtonSelected: {
+    backgroundColor: 'rgba(102, 164, 206, 0.6)',
+    borderColor: '#ffffffff',
+    borderWidth: 3,
+  },
+  ageButtonText: {
+    fontSize: responsive.wp(4.5),
+    fontWeight: '600',
+    color: 'rgba(0, 0, 0, 0.7)',
+    textAlign: 'center',
+  },
+  ageButtonTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  // ===== STANDARD QUESTION CONTAINER (Non-Purple) =====
   questionContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderRadius: responsive.wp(5),
     padding: responsive.wp(8),
-    marginBottom: responsive.hp(3.5),
+    marginBottom: responsive.hp(3),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: responsive.hp(1.2) },
     shadowOpacity: 0.3,
@@ -497,65 +743,20 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     color: '#2C3E50',
     marginTop: responsive.hp(1.2),
   },
-  // Centered input shown after tapping the screen for name entry
-  nameTapArea: {
-    width: '100%',
-    height: responsive.hp(30),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  namePlaceholder: {
-    fontSize: responsive.wp(4.6),
-    color: '#666',
-  },
-  inputCentered: {
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(4),
-    fontSize: responsive.wp(5),
-    color: '#2C3E50',
-    width: '80%',
-    textAlign: 'center',
-  },
-  topRightGif: {
-    position: 'absolute',
-    top: responsive.hp(2),
-    right: responsive.wp(4),
-    width: responsive.wp(18),
-    height: responsive.wp(18),
-    zIndex: 20,
-  },
   languageContainer: {
     marginTop: responsive.hp(2.5),
   },
-  languageButton: {
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(4),
-    marginBottom: responsive.hp(1.2),
-    alignItems: 'center',
-  },
-  languageButtonSelected: {
-    backgroundColor: '#43BCCD',
-    borderColor: '#43BCCD',
-  },
-  languageButtonText: {
-    fontSize: responsive.wp(4.2),
-    color: '#2C3E50',
-    fontWeight: '500',
-  },
-  languageButtonTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
+  
+  // ===== BUTTON STYLES =====
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: responsive.wp(2.5),
+    justifyContent: 'center',
+    paddingHorizontal: responsive.wp(2),
+    paddingBottom: responsive.hp(2),
+    gap: responsive.wp(2),
+  },
+  purpleButtonContainer: {
+    backgroundColor: 'transparent',
   },
   backButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.6)',
@@ -563,7 +764,6 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     padding: responsive.wp(4.2),
     alignItems: 'center',
     flex: 1,
-    marginRight: responsive.wp(2.5),
   },
   backButtonText: {
     color: '#2C3E50',
@@ -571,17 +771,27 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontWeight: 'bold',
   },
   nextButton: {
-    backgroundColor: '#43BCCD',
+    backgroundColor: '#2196F3',
     borderRadius: responsive.wp(3),
-    padding: responsive.wp(4.2),
+    padding: responsive.wp(4),
     alignItems: 'center',
     flex: 1,
-    marginLeft: responsive.wp(2.5),
+  },
+  purpleNextButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: responsive.hp(2),
+  },
+  nextButtonFullWidth: {
+    flex: 1,
   },
   nextButtonText: {
     color: '#FFFFFF',
-    fontSize: responsive.wp(4.2),
+    fontSize: responsive.wp(5),
     fontWeight: 'bold',
+  },
+  purpleNextButtonText: {
+    color: '#FFFFFF',
+    fontSize: responsive.wp(5.2),
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -600,6 +810,18 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     color: '#EF4444',
     fontSize: responsive.wp(3.2),
     marginBottom: responsive.hp(0.5),
+  },
+  // ===== PURPLE THEME: ERROR STYLES =====
+  purpleErrorContainer: {
+    marginTop: responsive.hp(1.5),
+    padding: responsive.wp(3),
+    backgroundColor: 'rgba(255, 0, 0, 0.15)',
+    borderRadius: responsive.wp(2),
+  },
+  purpleErrorText: {
+    color: '#FF6B6B',
+    fontSize: responsive.wp(3),
+    marginBottom: responsive.hp(0.4),
   },
 });
 

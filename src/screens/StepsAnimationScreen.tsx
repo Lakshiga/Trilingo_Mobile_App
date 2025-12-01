@@ -36,6 +36,8 @@ const StepsAnimationScreen: React.FC = () => {
             <Image
               source={require('../../assets/elephant2.gif')}
               resizeMode="contain"
+
+              
               style={styles.gif}
             />
           </Animated.View>

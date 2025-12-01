@@ -32,6 +32,7 @@ export interface Translations {
   whichLanguageToLearn: string;
   back: string;
   next: string;
+  continue: string;
   complete: string;
   step: string;
   of: string;
@@ -108,6 +109,7 @@ const translations: Record<Language, Translations> = {
     whichLanguageToLearn: 'Which language would you like to learn?',
     back: 'Back',
     next: 'Next',
+    continue: 'Continue',
     complete: 'Complete',
     step: 'Step',
     of: 'of',
@@ -170,6 +172,7 @@ const translations: Record<Language, Translations> = {
     whichLanguageToLearn: 'நீங்கள் எந்த மொழியைக் கற்றுக்கொள்ள விரும்புகிறீர்கள்?',
     back: 'பின்',
     next: 'அடுத்து',
+    continue: 'தொடரவும்',
     complete: 'முடிக்க',
     step: 'படி',
     of: 'இல்',
@@ -232,6 +235,7 @@ const translations: Record<Language, Translations> = {
     whichLanguageToLearn: 'ඔබ ඉගෙන ගැනීමට කැමති භාෂාව කුමක්ද?',
     back: 'ආපසු',
     next: 'ඊළඟ',
+    continue: 'ඉදිරියට ගොඩනෙතින්න',
     complete: 'සම්පූර්ණ කරන්න',
     step: 'පියවර',
     of: 'හි',

@@ -32,7 +32,7 @@ const WelcomeScreen: React.FC = () => {
   };
 
   return (
-    <LinearGradient colors={['#ffffffff', '#514c4cff']} style={styles.gradient}>
+    <LinearGradient colors={['#83dce3ff', '#0400ffff']} style={styles.gradient}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         <Text style={styles.heading}>Welcome to Q-bit</Text>
