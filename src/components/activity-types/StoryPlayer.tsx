@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Slider,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -84,7 +84,7 @@ const StoryPlayer: React.FC<ActivityComponentProps> = ({
       setSound(newSound);
       const status = await newSound.getStatusAsync();
       if (status.isLoaded) {
-        setDuration(status.durationMillis / 1000);
+        setDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
       }
 
       newSound.setOnPlaybackStatusUpdate((status: any) => {

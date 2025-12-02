@@ -15,10 +15,16 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
-import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
+import apiService, { ActivityDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
+import {
+  findActivityTypeIds,
+  findMainActivityIds,
+  LISTENING_MAIN_ACTIVITY_NAMES,
+  STORY_PLAYER_ACTIVITY_TYPE_NAMES,
+} from '../utils/activityMappings';
 
 const { width } = Dimensions.get('window');
 
@@ -54,26 +60,33 @@ const StoriesScreen: React.FC = () => {
         setLoading(true);
         
         // Fetch all activities and activity types
-        const [allActivities, activityTypes] = await Promise.all([
+        const [allActivities, activityTypes, mainActivities] = await Promise.all([
           apiService.getAllActivities(),
           apiService.getAllActivityTypes(),
+          apiService.getAllMainActivities(),
         ]);
-        
-        // Find Story Player activity type
-        const storyPlayerType = activityTypes.find(type => 
-          type.name_en.toLowerCase().includes('story player') ||
-          type.name_en.toLowerCase() === 'story player'
+
+        const listeningMainActivityIds = findMainActivityIds(
+          mainActivities,
+          LISTENING_MAIN_ACTIVITY_NAMES
         );
-        
-        if (!storyPlayerType) {
+        const storyPlayerTypeIds = findActivityTypeIds(
+          activityTypes,
+          STORY_PLAYER_ACTIVITY_TYPE_NAMES
+        );
+
+        if (storyPlayerTypeIds.size === 0) {
           console.warn('Story Player activity type not found');
           setStories([]);
           return;
         }
-        
-        // Filter activities with Story Player activity type
-        const storyActivities = allActivities.filter(activity => 
-          activity.activityTypeId === storyPlayerType.id
+
+        // Filter activities with Story Player activity type under Listening
+        const storyActivities = allActivities.filter(
+          (activity) =>
+            storyPlayerTypeIds.has(activity.activityTypeId) &&
+            (listeningMainActivityIds.size === 0 ||
+              listeningMainActivityIds.has(activity.mainActivityId))
         );
         
         // Map activities to stories

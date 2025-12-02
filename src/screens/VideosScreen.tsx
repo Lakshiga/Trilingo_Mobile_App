@@ -10,6 +10,12 @@ import { CLOUDFRONT_URL } from '../config/apiConfig';
 import { getTranslation, Language } from '../utils/translations';
 import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
 import { Dimensions } from 'react-native';
+import {
+  findActivityTypeIds,
+  findMainActivityIds,
+  VIDEO_MAIN_ACTIVITY_NAMES,
+  VIDEO_PLAYER_ACTIVITY_TYPE_NAMES,
+} from '../utils/activityMappings';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,36 +53,54 @@ const VideosScreen: React.FC = () => {
           apiService.getAllMainActivities(),
         ]);
         
-        // Find Video main activity
-        const videoMainActivity = mainActivities.find(ma => 
-          ma.name_en.toLowerCase() === 'video' || ma.name_en.toLowerCase() === 'videos'
+        const videoMainActivityIds = findMainActivityIds(
+          mainActivities,
+          VIDEO_MAIN_ACTIVITY_NAMES
         );
-        
-        if (!videoMainActivity) {
-          console.warn('Video main activity not found');
-          setVideos([]);
-          return;
-        }
-        
-        // Filter activities with Video main activity or activities with YouTube links in Details_JSON
-        const videoActivities = allActivities.filter(activity => {
-          // Check if activity belongs to Video main activity
-          if (activity.mainActivityId === videoMainActivity.id) return true;
-          
-          // Check if Details_JSON contains YouTube videoUrl
-          if (activity.details_JSON) {
-            try {
-              const parsed = JSON.parse(activity.details_JSON);
-              const videoUrl = parsed.videoUrl || parsed.mediaUrl || parsed.youtubeUrl;
-              if (videoUrl && (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be'))) {
-                return true;
-              }
-            } catch (e) {
-              return false;
+        const videoPlayerActivityTypeIds = findActivityTypeIds(
+          activityTypes,
+          VIDEO_PLAYER_ACTIVITY_TYPE_NAMES
+        );
+
+        let videoActivities = allActivities.filter(
+          (activity) =>
+            (videoMainActivityIds.size === 0 ||
+              videoMainActivityIds.has(activity.mainActivityId)) &&
+            (videoPlayerActivityTypeIds.size === 0 ||
+              videoPlayerActivityTypeIds.has(activity.activityTypeId))
+        );
+
+        if (videoActivities.length === 0) {
+          console.warn(
+            'Video Player mapping not found. Falling back to YouTube detection.'
+          );
+          videoActivities = allActivities.filter((activity) => {
+            if (
+              videoMainActivityIds.size > 0 &&
+              videoMainActivityIds.has(activity.mainActivityId)
+            ) {
+              return true;
             }
-          }
-          return false;
-        });
+
+            if (activity.details_JSON) {
+              try {
+                const parsed = JSON.parse(activity.details_JSON);
+                const videoUrl =
+                  parsed.videoUrl || parsed.mediaUrl || parsed.youtubeUrl;
+                if (
+                  videoUrl &&
+                  (videoUrl.includes('youtube.com') ||
+                    videoUrl.includes('youtu.be'))
+                ) {
+                  return true;
+                }
+              } catch (e) {
+                return false;
+              }
+            }
+            return false;
+          });
+        }
         
         // Map activities to videos
         const mappedVideos: Video[] = videoActivities.map((activity, index) => {

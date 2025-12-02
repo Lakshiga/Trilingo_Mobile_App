@@ -903,67 +903,16 @@ class ApiService {
     try {
       console.log(`Fetching stages for levelId: ${levelId}`);
       
-      // First, try to fetch stages directly (silently fail if permission denied)
-      const allStages = await this.getAllStages();
+      // Use the new direct method to get stages by level ID
+      const response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`);
+      const stages = Array.isArray(response) ? response : [];
       
-      if (allStages.length > 0) {
-        // Filter by levelId
-        const filteredStages = allStages.filter(stage => stage.levelId === levelId);
-        console.log(`Found ${filteredStages.length} stages directly for level ${levelId}`);
-        
-        if (filteredStages.length > 0) {
-          return filteredStages;
-        }
-      }
-      
-      // Fallback: Get stages from activities
-      // Use activities to find which stages exist, then fetch actual stage data from database
-      console.log('Finding stages from activities...');
-      const allActivities = await this.getAllActivities();
-      console.log(`Total activities fetched: ${allActivities.length}`);
-      
-      // Group activities by stageId to find all unique stages
-      const uniqueStageIds = new Set<number>();
-      
-      allActivities.forEach(activity => {
-        if (activity.stageId) {
-          uniqueStageIds.add(activity.stageId);
-        }
-      });
-      
-      console.log(`Found ${uniqueStageIds.size} unique stage IDs from activities`);
-      
-      // Fetch actual stage data from database for each stageId
-      // Only return stages that we can actually fetch (with real database names)
-      const validStages: StageDto[] = [];
-      const stagePromises: Promise<void>[] = [];
-      
-      for (const stageId of uniqueStageIds) {
-        stagePromises.push(
-          (async () => {
-            // Try to fetch actual stage from database - will return null if can't fetch
-            const stage = await this.getStageById(stageId);
-            if (stage) {
-              // Only include if it belongs to the requested level AND has actual database names
-              if (stage.levelId === levelId && stage.name_en && stage.name_ta && stage.name_si) {
-                validStages.push(stage);
-              }
-            }
-            // If we can't fetch the stage, we don't create inferred stages
-            // Only show stages with actual database names
-          })()
-        );
-      }
-      
-      // Wait for all stage fetches to complete
-      await Promise.all(stagePromises);
+      console.log(`Found ${stages.length} stages for level ${levelId}`);
       
       // Sort by ID to maintain order (matching database order)
-      validStages.sort((a, b) => a.id - b.id);
+      const sortedStages = stages.sort((a, b) => a.id - b.id);
       
-      console.log(`Found ${validStages.length} stages with database names for level ${levelId}`);
-      
-      return validStages;
+      return sortedStages;
     } catch (error: any) {
       // Silently handle errors - don't crash the app
       console.log(`Error fetching stages for level ${levelId}, returning empty array`);

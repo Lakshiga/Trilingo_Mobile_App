@@ -18,6 +18,10 @@ import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
 import { getTranslation, Language } from '../utils/translations';
 import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
+import {
+  findMainActivityIds,
+  LEARNING_MAIN_ACTIVITY_NAMES,
+} from '../utils/activityMappings';
 
 const { width, height } = Dimensions.get('window');
 
@@ -173,11 +177,26 @@ const ActivitiesScreen: React.FC = () => {
     const fetchActivities = async () => {
       try {
         setLoading(true);
-        const backendActivities = await apiService.getAllActivities();
+        const [backendActivities, mainActivities] = await Promise.all([
+          apiService.getAllActivities(),
+          apiService.getAllMainActivities(),
+        ]);
+
+        const learningMainActivityIds = findMainActivityIds(
+          mainActivities,
+          LEARNING_MAIN_ACTIVITY_NAMES
+        );
+
+        const relevantActivities =
+          learningMainActivityIds.size > 0
+            ? backendActivities.filter((activity) =>
+                learningMainActivityIds.has(activity.mainActivityId)
+              )
+            : backendActivities;
         
-        if (backendActivities && backendActivities.length > 0) {
+        if (relevantActivities && relevantActivities.length > 0) {
           // Map backend activities to mobile format using learning language
-          const mappedActivities = backendActivities.map((dto, index) => 
+          const mappedActivities = relevantActivities.map((dto, index) => 
             mapActivityDtoToActivity(dto, index, learningLanguage)
           );
           setActivities(mappedActivities);

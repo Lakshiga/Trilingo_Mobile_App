@@ -76,20 +76,11 @@ const LevelsScreen: React.FC = () => {
   }, []);
 
   const handleLevelPress = (level: LevelDto) => {
-    if (level.id === 1) {
-      // Only Level 01 is active
-      (navigation as any).navigate('Lessons', { 
-        levelId: level.id, 
-        levelName: getLearningLanguageField(learningLanguage, level) 
-      });
-    } else {
-      // Other levels are locked
-      Alert.alert(
-        'Coming Soon',
-        'This level will be available in a future update. Stay tuned!',
-        [{ text: 'OK' }]
-      );
-    }
+    // Allow all levels to be accessible, not just level 1
+    (navigation as any).navigate('Lessons', { 
+      levelId: level.id, 
+      levelName: getLearningLanguageField(learningLanguage, level) 
+    });
   };
 
   const getLevelName = (level: LevelDto) => {
@@ -195,45 +186,31 @@ const LevelsScreen: React.FC = () => {
             ]}
           >
             {levels.map((level, index) => {
-              const isLocked = level.id !== 1;
               const levelName = getLevelName(level);
               
               return (
                 <TouchableOpacity
                   key={level.id}
-                  style={[styles.levelCard, isLocked && styles.lockedCard]}
+                  style={styles.levelCard}
                   onPress={() => handleLevelPress(level)}
                   activeOpacity={0.8}
-                  disabled={isLocked}
                 >
                   <LinearGradient
-                    colors={isLocked 
-                      ? ['#E5E7EB', '#D1D5DB'] 
-                      : ['#43BCCD', '#5DD3A1']
-                    }
+                    colors={['#43BCCD', '#5DD3A1']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.levelGradient}
                   >
                     <View style={styles.levelContent}>
                       <View style={styles.levelIconContainer}>
-                        {isLocked ? (
-                          <MaterialIcons name="lock" size={responsive.wp(10.5)} color="#9CA3AF" />
-                        ) : (
-                          <Text style={styles.levelNumber}>{level.id}</Text>
-                        )}
+                        <Text style={styles.levelNumber}>{level.id}</Text>
                       </View>
                       <View style={styles.levelTextContainer}>
-                        <Text style={[styles.levelTitle, isLocked && styles.lockedText]}>
+                        <Text style={styles.levelTitle}>
                           {levelName}
                         </Text>
-                        {isLocked && (
-                          <Text style={styles.lockedSubtext}>Coming Soon</Text>
-                        )}
                       </View>
-                      {!isLocked && (
-                        <MaterialIcons name="chevron-right" size={responsive.wp(8.5)} color="#fff" />
-                      )}
+                      <MaterialIcons name="chevron-right" size={responsive.wp(8.5)} color="#fff" />
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -347,16 +324,16 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     shadowRadius: responsive.wp(2),
     overflow: 'hidden',
   },
-  lockedCard: {
-    opacity: 0.7,
-  },
+  
   levelGradient: {
     padding: responsive.wp(5),
   },
+  
   levelContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  
   levelIconContainer: {
     width: responsive.wp(18.5),
     height: responsive.wp(18.5),
@@ -366,14 +343,17 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     alignItems: 'center',
     marginRight: responsive.wp(4),
   },
+  
   levelNumber: {
     fontSize: responsive.wp(8.5),
     fontWeight: 'bold',
     color: '#fff',
   },
+  
   levelTextContainer: {
     flex: 1,
   },
+  
   levelTitle: {
     fontSize: responsive.wp(6.4),
     fontWeight: 'bold',
@@ -382,15 +362,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     textShadowOffset: { width: responsive.wp(0.25), height: responsive.hp(0.12) },
     textShadowRadius: responsive.wp(0.5),
   },
-  lockedText: {
-    color: '#6B7280',
-  },
-  lockedSubtext: {
-    fontSize: responsive.wp(3.7),
-    color: '#9CA3AF',
-    marginTop: responsive.hp(0.5),
-    fontStyle: 'italic',
-  },
+
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

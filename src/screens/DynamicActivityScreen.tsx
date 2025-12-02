@@ -1,230 +1,412 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
-import { StoryPlayer } from '../components/activity-types'; // Import StoryPlayer component
+import { useUser } from '../context/UserContext';
+import { Language } from '../utils/translations';
+import { getLearningLanguageField } from '../utils/languageUtils';
+import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
+import {
+  StoryPlayer,
+  ConversationPlayer,
+  MCQActivity,
+  Flashcard,
+  Matching,
+  MemoryPair,
+  FillInTheBlanks,
+  TrueFalse,
+  ScrambleActivity,
+  PronunciationActivity,
+  TripleBlast,
+  BubbleBlast,
+  GroupSorter,
+  SongPlayer,
+  VideoPlayer,
+} from '../components/activity-types';
 
 type DynamicActivityRouteParams = {
+  activityId?: number;
   activityTypeId?: number;
   jsonMethod?: string;
   activityTitle?: string;
-  storyData?: any; // Add storyData property
+  storyData?: any;
+  conversationData?: any;
 };
 
 const DynamicActivityScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: DynamicActivityRouteParams }, 'params'>>();
   const { theme } = useTheme();
-  const { activityTypeId, jsonMethod, activityTitle, storyData } = route.params || {};
+  const { currentUser } = useUser();
+  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  const currentLang = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
 
-  // Handle different activity types based on JSON method
-  const renderActivityContent = () => {
-    // Check if this is a story activity
-    if (storyData) {
-      return renderStoryActivity();
-    }
-    
-    if (!jsonMethod) {
-      return (
-        <View style={styles.emptyState}>
-          <MaterialIcons name="help-outline" size={64} color={theme.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-            Unknown Activity Type
-          </Text>
-          <Text style={[styles.emptyDescription, { color: theme.textSecondary }]}>
-            No activity type information available.
-          </Text>
-        </View>
-      );
-    }
+  const { activityId, activityTypeId, jsonMethod, activityTitle, storyData, conversationData } =
+    route.params || {};
 
-    // Parse the JSON method to determine what type of activity to render
-    try {
-      // This is where you would implement different activity type renderers
-      // based on the jsonMethod value from the backend
-      switch (jsonMethod.toLowerCase()) {
-        case 'mcq':
-          return renderMCQActivity();
-        case 'flashcard':
-          return renderFlashcardActivity();
-        case 'matching':
-          return renderMatchingActivity();
-        case 'memory':
-          return renderMemoryActivity();
-        default:
-          return renderGenericActivity();
+  const [activity, setActivity] = useState<ActivityDto | null>(null);
+  const [activityType, setActivityType] = useState<ActivityTypeDto | null>(null);
+  const [content, setContent] = useState<any>(storyData ?? conversationData ?? null);
+  const [loading, setLoading] = useState<boolean>(!!activityId);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadActivity = async () => {
+      try {
+        setError(null);
+
+        if (!activityId && !activityTypeId) {
+          setLoading(false);
+          return;
+        }
+
+        setLoading(true);
+
+        let fetchedActivity: ActivityDto | null = null;
+        if (activityId) {
+          fetchedActivity = await apiService.getActivityById(activityId);
+        }
+
+        if (!isMounted) return;
+
+        if (fetchedActivity) {
+          setActivity(fetchedActivity);
+          if (fetchedActivity.details_JSON) {
+            try {
+              const parsed = JSON.parse(fetchedActivity.details_JSON);
+              setContent(parsed);
+            } catch (parseError) {
+              console.warn('Failed to parse activity JSON', parseError);
+            }
+          }
+        }
+
+        const typeIdToUse = activityTypeId || fetchedActivity?.activityTypeId;
+        if (typeIdToUse) {
+          const fetchedType = await apiService.getActivityTypeById(typeIdToUse);
+          if (!isMounted) return;
+          setActivityType(fetchedType);
+        } else {
+          setActivityType(null);
+        }
+      } catch (err) {
+        console.error('Failed to load activity data', err);
+        if (isMounted) {
+          setError('Unable to load this activity right now. Please try again later.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Error parsing JSON method:', error);
-      return renderGenericActivity();
+    };
+
+    loadActivity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activityId, activityTypeId]);
+
+  const normalizedMethod = useMemo(() => {
+    const method = activityType?.jsonMethod || jsonMethod || '';
+    return method.trim().toLowerCase();
+  }, [activityType?.jsonMethod, jsonMethod]);
+
+  const headerTitle =
+    activityTitle ||
+    getLearningLanguageField(learningLanguage, activity) ||
+    activity?.name_en ||
+    'Activity';
+
+  const headerSubtitle =
+    activity?.name_en || activity?.name_ta || activity?.name_si || 'Dynamic Activity';
+
+  const ensureMultilingual = (value: any, fallback: string) => {
+    if (value && typeof value === 'object') {
+      return value;
     }
+    return { en: fallback };
   };
 
-  // Render story activity using StoryPlayer component
+  const buildGenericContent = (fallbackInstruction: string) => {
+    if (content && typeof content === 'object') {
+      return {
+        ...content,
+        title: ensureMultilingual(content.title, headerTitle),
+        instruction: ensureMultilingual(content.instruction, fallbackInstruction),
+      };
+    }
+    return {
+      title: ensureMultilingual(null, headerTitle),
+      instruction: ensureMultilingual(null, fallbackInstruction),
+    };
+  };
+
+  const handleOpenExercises = () => {
+    if (!activityId) return;
+    navigation.navigate('Exercise', {
+      activityId,
+      activity: {
+        id: activityId,
+        title: headerTitle,
+        description: headerSubtitle,
+      },
+      activityTypeId: activityType?.id || activityTypeId,
+      jsonMethod: activityType?.jsonMethod || jsonMethod,
+    });
+  };
+
   const renderStoryActivity = () => {
-    // Create content object for StoryPlayer
-    const storyContent = {
-      title: { en: activityTitle || 'Story' },
-      instruction: { en: 'Enjoy the story!' },
-      storyData: storyData,
+    const storyPayload = {
+      title: ensureMultilingual(content?.title, headerTitle),
+      instruction: ensureMultilingual(content?.instruction, 'Enjoy the story!'),
+      storyData: content?.storyData || content || storyData,
     };
 
     return (
-      <StoryPlayer 
-        content={storyContent}
-        currentLang="en"
+      <StoryPlayer
+        content={storyPayload}
+        currentLang={currentLang as any}
         onComplete={() => {}}
       />
     );
   };
 
+  const renderConversationActivity = () => {
+    const conversationPayload = {
+      title: ensureMultilingual(content?.title, headerTitle),
+      instruction: ensureMultilingual(content?.instruction, 'Listen and follow the conversation.'),
+      conversationData: content?.conversationData || content || conversationData,
+    };
+
+    return (
+      <ConversationPlayer
+        content={conversationPayload}
+        currentLang={currentLang as any}
+        onComplete={() => {}}
+      />
+    );
+  };
+
+  const renderSongActivity = () => (
+    <SongPlayer
+      content={{
+        ...buildGenericContent('Listen to the song and sing along!'),
+        songData: content?.songData || content,
+      }}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderVideoActivity = () => (
+    <VideoPlayer
+      content={{
+        ...buildGenericContent('Watch the video carefully.'),
+        videoData: content?.videoData || content,
+      }}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
   const renderMCQActivity = () => (
-    <View style={styles.activityContainer}>
-      <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
-        Multiple Choice Quiz
-      </Text>
-      <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-        This is a Multiple Choice Quiz activity. In the full implementation, 
-        this would load questions from the backend and allow users to select answers.
-      </Text>
-      <View style={styles.placeholderCard}>
-        <Text style={styles.placeholderText}>Question 1: What is 2 + 2?</Text>
-        <View style={styles.optionsContainer}>
-          <TouchableOpacity style={styles.optionButton}>
-            <Text style={styles.optionText}>A) 3</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.optionButton, styles.selectedOption]}>
-            <Text style={styles.optionText}>B) 4</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionButton}>
-            <Text style={styles.optionText}>C) 5</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.optionButton}>
-            <Text style={styles.optionText}>D) 6</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
+    <MCQActivity
+      content={buildGenericContent('Select the correct answer.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
   );
 
   const renderFlashcardActivity = () => (
-    <View style={styles.activityContainer}>
-      <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
-        Flashcard Activity
-      </Text>
-      <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-        This is a Flashcard activity. In the full implementation, 
-        this would show vocabulary words with images and audio.
-      </Text>
-      <View style={styles.flashcardContainer}>
-        <View style={styles.flashcard}>
-          <Text style={styles.flashcardText}>Hello</Text>
-          <Text style={styles.flashcardTranslation}>வணக்கம்</Text>
-        </View>
-        <TouchableOpacity style={styles.flipButton}>
-          <Text style={styles.flipButtonText}>Flip Card</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    <Flashcard
+      content={buildGenericContent('Flip the card to reveal the translation.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
   );
 
   const renderMatchingActivity = () => (
-    <View style={styles.activityContainer}>
-      <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
-        Matching Game
-      </Text>
-      <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-        This is a Matching activity. In the full implementation, 
-        this would show pairs of items to match.
-      </Text>
-      <View style={styles.matchingContainer}>
-        <View style={styles.matchingRow}>
-          <View style={styles.matchItem}>
-            <Text style={styles.matchText}>Apple</Text>
-          </View>
-          <View style={styles.matchConnector} />
-          <View style={[styles.matchItem, styles.matchedItem]}>
-            <Text style={styles.matchText}>ஆப்பிள்</Text>
-          </View>
-        </View>
-        <View style={styles.matchingRow}>
-          <View style={[styles.matchItem, styles.matchedItem]}>
-            <Text style={styles.matchText}>Cat</Text>
-          </View>
-          <View style={styles.matchConnector} />
-          <View style={styles.matchItem}>
-            <Text style={styles.matchText}>பூனை</Text>
-          </View>
-        </View>
-      </View>
-    </View>
+    <Matching
+      content={buildGenericContent('Match the related pairs.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
   );
 
   const renderMemoryActivity = () => (
-    <View style={styles.activityContainer}>
-      <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
-        Memory Game
+    <MemoryPair
+      content={buildGenericContent('Remember and match the cards.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderFillInTheBlanksActivity = () => (
+    <FillInTheBlanks
+      content={buildGenericContent('Complete the sentence.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderTrueFalseActivity = () => (
+    <TrueFalse
+      content={buildGenericContent('Decide if each statement is True or False.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderScrambleActivity = () => (
+    <ScrambleActivity
+      content={buildGenericContent('Unscramble the words.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderPronunciationActivity = () => (
+    <PronunciationActivity
+      content={buildGenericContent('Practice the pronunciation.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderTripleBlastActivity = () => (
+    <TripleBlast
+      content={buildGenericContent('Match three related tiles.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderBubbleBlastActivity = () => (
+    <BubbleBlast
+      content={buildGenericContent('Pop the bubbles with correct answers.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderGroupSorterActivity = () => (
+    <GroupSorter
+      content={buildGenericContent('Sort the items into the correct group.')}
+      currentLang={currentLang as any}
+      onComplete={() => {}}
+    />
+  );
+
+  const renderUnsupportedActivity = (message?: string) => (
+    <View style={styles.genericContainer}>
+      <MaterialIcons name="extension-off" size={56} color={theme.textSecondary} />
+      <Text style={[styles.genericTitle, { color: theme.textPrimary }]}>
+        {message || 'This activity type is not supported yet.'}
       </Text>
-      <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-        This is a Memory Game activity. In the full implementation, 
-        this would show cards that flip to reveal images.
+      <Text style={[styles.genericDescription, { color: theme.textSecondary }]}>
+        {activityType?.jsonMethod || jsonMethod
+          ? `Activity Type: ${activityType?.jsonMethod || jsonMethod}`
+          : 'No activity type information provided.'}
       </Text>
-      <View style={styles.memoryGrid}>
-        {[1, 2, 3, 4, 5, 6].map((item) => (
-          <TouchableOpacity key={item} style={styles.memoryCard}>
-            <Text style={styles.memoryCardText}>?</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {activityId && (
+        <TouchableOpacity style={styles.genericButton} onPress={handleOpenExercises}>
+          <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
+          <Text style={styles.genericButtonText}>View Exercises</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
-  const renderGenericActivity = () => (
-    <View style={styles.activityContainer}>
-      <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
-        {activityTitle || 'Activity'}
-      </Text>
-      <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-        Activity Type: {jsonMethod || 'Unknown'}
-      </Text>
-      <Text style={[styles.genericDescription, { color: theme.textSecondary }]}>
-        This activity type is not yet implemented. In the full implementation, 
-        this would render a custom activity based on the JSON method: {jsonMethod}
-      </Text>
-      <TouchableOpacity 
-        style={styles.startButton}
-        onPress={() => Alert.alert('Activity Started', 'This would start the activity in a full implementation.')}
-      >
-        <Text style={styles.startButtonText}>Start Activity</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.headerGradient[0]} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading activity...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return renderUnsupportedActivity(error);
+    }
+
+    const hasStoryPayload = storyData || content?.storyData || normalizedMethod.includes('story');
+    const hasConversationPayload =
+      conversationData || content?.conversationData || normalizedMethod.includes('conversation');
+
+    if (hasStoryPayload) {
+      return renderStoryActivity();
+    }
+
+    if (hasConversationPayload) {
+      return renderConversationActivity();
+    }
+
+    switch (true) {
+      case normalizedMethod.includes('song'):
+        return renderSongActivity();
+      case normalizedMethod.includes('video'):
+        return renderVideoActivity();
+      case normalizedMethod === 'mcq':
+      case normalizedMethod === 'multiple_choice':
+        return renderMCQActivity();
+      case normalizedMethod.includes('flash'):
+        return renderFlashcardActivity();
+      case normalizedMethod.includes('matching'):
+        return renderMatchingActivity();
+      case normalizedMethod.includes('memory'):
+        return renderMemoryActivity();
+      case normalizedMethod.includes('fill'):
+        return renderFillInTheBlanksActivity();
+      case normalizedMethod.includes('true'):
+      case normalizedMethod.includes('false'):
+        return renderTrueFalseActivity();
+      case normalizedMethod.includes('scramble'):
+        return renderScrambleActivity();
+      case normalizedMethod.includes('pronunciation'):
+        return renderPronunciationActivity();
+      case normalizedMethod.includes('triple'):
+        return renderTripleBlastActivity();
+      case normalizedMethod.includes('bubble'):
+        return renderBubbleBlastActivity();
+      case normalizedMethod.includes('group'):
+        return renderGroupSorterActivity();
+      default:
+        return renderUnsupportedActivity();
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background[0] }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.headerGradient[0] }]}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+      <LinearGradient colors={theme.headerGradient} style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={[styles.headerTitle, { color: '#FFFFFF' }]} numberOfLines={1}>
-            {activityTitle || 'Dynamic Activity'}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {headerTitle}
           </Text>
-          <Text style={[styles.headerSubtitle, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>
-            Activity Type: {jsonMethod || 'Unknown'}
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {normalizedMethod ? `Activity Type: ${activityType?.jsonMethod || jsonMethod}` : headerSubtitle}
           </Text>
         </View>
-      </View>
+      </LinearGradient>
 
-      {/* Activity Content */}
-      <ScrollView style={styles.content}>
-        {renderActivityContent()}
-      </ScrollView>
+      <View style={styles.contentWrapper}>{renderContent()}</View>
     </View>
   );
 };
@@ -248,7 +430,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 50,
+    top: 45,
     left: 20,
     zIndex: 20,
   },
@@ -259,194 +441,59 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 5,
+    color: '#FFFFFF',
+    marginBottom: 4,
+    textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 14,
-    opacity: 0.8,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
   },
-  content: {
+  contentWrapper: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
-  activityContainer: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  activityTitle: {
-    fontSize: 24,
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  genericContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  genericTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginTop: 16,
     textAlign: 'center',
-  },
-  activityDescription: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
   },
   genericDescription: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
-    fontStyle: 'italic',
-  },
-  placeholderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  placeholderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    marginTop: 8,
     marginBottom: 20,
-    textAlign: 'center',
   },
-  optionsContainer: {
-    gap: 10,
-  },
-  optionButton: {
-    backgroundColor: '#F0F0F0',
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-  },
-  selectedOption: {
-    backgroundColor: '#E3F2FD',
-    borderColor: '#2196F3',
-  },
-  optionText: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  flashcardContainer: {
+  genericButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  flashcard: {
     backgroundColor: '#43BCCD',
-    width: 200,
-    height: 120,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  flashcardText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 5,
-  },
-  flashcardTranslation: {
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  flipButton: {
-    backgroundColor: '#FF6B9D',
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 25,
+    borderRadius: 24,
+    gap: 8,
   },
-  flipButtonText: {
+  genericButtonText: {
     color: '#FFFFFF',
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  matchingContainer: {
-    gap: 20,
-  },
-  matchingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  matchItem: {
-    backgroundColor: '#F0F0F0',
-    padding: 15,
-    borderRadius: 10,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  matchedItem: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
-    borderWidth: 2,
-  },
-  matchText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  matchConnector: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#43BCCD',
-    marginHorizontal: 10,
-  },
-  memoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    gap: 15,
-  },
-  memoryCard: {
-    backgroundColor: '#43BCCD',
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  memoryCardText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  startButton: {
-    backgroundColor: '#43BCCD',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    alignSelf: 'center',
-    marginTop: 30,
-  },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  emptyDescription: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });
 

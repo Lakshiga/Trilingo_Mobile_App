@@ -4,8 +4,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
-import apiService, { ActivityDto } from '../services/api';
+import apiService from '../services/api';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
+import {
+  findActivityTypeIds,
+  findMainActivityIds,
+  LISTENING_MAIN_ACTIVITY_NAMES,
+  SONG_PLAYER_ACTIVITY_TYPE_NAMES,
+} from '../utils/activityMappings';
 
 // Define the song type
 type Song = {
@@ -45,10 +51,28 @@ const SongsScreen: React.FC = () => {
     const fetchSongs = async () => {
       try {
         setLoading(true);
-        const allActivities = await apiService.getAllActivities();
-        
-        // Filter activities with ActivityTypeId = 6 (Song Player)
-        const songActivities = allActivities.filter(activity => activity.activityTypeId === 6);
+        const [allActivities, activityTypes, mainActivities] = await Promise.all([
+          apiService.getAllActivities(),
+          apiService.getAllActivityTypes(),
+          apiService.getAllMainActivities(),
+        ]);
+
+        const listeningMainIds = findMainActivityIds(
+          mainActivities,
+          LISTENING_MAIN_ACTIVITY_NAMES
+        );
+        const songPlayerTypeIds = findActivityTypeIds(
+          activityTypes,
+          SONG_PLAYER_ACTIVITY_TYPE_NAMES
+        );
+
+        const songActivities = allActivities.filter(
+          (activity) =>
+            (listeningMainIds.size === 0 ||
+              listeningMainIds.has(activity.mainActivityId)) &&
+            (songPlayerTypeIds.size === 0 ||
+              songPlayerTypeIds.has(activity.activityTypeId))
+        );
         
         // Map activities to songs
         const mappedSongs: Song[] = songActivities.map((activity, index) => {

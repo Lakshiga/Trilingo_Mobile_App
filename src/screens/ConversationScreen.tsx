@@ -17,6 +17,12 @@ import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
+import {
+  findActivityTypeIds,
+  findMainActivityIds,
+  CONVERSATION_MAIN_ACTIVITY_NAMES,
+  CONVERSATION_PLAYER_ACTIVITY_TYPE_NAMES,
+} from '../utils/activityMappings';
 
 const ConversationScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -34,26 +40,29 @@ const ConversationScreen: React.FC = () => {
       try {
         setLoading(true);
         
-        // Fetch all activities and main activities
-        const [allActivities, mainActivities] = await Promise.all([
+        // Fetch all activities, main activities, and activity types
+        const [allActivities, mainActivities, activityTypes] = await Promise.all([
           apiService.getAllActivities(),
           apiService.getAllMainActivities(),
+          apiService.getAllActivityTypes(),
         ]);
-        
-        // Find Conversation main activity
-        const conversationMainActivity = mainActivities.find(ma => 
-          ma.name_en.toLowerCase() === 'conversation' || ma.name_en.toLowerCase() === 'conversations'
+
+        const conversationMainActivityIds = findMainActivityIds(
+          mainActivities,
+          CONVERSATION_MAIN_ACTIVITY_NAMES
         );
-        
-        if (!conversationMainActivity) {
-          console.warn('Conversation main activity not found');
-          setConversations([]);
-          return;
-        }
-        
-        // Filter activities with Conversation main activity
-        const conversationActivities = allActivities.filter(activity => 
-          activity.mainActivityId === conversationMainActivity.id
+        const conversationPlayerTypeIds = findActivityTypeIds(
+          activityTypes,
+          CONVERSATION_PLAYER_ACTIVITY_TYPE_NAMES
+        );
+
+        // Filter activities that belong to Conversation main activity and Conversation Player type
+        const conversationActivities = allActivities.filter(
+          (activity) =>
+            (conversationMainActivityIds.size === 0 ||
+              conversationMainActivityIds.has(activity.mainActivityId)) &&
+            (conversationPlayerTypeIds.size === 0 ||
+              conversationPlayerTypeIds.has(activity.activityTypeId))
         );
         
         // Sort by sequenceOrder
@@ -87,10 +96,23 @@ const ConversationScreen: React.FC = () => {
   }, [learningLanguage]);
 
   const handleConversationPress = (activity: ActivityDto) => {
-    // Navigate to conversation detail or activity screen
+    let conversationData: any = null;
+
+    if (activity.details_JSON) {
+      try {
+        const parsed = JSON.parse(activity.details_JSON);
+        // Support both direct conversationData or whole JSON as conversationData
+        conversationData = parsed.conversationData || parsed;
+      } catch (e) {
+        console.error('Error parsing conversation JSON:', e);
+      }
+    }
+
     (navigation as any).navigate('DynamicActivity', {
       activityId: activity.id,
       activityTitle: getLearningLanguageField(learningLanguage, activity),
+      conversationData,
+      jsonMethod: 'conversation_player',
     });
   };
 

@@ -43,21 +43,29 @@ const LessonsScreen: React.FC = () => {
     const fetchLessons = async () => {
       try {
         setLoading(true);
-        console.log(`Fetching lessons for levelId: ${levelId}`);
+        console.log(`📚 Fetching lessons for levelId: ${levelId}`);
         
         // Fetch all lessons (stages) for this level
-        // API service will silently handle permission errors and use fallback
         const allLessons = await apiService.getStagesByLevelId(levelId);
         
-        console.log(`Found ${allLessons.length} lessons for level ${levelId}`);
+        if (allLessons.length === 0) {
+          console.warn(`⚠️ No lessons found for level ${levelId}. This could mean:`);
+          console.warn('   1. No lessons exist for this level in database');
+          console.warn('   2. User does not have permission (check console for 403 errors)');
+          console.warn('   3. Authentication token is missing or invalid');
+        } else {
+          console.log(`✅ Found ${allLessons.length} lessons for level ${levelId}`);
+        }
         
         // Sort by ID (since sequenceOrder is not in backend DTO)
         const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
         
         setLessons(sortedLessons);
       } catch (error: any) {
-        // Silently handle errors - API service handles permission errors internally
-        console.log('Error fetching lessons, using empty array');
+        // Log error details for debugging
+        console.error('❌ Error fetching lessons:', error);
+        console.error('   Error message:', error.message);
+        console.error('   Check console above for detailed API error information');
         setLessons([]); // Set empty array on error
       } finally {
         setLoading(false);

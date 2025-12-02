@@ -53,7 +53,14 @@ const ConversationPlayer: React.FC<ActivityComponentProps> = ({
   const [currentDialogueIndex, setCurrentDialogueIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const conversationData = (content as ConversationPlayerContent)?.conversationData;
+  const rawConversationData = (content as ConversationPlayerContent)?.conversationData as
+    | ConversationData
+    | { conversationData?: ConversationData }
+    | any;
+
+  const conversationData: ConversationData | null = rawConversationData
+    ? (rawConversationData.conversationData || rawConversationData)
+    : null;
 
   const getText = (text: MultiLingualText | undefined | null): string => {
     if (!text) return '';
@@ -174,10 +181,15 @@ const ConversationPlayer: React.FC<ActivityComponentProps> = ({
   };
 
   const getSpeaker = (id: string): Speaker | undefined => {
-    return conversationData?.speakers.find(s => s.id === id);
+    if (!conversationData?.speakers) return undefined;
+    return conversationData.speakers.find(s => s.id === id);
   };
 
-  if (!conversationData) {
+  const dialogues = Array.isArray(conversationData?.dialogues)
+    ? conversationData!.dialogues
+    : [];
+
+  if (!conversationData || dialogues.length === 0) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>No conversation content available</Text>
@@ -197,9 +209,8 @@ const ConversationPlayer: React.FC<ActivityComponentProps> = ({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Dialogues */}
         <View style={styles.dialoguesContainer}>
-          {conversationData.dialogues.map((dialogue, index) => {
+          {dialogues.map((dialogue, index) => {
             const speaker = getSpeaker(dialogue.speakerId);
             const isActive = index === currentDialogueIndex;
 
