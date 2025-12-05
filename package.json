@@ -4,15 +4,19 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:local": "cross-env EXPO_PUBLIC_ENABLE_LOCAL=true expo start",
     "android": "expo start --android",
+    "android:local": "cross-env EXPO_PUBLIC_ENABLE_LOCAL=true expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "ios:local": "cross-env EXPO_PUBLIC_ENABLE_LOCAL=true expo start --ios",
+    "web": "expo start --web",
+    "web:local": "cross-env EXPO_PUBLIC_ENABLE_LOCAL=true expo start --web"
   },
   "dependencies": {
     "@expo-google-fonts/spicy-rice": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@react-native-community/slider": "^5.1.1",
+    "@react-native-community/slider": "5.0.1",
     "@react-navigation/bottom-tabs": "^7.7.3",
     "@react-navigation/native": "^7.1.19",
     "@react-navigation/stack": "^7.6.2",
@@ -38,7 +42,9 @@
   "devDependencies": {
     "@babel/core": "^7.25.0",
     "@types/react": "~19.1.0",
+    "@types/react-native": "^0.72.8",
     "babel-preset-expo": "~54.0.0",
+    "cross-env": "^7.0.3",
     "expo-modules": "^0.0.0",
     "typescript": "~5.9.2"
   },

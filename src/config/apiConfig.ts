@@ -6,16 +6,20 @@ export const API_CONFIG = {
   // Update these URLs based on your development setup
 
   // For Android Emulator (most common)
-  ANDROID_EMULATOR: 'https://d3v81eez8ecmto.cloudfront.net/api',
+  // Android emulator uses 10.0.2.2 to access host machine's localhost
+  ANDROID_EMULATOR: 'http://10.0.2.2:5166/api',
 
   // For iOS Simulator
-  IOS_SIMULATOR: 'https://d3v81eez8ecmto.cloudfront.net/api',
+  // iOS simulator can access localhost directly
+  IOS_SIMULATOR: 'http://localhost:5166/api',
 
   // For Physical Device (use your computer's IP address)
-  PHYSICAL_DEVICE: 'https://d3v81eez8ecmto.cloudfront.net/api', // TODO: replace with your local machine IPv4
+  // Current IP: 10.207.178.68
+  // Find your IP: Windows: ipconfig | iOS/Mac: ifconfig | Linux: ip addr
+  PHYSICAL_DEVICE: 'http://10.207.178.68:5166/api', // ✅ Configured with current IP
 
   // For Web/Expo Go
-  WEB: 'https://d3v81eez8ecmto.cloudfront.net/api',
+  WEB: 'http://localhost:5166/api',
 
   // Production URL (CloudFront)
   PRODUCTION: 'https://d3v81eez8ecmto.cloudfront.net/api',
@@ -128,6 +132,16 @@ export const getApiBaseUrl = (): string => {
         resolvedHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
       }
       return `http://${resolvedHost}:5166/api`;
+    }
+
+    // If no host derived and local dev is enabled, check platform
+    // For physical devices (Expo Go), use PHYSICAL_DEVICE IP
+    // For emulators/simulators, use platform-specific URLs
+    if (enableLocalDev) {
+      // Try to detect if running on physical device vs emulator
+      // If we can't derive host, it's likely a physical device
+      // Use the configured physical device IP
+      return API_CONFIG.PHYSICAL_DEVICE;
     }
 
     if (Platform.OS === 'android' && enableLocalDev) return API_CONFIG.ANDROID_EMULATOR;
