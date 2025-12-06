@@ -46,6 +46,8 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 
 import ConversationScreen from '../screens/ConversationScreen';
 import StepsAnimationScreen from '../screens/StepsAnimationScreen';
+import LetterSelectionScreen from '../screens/LetterSelectionScreen';
+import LetterTrackingScreen from '../screens/LetterTrackingScreen';
 
 // Create stack navigator
 const Stack = createStackNavigator();
@@ -137,6 +139,8 @@ export default function AppNavigator() {
       <Stack.Screen name="LessonActivities" component={LessonActivitiesScreen} />
       <Stack.Screen name="Conversation" component={ConversationScreen} />
       <Stack.Screen name="StepsAnimation" component={StepsAnimationScreen} />
+      <Stack.Screen name="LetterSelection" component={LetterSelectionScreen} />
+      <Stack.Screen name="LetterTracking" component={LetterTrackingScreen} />
     </Stack.Navigator>
   );
 }

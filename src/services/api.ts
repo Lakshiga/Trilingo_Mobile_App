@@ -857,44 +857,61 @@ class ApiService {
   // Stage/Lesson Methods
   async getAllStages(): Promise<StageDto[]> {
     try {
-      const response = await this.makeApiCall<StageDto[]>('/Stages');
+      // This endpoint requires authentication (Admin or Parent role)
+      // Use authenticated API directly, not public API first
+      // Try lowercase first (ASP.NET Core routing may be case-sensitive)
+      let response: StageDto[];
+      try {
+        response = await this.makeApiCall<StageDto[]>('/stages', false);
+      } catch (lowercaseError: any) {
+        // If lowercase fails with 404, try uppercase
+        if (lowercaseError.response?.status === 404) {
+          response = await this.makeApiCall<StageDto[]>('/Stages', false);
+        } else {
+          throw lowercaseError;
+        }
+      }
       return Array.isArray(response) ? response : [];
     } catch (error: any) {
-      // Silently return empty array for permission errors - we'll use fallback
-      if (error.name === 'PermissionDeniedError' || 
-          (error.response?.status === 403) ||
-          (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        // Silently fail - fallback will handle it
-        return [];
+      // Log detailed error information for debugging
+      const statusCode = error.response?.status;
+      const errorMessage = error.message || 'Unknown error';
+      
+      if (statusCode === 401) {
+        console.error('❌ Failed to fetch stages: Authentication failed. Token may be missing or invalid.');
+      } else if (statusCode === 403) {
+        console.error('❌ Failed to fetch stages: Permission denied. User may not have Admin or Parent role.');
+      } else {
+        console.error('❌ Failed to fetch stages:', errorMessage);
       }
-      // Only log non-permission errors
-      console.error('Failed to fetch stages:', error);
+      
       return [];
     }
   }
 
   async getStageById(id: number): Promise<StageDto | null> {
     try {
-      // Try public API first
+      // This endpoint requires authentication (Admin or Parent role)
+      // Use authenticated API directly
+      // Try lowercase first (ASP.NET Core routing may be case-sensitive)
+      let response: StageDto;
       try {
-        const response = await this.publicApi.get<StageDto>(`/Stages/${id}`);
-        return response.data || null;
-      } catch (publicError: any) {
-        // If public API fails with 401/403, try authenticated API
-        if (publicError.response?.status === 401 || publicError.response?.status === 403) {
-          try {
-            const response = await this.api.get<StageDto>(`/Stages/${id}`);
-            return response.data || null;
-          } catch (authError: any) {
-            // If both fail, return null silently
-            return null;
-          }
+        response = await this.makeApiCall<StageDto>(`/stages/${id}`, false);
+      } catch (lowercaseError: any) {
+        // If lowercase fails with 404, try uppercase
+        if (lowercaseError.response?.status === 404) {
+          response = await this.makeApiCall<StageDto>(`/Stages/${id}`, false);
+        } else {
+          throw lowercaseError;
         }
-        // For other errors, return null
-        return null;
       }
+      return response || null;
     } catch (error: any) {
-      // Silently return null for any error
+      // Log error for debugging
+      const statusCode = error.response?.status;
+      if (statusCode === 401 || statusCode === 403) {
+        console.error(`❌ Failed to fetch stage ${id}: Authentication/Authorization failed`);
+      }
       return null;
     }
   }
@@ -903,19 +920,58 @@ class ApiService {
     try {
       console.log(`Fetching stages for levelId: ${levelId}`);
       
-      // Use the new direct method to get stages by level ID
-      const response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`);
+      // This endpoint requires authentication (Admin or Parent role)
+      // Use authenticated API directly, not public API first
+      // Try lowercase first (ASP.NET Core routing may be case-sensitive)
+      let response: StageDto[];
+      try {
+        response = await this.makeApiCall<StageDto[]>(`/stages/level/${levelId}`, false);
+      } catch (lowercaseError: any) {
+        // If lowercase fails with 404, try uppercase
+        if (lowercaseError.response?.status === 404) {
+          console.log(`Trying uppercase route: /Stages/level/${levelId}`);
+          response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`, false);
+        } else {
+          throw lowercaseError;
+        }
+      }
+      
       const stages = Array.isArray(response) ? response : [];
       
-      console.log(`Found ${stages.length} stages for level ${levelId}`);
+      console.log(`✅ Found ${stages.length} stages for level ${levelId}`);
       
       // Sort by ID to maintain order (matching database order)
       const sortedStages = stages.sort((a, b) => a.id - b.id);
       
       return sortedStages;
     } catch (error: any) {
-      // Silently handle errors - don't crash the app
-      console.log(`Error fetching stages for level ${levelId}, returning empty array`);
+      // Log detailed error information for debugging
+      const statusCode = error.response?.status;
+      const errorMessage = error.message || 'Unknown error';
+      const errorData = error.response?.data;
+      const requestUrl = error.config?.url || error.request?.responseURL || 'Unknown URL';
+      
+      console.error(`❌ Error fetching stages for level ${levelId}:`);
+      console.error(`   Status Code: ${statusCode || 'N/A'}`);
+      console.error(`   Error Message: ${errorMessage}`);
+      console.error(`   Request URL: ${requestUrl}`);
+      if (errorData) {
+        console.error(`   Error Data:`, JSON.stringify(errorData));
+      }
+      
+      // Check if it's an authentication/authorization error
+      if (statusCode === 401) {
+        console.error(`   → Authentication failed. Token may be missing or invalid.`);
+      } else if (statusCode === 403) {
+        console.error(`   → Permission denied. User may not have Admin or Parent role.`);
+      } else if (statusCode === 404) {
+        console.error(`   → Endpoint not found. Tried both /stages/level/${levelId} and /Stages/level/${levelId}`);
+        console.error(`   → Check backend route configuration and ensure controller is properly registered.`);
+      } else if (!statusCode) {
+        console.error(`   → Network error or API unavailable. Check connection.`);
+      }
+      
+      // Return empty array to prevent app crash, but log the error
       return [];
     }
   }

@@ -29,6 +29,14 @@ const HomeScreen: React.FC = () => {
       color: ['#43BCCD', '#5DD3A1', '#E0F7F4'] 
     },
     { 
+      id: 'letters', 
+      title: 'Letters', 
+      emoji: '✏️',
+      description: 'Trace & Learn',
+      image: require('../../assets/Gemini_Generated_Learning.png'),
+      color: ['#FFD93D', '#F9A826', '#FFF4E6'] 
+    },
+    { 
       id: 'songs', 
       title: 'Songs', 
       emoji: '🎵',
@@ -138,6 +146,15 @@ const HomeScreen: React.FC = () => {
     navigation.navigate('Conversation' as never);
   };
 
+  const handleLettersPress = () => {
+    if (isGuest) {
+      // Show guest limitation message
+      alert('Guest users can access limited content. Please login or register to unlock all features!');
+    }
+    // Navigate to Letter Selection screen (Letter Tracking flow)
+    navigation.navigate('LetterSelection' as never);
+  };
+
   const handleStartLearningPress = () => {
     if (isGuest) {
       // Show guest limitation message
@@ -149,6 +166,7 @@ const HomeScreen: React.FC = () => {
 
   const buttonHandlers: Record<string, () => void> = {
     learning: handleLearningPress,
+    letters: handleLettersPress,
     songs: handleSongsPress,
     videos: handleVideosPress,
     stories: handleStoriesPress,
