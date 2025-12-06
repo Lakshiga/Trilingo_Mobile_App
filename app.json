@@ -28,7 +28,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBaseUrl": "https://d3v81eez8ecmto.cloudfront.net/api",
+      "apiBaseUrl": "http://10.207.178.68:5166/api",
       "cloudFrontUrl": "https://d3v81eez8ecmto.cloudfront.net"
     },
     "plugins": [

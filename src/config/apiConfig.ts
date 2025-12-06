@@ -103,16 +103,72 @@ export const getApiBaseUrl = (): string => {
       env.EXPO_PUBLIC_FORCE_PROD === 'true';
     const enableLocalDev = env.EXPO_PUBLIC_ENABLE_LOCAL === 'true';
 
+    // If local dev is enabled, prioritize local URLs
+    if (enableLocalDev && !isProduction) {
+      // Check for explicit local API URL first
+      const manualOverride =
+        (env.EXPO_PUBLIC_API_URL as string | undefined) ??
+        (env.API_URL as string | undefined);
+      
+      // Only use manual override if it's a valid local URL (not NEW_IP placeholder)
+      if (manualOverride && typeof manualOverride === 'string' && manualOverride.trim()) {
+        const trimmed = manualOverride.trim();
+        // Ignore placeholder values
+        if (!trimmed.includes('NEW_IP') && !trimmed.includes('YOUR_IP')) {
+          return normalizeApiUrl(trimmed);
+        }
+      }
+
+      const manualDirect = env.EXPO_PUBLIC_API_DIRECT as string | undefined;
+      if (manualDirect && typeof manualDirect === 'string' && manualDirect.trim()) {
+        const trimmed = manualDirect.trim();
+        if (!trimmed.includes('NEW_IP') && !trimmed.includes('YOUR_IP')) {
+          return normalizeApiUrl(trimmed);
+        }
+      }
+
+      // For local dev, try to derive host from runtime
+      const host = deriveHostFromRuntime();
+      if (host && typeof host === 'string' && host.trim()) {
+        let resolvedHost = host;
+        if (host === 'localhost' || host === '127.0.0.1') {
+          resolvedHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+        }
+        return `http://${resolvedHost}:5166/api`;
+      }
+
+      // If no host derived, use platform-specific local URLs
+      if (Platform.OS === 'android') {
+        return API_CONFIG.ANDROID_EMULATOR;
+      }
+      if (Platform.OS === 'ios') {
+        return API_CONFIG.IOS_SIMULATOR;
+      }
+      if (Platform.OS === 'web') {
+        return API_CONFIG.WEB;
+      }
+
+      // Fallback to physical device IP for Expo Go
+      return API_CONFIG.PHYSICAL_DEVICE;
+    }
+
+    // Production mode or local dev not enabled - check for manual overrides
     const manualOverride =
       (env.EXPO_PUBLIC_API_URL as string | undefined) ??
       (env.API_URL as string | undefined);
     if (manualOverride && typeof manualOverride === 'string' && manualOverride.trim()) {
-      return normalizeApiUrl(manualOverride);
+      const trimmed = manualOverride.trim();
+      if (!trimmed.includes('NEW_IP') && !trimmed.includes('YOUR_IP')) {
+        return normalizeApiUrl(trimmed);
+      }
     }
 
     const manualDirect = env.EXPO_PUBLIC_API_DIRECT as string | undefined;
     if (manualDirect && typeof manualDirect === 'string' && manualDirect.trim()) {
-      return normalizeApiUrl(manualDirect);
+      const trimmed = manualDirect.trim();
+      if (!trimmed.includes('NEW_IP') && !trimmed.includes('YOUR_IP')) {
+        return normalizeApiUrl(trimmed);
+      }
     }
 
     const configured = getConfiguredApiUrl();

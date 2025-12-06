@@ -697,7 +697,7 @@ class ApiService {
   // Activity Methods
   async getAllActivities(): Promise<ActivityDto[]> {
     try {
-      const response = await this.makeApiCall<ActivityDto[]>('/Activities');
+      const response = await this.makeApiCall<ActivityDto[]>('/activities');
       return Array.isArray(response) ? response : [];
     } catch (error: any) {
       console.error('Failed to fetch activities:', error);
@@ -714,7 +714,7 @@ class ApiService {
 
   async getActivityById(id: number): Promise<ActivityDto | null> {
     try {
-      const response = await this.makeApiCall<ActivityDto>(`/Activities/${id}`);
+      const response = await this.makeApiCall<ActivityDto>(`/activities/${id}`);
       return response || null;
     } catch (error: any) {
       console.error(`Failed to fetch activity ${id}:`, error);
@@ -731,7 +731,7 @@ class ApiService {
 
   async getActivitiesByStage(stageId: number): Promise<ActivityDto[]> {
     try {
-      const response = await this.makeApiCall<ActivityDto[]>(`/Activities/stage/${stageId}`);
+      const response = await this.makeApiCall<ActivityDto[]>(`/activities/stage/${stageId}`);
       return Array.isArray(response) ? response : [];
     } catch (error: any) {
       console.error(`Failed to fetch activities for stage ${stageId}:`, error);
@@ -811,7 +811,7 @@ class ApiService {
 
   async getExercisesByActivityId(activityId: number): Promise<ExerciseDto[]> {
     try {
-      const response = await this.api.get<ExerciseDto[]>(`/Activities/${activityId}/exercises`);
+      const response = await this.api.get<ExerciseDto[]>(`/activities/${activityId}/exercises`);
       return Array.isArray(response.data) ? response.data : [];
     } catch (error: any) {
       console.error(`Failed to fetch exercises for activity ${activityId}:`, error);
@@ -822,7 +822,7 @@ class ApiService {
   // Level Methods
   async getAllLevels(): Promise<LevelDto[]> {
     try {
-      const response = await this.makeApiCall<LevelDto[]>('/Levels');
+      const response = await this.makeApiCall<LevelDto[]>('/levels');
       return Array.isArray(response) ? response : [];
     } catch (error: any) {
       console.error('Failed to fetch levels:', error);
@@ -839,7 +839,7 @@ class ApiService {
 
   async getLevelById(id: number): Promise<LevelDto | null> {
     try {
-      const response = await this.makeApiCall<LevelDto>(`/Levels/${id}`);
+      const response = await this.makeApiCall<LevelDto>(`/levels/${id}`);
       return response || null;
     } catch (error: any) {
       console.error(`Failed to fetch level ${id}:`, error);
@@ -857,7 +857,7 @@ class ApiService {
   // Stage/Lesson Methods
   async getAllStages(): Promise<StageDto[]> {
     try {
-      const response = await this.makeApiCall<StageDto[]>('/Stages');
+      const response = await this.makeApiCall<StageDto[]>('/stages');
       return Array.isArray(response) ? response : [];
     } catch (error: any) {
       // Silently return empty array for permission errors - we'll use fallback
@@ -877,13 +877,13 @@ class ApiService {
     try {
       // Try public API first
       try {
-        const response = await this.publicApi.get<StageDto>(`/Stages/${id}`);
+        const response = await this.publicApi.get<StageDto>(`/stages/${id}`);
         return response.data || null;
       } catch (publicError: any) {
         // If public API fails with 401/403, try authenticated API
         if (publicError.response?.status === 401 || publicError.response?.status === 403) {
           try {
-            const response = await this.api.get<StageDto>(`/Stages/${id}`);
+            const response = await this.api.get<StageDto>(`/stages/${id}`);
             return response.data || null;
           } catch (authError: any) {
             // If both fail, return null silently
@@ -904,7 +904,7 @@ class ApiService {
       console.log(`Fetching stages for levelId: ${levelId}`);
       
       // Use the new direct method to get stages by level ID
-      const response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`);
+      const response = await this.makeApiCall<StageDto[]>(`/stages/level/${levelId}`);
       const stages = Array.isArray(response) ? response : [];
       
       console.log(`Found ${stages.length} stages for level ${levelId}`);
