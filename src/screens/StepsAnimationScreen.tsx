@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useResponsive } from '../utils/responsive';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const StepsAnimationScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -23,8 +24,10 @@ const StepsAnimationScreen: React.FC = () => {
   const styles = getStyles(responsive);
 
   return (
-    <View style={styles.whiteBackground}>
-      <StatusBar barStyle="dark-content" />
+    <LinearGradient
+  colors={['rgb(217, 217, 217)', 'rgb(0, 0, 0)']}
+  style={styles.gradient}>
+      <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
 
@@ -57,15 +60,14 @@ const StepsAnimationScreen: React.FC = () => {
 
         </View>
       </SafeAreaView>
-    </View>
+    </LinearGradient>
   );
 };
 
 const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
   StyleSheet.create({
-    whiteBackground: {
+    gradient: {
       flex: 1,
-      backgroundColor: '#ffffff', // White background
     },
     container: {
       flex: 1,
@@ -102,7 +104,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
     },
 
     continueButton: {
-      backgroundColor: '#47C268',
+      backgroundColor: 'rgb(199, 119, 119)',
       paddingVertical: responsive.hp(2),
       paddingHorizontal: responsive.wp(12),
       borderRadius: responsive.wp(7),

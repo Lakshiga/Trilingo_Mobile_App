@@ -458,8 +458,6 @@ class ApiService {
     
     if (usePublicFirst || isPublicEndpoint) {
       try {
-        console.log(`Trying public API for POST ${endpoint}`);
-        
         const response = await this.retryRequest(
           () => this.publicApi.post<T>(endpoint, data),
           3, // max 3 retries
@@ -471,7 +469,6 @@ class ApiService {
         // For login/register endpoints, NEVER fallback to authenticated API
         // 401 is a valid response for invalid credentials - just throw it
         if (isPublicEndpoint) {
-          console.error(`Public API failed for POST ${endpoint}:`, publicError.message);
           throw publicError;
         }
         

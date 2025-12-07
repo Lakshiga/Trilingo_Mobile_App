@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { Audio } from 'expo-av';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
@@ -51,11 +52,11 @@ const ExerciseScreen: React.FC = () => {
   const [activityData, setActivityData] = useState<ActivityDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showJsonModal, setShowJsonModal] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
-    fetchActivityData();
     fetchExercises();
     
     Animated.parallel([
@@ -78,12 +79,16 @@ const ExerciseScreen: React.FC = () => {
 
   const fetchActivityData = async () => {
     try {
-      if (activityId) {
-        const fetchedActivity = await apiService.getActivityById(activityId);
+      const activityIdToUse = activity.id || activityId;
+      if (activityIdToUse) {
+        const fetchedActivity = await apiService.getActivityById(activityIdToUse);
         setActivityData(fetchedActivity);
+        return fetchedActivity;
       }
+      return null;
     } catch (error: any) {
       console.error('Error fetching activity data:', error);
+      return null;
     }
   };
 
@@ -95,14 +100,50 @@ const ExerciseScreen: React.FC = () => {
         throw new Error('No activity ID provided');
       }
       
-      const fetchedExercises = await apiService.getExercisesByActivityId(activityIdToUse);
+      // First, fetch the activity to get its stageId (lessonId)
+      const fetchedActivity = await fetchActivityData();
+      const stageId = fetchedActivity?.stageId;
       
-      // Sort by sequence order
-      const sortedExercises = fetchedExercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-      setExercises(sortedExercises);
+      if (!stageId) {
+        // Fallback: if no stageId, fetch exercises for this activity only
+        const fetchedExercises = await apiService.getExercisesByActivityId(activityIdToUse);
+        
+        // Ensure we have a valid array
+        if (Array.isArray(fetchedExercises) && fetchedExercises.length > 0) {
+          const sortedExercises = fetchedExercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+          setExercises(sortedExercises);
+        } else {
+          setExercises([]);
+        }
+        setCurrentPage(1);
+        return;
+      }
+      
+      // Fetch all activities in this lesson (stage)
+      const activitiesInLesson = await apiService.getActivitiesByStage(stageId);
+      
+      // Fetch exercises for all activities in this lesson
+      const allExercisesPromises = activitiesInLesson.map(act => 
+        apiService.getExercisesByActivityId(act.id).catch(() => [])
+      );
+      
+      const allExercisesArrays = await Promise.all(allExercisesPromises);
+      
+      // Combine all exercises into a single array
+      const allExercises = allExercisesArrays.flat();
+      
+      // Ensure we have a valid array and sort by sequence order
+      if (Array.isArray(allExercises) && allExercises.length > 0) {
+        const sortedExercises = allExercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+        setExercises(sortedExercises);
+      } else {
+        setExercises([]);
+      }
       setCurrentPage(1);
     } catch (error: any) {
       console.error('Error fetching exercises:', error);
+      // Set empty array on error so empty state shows
+      setExercises([]);
       Alert.alert(
         'Error',
         'Could not load exercises. Please try again.',
@@ -145,12 +186,27 @@ const ExerciseScreen: React.FC = () => {
   // Handle different activity types based on JSON method
   const handleActivityTypeNavigation = () => {
     if (jsonMethod) {
-      // Navigate to a dynamic screen based on the JSON method
-      // For now, we'll still go to the exercise detail but pass the JSON method
-      openExerciseDetail(0);
+      // Navigate to DynamicActivity screen
+      (navigation as any).navigate('DynamicActivity', {
+        activityTypeId: activityTypeId,
+        jsonMethod: jsonMethod,
+        activityId: activity.id || activityId,
+        activityTitle: activity.title,
+      });
     } else {
       // Default behavior
       openExerciseDetail(0);
+    }
+  };
+
+  const handleShowJson = () => {
+    setShowJsonModal(true);
+  };
+
+  const handleViewExercises = () => {
+    // Already on exercise list, just scroll to top or ensure exercises are visible
+    if (exercises.length > 0) {
+      // Exercises are already showing, no action needed
     }
   };
 
@@ -310,7 +366,12 @@ const ExerciseScreen: React.FC = () => {
           </Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.headerGradient[0]} />
+          <LottieView
+            source={require('../../assets/animations/Loading animation.json')}
+            autoPlay
+            loop
+            style={styles.loadingAnimation}
+          />
         </View>
       </View>
     );
@@ -333,27 +394,8 @@ const ExerciseScreen: React.FC = () => {
           <Text style={[styles.headerTitle, { color: '#FFFFFF' }]} numberOfLines={1}>
             {activity.title || (activityData ? activityData.name_en : 'Activity')}
           </Text>
-          <Text style={[styles.headerSubtitle, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>
-            {activity.description || (activityData ? (activityData.name_en || activityData.name_ta || activityData.name_si) : '')}
-          </Text>
         </View>
       </LinearGradient>
-
-      {/* Special Activity Type Handling */}
-      {jsonMethod && (
-        <View style={styles.activityTypeBanner}>
-          <Text style={styles.activityTypeText}>
-            Activity Type: {jsonMethod}
-          </Text>
-          <TouchableOpacity 
-            style={styles.startActivityButton}
-            onPress={handleActivityTypeNavigation}
-          >
-            <Text style={styles.startActivityButtonText}>Start Activity</Text>
-            <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Exercises List */}
       <Animated.View 
@@ -362,7 +404,17 @@ const ExerciseScreen: React.FC = () => {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
         ]}
       >
-        {exercises.length > 0 ? (
+        {!loading && exercises.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="library-books" size={64} color={theme.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
+              No Exercises Available
+            </Text>
+            <Text style={[styles.emptyDescription, { color: theme.textSecondary }]}>
+              This activity doesn't have any exercises yet.
+            </Text>
+          </View>
+        ) : exercises.length > 0 ? (
           <>
             <ScrollView 
               contentContainerStyle={styles.scrollContent}
@@ -410,18 +462,30 @@ const ExerciseScreen: React.FC = () => {
               </View>
             )}
           </>
-        ) : (
-          <View style={styles.emptyState}>
-            <MaterialIcons name="library-books" size={64} color={theme.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-              No Exercises Available
-            </Text>
-            <Text style={[styles.emptyDescription, { color: theme.textSecondary }]}>
-              This activity doesn't have any exercises yet.
-            </Text>
-          </View>
-        )}
+        ) : null}
       </Animated.View>
+
+      {/* JSON Modal */}
+      {showJsonModal && activityData && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Activity JSON Data</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowJsonModal(false)}
+              >
+                <MaterialIcons name="close" size={24} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <Text style={[styles.jsonText, { color: theme.textPrimary }]}>
+                {JSON.stringify(activityData.details_JSON ? JSON.parse(activityData.details_JSON) : activityData, null, 2)}
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -474,21 +538,34 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  startActivityButton: {
+  bannerButtons: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    gap: 10,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  bannerButton: {
+    flexDirection: 'row',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 25,
     alignItems: 'center',
+    gap: 6,
   },
-  startActivityButtonText: {
-    color: '#43BCCD',
-    fontSize: 16,
+  showJsonButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  viewExercisesButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  bannerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: 'bold',
-    marginRight: 5,
   },
   content: {
     flex: 1,
@@ -497,6 +574,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   scrollContent: {
     padding: 20,
@@ -586,6 +667,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    width: '90%',
+    maxHeight: '80%',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  modalBody: {
+    padding: 20,
+    maxHeight: '70%',
+  },
+  jsonText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
   },
 });
 

@@ -13,9 +13,10 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
-import apiService, { ActivityDto } from '../services/api';
+import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
 import { getTranslation, Language } from '../utils/translations';
 import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
 import {
@@ -32,6 +33,8 @@ interface Activity {
   color: string;
   gradient: readonly [string, string, ...string[]];
   description: string;
+  activityTypeId?: number;
+  activityType?: ActivityTypeDto;
 }
 
 // Default activities as fallback
@@ -177,10 +180,17 @@ const ActivitiesScreen: React.FC = () => {
     const fetchActivities = async () => {
       try {
         setLoading(true);
-        const [backendActivities, mainActivities] = await Promise.all([
+        const [backendActivities, mainActivities, activityTypes] = await Promise.all([
           apiService.getAllActivities(),
           apiService.getAllMainActivities(),
+          apiService.getAllActivityTypes(),
         ]);
+
+        // Create activity type map for quick lookup
+        const activityTypeMap = new Map<number, ActivityTypeDto>();
+        activityTypes.forEach(type => {
+          activityTypeMap.set(type.id, type);
+        });
 
         const learningMainActivityIds = findMainActivityIds(
           mainActivities,
@@ -196,9 +206,16 @@ const ActivitiesScreen: React.FC = () => {
         
         if (relevantActivities && relevantActivities.length > 0) {
           // Map backend activities to mobile format using learning language
-          const mappedActivities = relevantActivities.map((dto, index) => 
-            mapActivityDtoToActivity(dto, index, learningLanguage)
-          );
+          const mappedActivities = relevantActivities.map((dto, index) => {
+            const mapped = mapActivityDtoToActivity(dto, index, learningLanguage);
+            // Add activity type information
+            const activityType = activityTypeMap.get(dto.activityTypeId);
+            return {
+              ...mapped,
+              activityTypeId: dto.activityTypeId,
+              activityType: activityType,
+            };
+          });
           setActivities(mappedActivities);
         } else {
           // Use default activities if backend returns empty
@@ -274,13 +291,13 @@ const ActivitiesScreen: React.FC = () => {
     };
 
     const handlePress = () => {
-      // Navigate to ExerciseScreen with activity details
-      (navigation as any).navigate('Exercise', {
-        activity: {
-          id: activity.id,
-          title: activity.title,
-          description: activity.description,
-        },
+      // Get activityTypeId and jsonMethod from activity (already available)
+      // Pass directly to DynamicActivityScreen so it doesn't need to fetch again
+      (navigation as any).navigate('DynamicActivity', {
+        activityId: activity.id,
+        activityTypeId: activity.activityTypeId,
+        jsonMethod: activity.activityType?.jsonMethod,
+        activityTitle: activity.title,
       });
     };
 
@@ -385,7 +402,12 @@ const ActivitiesScreen: React.FC = () => {
           {/* Loading Indicator */}
           {loading && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.textPrimary || '#4ECDC4'} />
+              <LottieView
+                source={require('../../assets/animations/Loading animation.json')}
+                autoPlay
+                loop
+                style={styles.loadingAnimation}
+              />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                 {getTranslation(nativeLanguage, 'loadingActivities')}
               </Text>
@@ -542,6 +564,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 50,
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
     marginTop: 16,

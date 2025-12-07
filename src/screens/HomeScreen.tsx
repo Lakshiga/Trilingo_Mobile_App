@@ -23,7 +23,7 @@ const HomeScreen: React.FC = () => {
     { 
       id: 'learning', 
       title: 'Learning', 
-      emoji: '🎮',
+      emoji: '📖',
       description: 'Play & Practice',
       image: require('../../assets/Gemini_Generated_Learning.png'),
       color: ['#43BCCD', '#5DD3A1', '#E0F7F4'] 
@@ -31,7 +31,7 @@ const HomeScreen: React.FC = () => {
     { 
       id: 'letters', 
       title: 'Letters', 
-      emoji: '✏️',
+      emoji: '🔤',
       description: 'Trace & Learn',
       image: require('../../assets/Gemini_Generated_Learning.png'),
       color: ['#FFD93D', '#F9A826', '#FFF4E6'] 

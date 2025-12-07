@@ -13,6 +13,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
@@ -391,7 +392,12 @@ const StoriesScreen: React.FC = () => {
           {/* Loading Indicator */}
           {loading && (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+              <LottieView
+                source={require('../../assets/animations/Loading animation.json')}
+                autoPlay
+                loop
+                style={styles.loadingAnimation}
+              />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                 Loading stories...
               </Text>
@@ -589,6 +595,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 50,
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
     marginTop: 16,

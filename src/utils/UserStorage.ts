@@ -166,7 +166,6 @@ export class UserStorage {
       return null;
     } catch (error: any) {
       const errorMessage = error?.message || 'Unknown error';
-      console.error('Login error:', errorMessage);
       
       // Network / connection errors - run diagnostics
       if (errorMessage.includes('Network error') || errorMessage.includes('Connection')) {
