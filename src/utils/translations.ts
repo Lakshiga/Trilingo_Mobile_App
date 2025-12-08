@@ -45,6 +45,10 @@ export interface Translations {
   passwordNumber: string;
   passwordSpecialChar: string;
   
+  // Email validation
+  emailInvalid: string;
+  emailAlreadyTaken: string;
+  
   // Common
   pleaseAnswer: string;
   error: string;
@@ -119,6 +123,8 @@ const translations: Record<Language, Translations> = {
     passwordLowercase: 'Password must contain at least one lowercase letter.',
     passwordNumber: 'Password must contain at least one number.',
     passwordSpecialChar: 'Password must contain at least one special character.',
+    emailInvalid: 'Please enter a valid email address.',
+    emailAlreadyTaken: 'This email is already registered. Please use a different email.',
     pleaseAnswer: 'Please answer the question',
     error: 'Error',
     success: 'Success',
@@ -182,6 +188,8 @@ const translations: Record<Language, Translations> = {
     passwordLowercase: 'கடவுச்சொல் குறைந்தது ஒரு சிறிய எழுத்தைக் கொண்டிருக்க வேண்டும்.',
     passwordNumber: 'கடவுச்சொல் குறைந்தது ஒரு எண்ணைக் கொண்டிருக்க வேண்டும்.',
     passwordSpecialChar: 'கடவுச்சொல் குறைந்தது ஒரு சிறப்பு எழுத்தைக் கொண்டிருக்க வேண்டும்.',
+    emailInvalid: 'தயவுசெய்து சரியான மின்னஞ்சல் முகவரியை உள்ளிடவும்.',
+    emailAlreadyTaken: 'இந்த மின்னஞ்சல் ஏற்கனவே பதிவுசெய்யப்பட்டுள்ளது. வேறு மின்னஞ்சலைப் பயன்படுத்தவும்.',
     pleaseAnswer: 'தயவுசெய்து கேள்விக்கு பதிலளிக்கவும்',
     error: 'பிழை',
     success: 'வெற்றி',
@@ -245,6 +253,8 @@ const translations: Record<Language, Translations> = {
     passwordLowercase: 'මුරපදය අවම වශයෙන් එක් කුඩා අක්ෂරයක් අඩංගු විය යුතුය.',
     passwordNumber: 'මුරපදය අවම වශයෙන් එක් අංකයක් අඩංගු විය යුතුය.',
     passwordSpecialChar: 'මුරපදය අවම වශයෙන් එක් විශේෂ අක්ෂරයක් අඩංගු විය යුතුය.',
+    emailInvalid: 'කරුණාකර වලංගු විද්‍යුත් තැපැල් ලිපිනයක් ඇතුළත් කරන්න.',
+    emailAlreadyTaken: 'මෙම විද්‍යුත් තැපැල් ලිපිනය දැනටමත් ලියාපදිංචි කර ඇත. කරුණාකර වෙනත් විද්‍යුත් තැපැල් ලිපිනයක් භාවිතා කරන්න.',
     pleaseAnswer: 'කරුණාකර ප්‍රශ්නයට පිළිතුරු දෙන්න',
     error: 'දෝෂය',
     success: 'සාර්ථකත්වය',

@@ -18,6 +18,7 @@ import { useUser } from '../context/UserContext';
 import { getTranslation, Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
 import { Video,ResizeMode } from 'expo-av';
+import apiService from '../services/api';
 
 // Age options for adult selection
 const ADULT_AGE_OPTIONS = ['0-1', '2', '3', '4', '5', '6+'];
@@ -54,6 +55,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   });
   const [fadeAnim] = useState(new Animated.Value(0));
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+  const [emailErrors, setEmailErrors] = useState<string[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
   
 
   // Get current language - use selected native language if available, otherwise default to English
@@ -82,6 +85,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     }
     if (!/[^a-zA-Z0-9]/.test(password)) {
       errors.push(getTranslation(currentLanguage, 'passwordSpecialChar'));
+    }
+    return errors;
+  };
+
+  const validateEmail = (email: string): string[] => {
+    const errors: string[] = [];
+    // Email regex pattern for validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      errors.push(getTranslation(currentLanguage, 'emailInvalid'));
     }
     return errors;
   };
@@ -147,13 +160,59 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     }).start();
   }, [currentStep, fadeAnim]);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const currentQuestion = questions[currentStep];
     
     // Validation
     if (!userData[currentQuestion.key as keyof UserData]) {
       Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'pleaseAnswer'));
       return;
+    }
+
+    // Email validation
+    if (currentQuestion.key === 'email') {
+      const errors = validateEmail(userData.email);
+      if (errors.length > 0) {
+        setEmailErrors(errors);
+        Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'emailInvalid'));
+        return;
+      }
+      setEmailErrors([]);
+      
+      // Check if email already exists - THIS MUST HAPPEN ON EMAIL STEP
+      setIsLoading(true);
+      try {
+        // Try to register with a dummy username and password to check if email exists
+        // The backend will return an error if email is already taken
+        await apiService.register({
+          username: `temp_check_${Date.now()}`,
+          email: userData.email,
+          password: 'TempCheck123!@#',
+        });
+        // If registration succeeds (unlikely), email is available - continue
+        setIsLoading(false);
+      } catch (error: any) {
+        setIsLoading(false);
+        const errorMessage = error.message || '';
+        // Check if error indicates email already taken
+        if (
+          errorMessage.toLowerCase().includes('email') && 
+          (errorMessage.toLowerCase().includes('already') || 
+           errorMessage.toLowerCase().includes('taken') ||
+           errorMessage.toLowerCase().includes('exists') ||
+           errorMessage.toLowerCase().includes('duplicate') ||
+           errorMessage.toLowerCase().includes('registered'))
+        ) {
+          setEmailErrors([getTranslation(currentLanguage, 'emailAlreadyTaken')]);
+          Alert.alert(
+            getTranslation(currentLanguage, 'error'),
+            getTranslation(currentLanguage, 'emailAlreadyTaken')
+          );
+          return; // Stop here, don't proceed to next step
+        }
+        // Other errors (like validation for dummy data) are okay, means email might be available
+        // Continue to next step
+      }
     }
 
     // Password validation
@@ -229,12 +288,34 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           ]
         );
       } else {
-        // Genuine error - show error message
-        Alert.alert(
-          'Registration Failed',
-          error.message || 'Failed to create account. Please try again.',
-          [{ text: 'OK' }]
-        );
+        // Check if error is about email already taken
+        const errorMessage = error.message || '';
+        if (
+          errorMessage.toLowerCase().includes('email') && 
+          (errorMessage.toLowerCase().includes('already') || 
+           errorMessage.toLowerCase().includes('taken') ||
+           errorMessage.toLowerCase().includes('exists') ||
+           errorMessage.toLowerCase().includes('duplicate') ||
+           errorMessage.toLowerCase().includes('registered'))
+        ) {
+          // Go back to email step and show error
+          const emailStepIndex = questions.findIndex(q => q.key === 'email');
+          if (emailStepIndex !== -1) {
+            setCurrentStep(emailStepIndex);
+          }
+          setEmailErrors([getTranslation(currentLanguage, 'emailAlreadyTaken')]);
+          Alert.alert(
+            getTranslation(currentLanguage, 'error'),
+            getTranslation(currentLanguage, 'emailAlreadyTaken')
+          );
+        } else {
+          // Genuine error - show error message
+          Alert.alert(
+            'Registration Failed',
+            error.message || 'Failed to create account. Please try again.',
+            [{ text: 'OK' }]
+          );
+        }
       }
     } finally {
       setIsLoading(false);
@@ -342,7 +423,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                 value={userData.name}
                 onChangeText={(text) => setUserData({ ...userData, name: text })}
                 placeholder={currentQuestion.placeholder}
-                placeholderTextColor="rgba(173, 197, 216, 0.62)"
+                placeholderTextColor="rgba(76, 160, 228, 0.62)"
                 keyboardType={currentQuestion.keyboardType as any}
                 autoCapitalize="words"
               />
@@ -354,14 +435,30 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
             <View style={styles.purpleInputContainer}>
               <TextInput
                 autoFocus={true}
-                style={styles.purpleNameInput}
+                style={[
+                  styles.purpleNameInput,
+                  emailErrors.length > 0 && styles.purpleInputError
+                ]}
                 value={userData.email}
-                onChangeText={(text) => setUserData({ ...userData, email: text })}
+                onChangeText={(text) => {
+                  setUserData({ ...userData, email: text });
+                  const errors = validateEmail(text);
+                  setEmailErrors(errors);
+                }}
                 placeholder={currentQuestion.placeholder}
                 placeholderTextColor="rgba(255, 255, 255, 0.5)"
                 keyboardType={currentQuestion.keyboardType as any}
                 autoCapitalize="none"
               />
+              {emailErrors.length > 0 && (
+                <View style={styles.purpleErrorContainer}>
+                  {emailErrors.map((error, index) => (
+                    <Text key={index} style={styles.purpleErrorText}>
+                      • {error}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -441,21 +538,34 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           {/* PASSWORD Screen: Purple Design with Auto-focused Input */}
           {currentQuestion.key === 'password' && (
             <View style={styles.purpleInputContainer}>
-              <TextInput
-                autoFocus={true}
-                style={styles.purpleNameInput}
-                value={userData.password}
-                onChangeText={(text) => {
-                  setUserData({ ...userData, password: text });
-                  const errors = validatePassword(text);
-                  setPasswordErrors(errors);
-                }}
-                placeholder={currentQuestion.placeholder}
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                keyboardType={currentQuestion.keyboardType as any}
-                autoCapitalize="none"
-                secureTextEntry={true}
-              />
+              <View style={styles.purplePasswordInputContainer}>
+                <TextInput
+                  autoFocus={true}
+                  style={styles.purplePasswordInput}
+                  value={userData.password}
+                  onChangeText={(text) => {
+                    setUserData({ ...userData, password: text });
+                    const errors = validatePassword(text);
+                    setPasswordErrors(errors);
+                  }}
+                  placeholder={currentQuestion.placeholder}
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  keyboardType={currentQuestion.keyboardType as any}
+                  autoCapitalize="none"
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity
+                  style={styles.purpleEyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={responsive.wp(6)}
+                    color="rgba(255, 255, 255, 0.7)"
+                  />
+                </TouchableOpacity>
+              </View>
               {passwordErrors.length > 0 && (
                 <View style={styles.purpleErrorContainer}>
                   {passwordErrors.map((error, index) => (
@@ -501,36 +611,67 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                 </View>
               ) : (
                 <>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      currentQuestion.key === 'password' && passwordErrors.length > 0 && styles.inputError
-                    ]}
-                    value={userData[currentQuestion.key as keyof UserData]}
-                    onChangeText={(text) => {
-                      setUserData({
-                        ...userData,
-                        [currentQuestion.key]: text,
-                      });
-                      if (currentQuestion.key === 'password') {
-                        const errors = validatePassword(text);
-                        setPasswordErrors(errors);
-                      }
-                    }}
-                    placeholder={currentQuestion.placeholder}
-                    placeholderTextColor="#999"
-                    keyboardType={currentQuestion.keyboardType as any}
-                    secureTextEntry={currentQuestion.secure}
-                    autoCapitalize="none"
-                  />
-                  {currentQuestion.key === 'password' && passwordErrors.length > 0 && (
-                    <View style={styles.errorContainer}>
-                      {passwordErrors.map((error, index) => (
-                        <Text key={index} style={styles.errorText}>
-                          • {error}
-                        </Text>
-                      ))}
+                  {currentQuestion.key === 'password' ? (
+                    <View style={styles.passwordInputWrapper}>
+                      <View style={styles.passwordInputRow}>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            styles.passwordInputField,
+                            passwordErrors.length > 0 && styles.inputError
+                          ]}
+                          value={userData.password}
+                          onChangeText={(text) => {
+                            setUserData({
+                              ...userData,
+                              password: text,
+                            });
+                            const errors = validatePassword(text);
+                            setPasswordErrors(errors);
+                          }}
+                          placeholder={currentQuestion.placeholder}
+                          placeholderTextColor="#999"
+                          keyboardType={currentQuestion.keyboardType as any}
+                          secureTextEntry={!showPassword}
+                          autoCapitalize="none"
+                        />
+                        <TouchableOpacity
+                          style={styles.eyeIconButton}
+                          onPress={() => setShowPassword(!showPassword)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons
+                            name={showPassword ? 'eye-off' : 'eye'}
+                            size={responsive.wp(5)}
+                            color="#666"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      {passwordErrors.length > 0 && (
+                        <View style={styles.errorContainer}>
+                          {passwordErrors.map((error, index) => (
+                            <Text key={index} style={styles.errorText}>
+                              • {error}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
                     </View>
+                  ) : (
+                    <TextInput
+                      style={styles.input}
+                      value={userData[currentQuestion.key as keyof UserData]}
+                      onChangeText={(text) => {
+                        setUserData({
+                          ...userData,
+                          [currentQuestion.key]: text,
+                        });
+                      }}
+                      placeholder={currentQuestion.placeholder}
+                      placeholderTextColor="#999"
+                      keyboardType={currentQuestion.keyboardType as any}
+                      autoCapitalize="none"
+                    />
                   )}
                 </>
               )}
@@ -667,6 +808,25 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     paddingHorizontal: responsive.wp(4),
     paddingVertical: responsive.hp(1),
   },
+  purplePasswordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  purplePasswordInput: {
+    flex: 1,
+    fontSize: responsive.wp(8.5),
+    color: '#0a0ab8ff',
+    textAlign: 'center',
+    fontWeight: '700',
+    paddingHorizontal: responsive.wp(4),
+    paddingVertical: responsive.hp(1),
+  },
+  purpleEyeIcon: {
+    padding: responsive.wp(2),
+    marginLeft: responsive.wp(2),
+  },
   // ===== PURPLE THEME: AGE GRID =====
   purpleAgeContainer: {
     flex: 1,
@@ -742,6 +902,28 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontSize: responsive.wp(4.2),
     color: '#2C3E50',
     marginTop: responsive.hp(1.2),
+  },
+  passwordInputWrapper: {
+    width: '100%',
+    marginTop: responsive.hp(1.2),
+  },
+  passwordInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: responsive.wp(3),
+    paddingRight: responsive.wp(2),
+  },
+  passwordInputField: {
+    flex: 1,
+    marginTop: 0,
+    borderWidth: 0,
+    paddingRight: responsive.wp(1),
+  },
+  eyeIconButton: {
+    padding: responsive.wp(2),
   },
   languageContainer: {
     marginTop: responsive.hp(2.5),
@@ -822,6 +1004,10 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     color: '#FF6B6B',
     fontSize: responsive.wp(3),
     marginBottom: responsive.hp(0.4),
+  },
+  purpleInputError: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#FF6B6B',
   },
 });
 

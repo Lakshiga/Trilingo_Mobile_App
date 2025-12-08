@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -123,7 +124,12 @@ const ConversationScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+        <LottieView
+          source={require('../../assets/animations/Loading animation.json')}
+          autoPlay
+          loop
+          style={styles.loadingAnimation}
+        />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading conversations...
         </Text>
@@ -358,6 +364,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFF9E6',
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
     marginTop: 16,

@@ -347,20 +347,11 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               await logout();
-              // Show success message
-              Alert.alert(
-                'Success',
-                'Logged out successfully.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      // The app will automatically redirect to login screen
-                      // due to the UserContext state change in App.tsx
-                    },
-                  },
-                ]
-              );
+              // Navigate to Welcome screen after logout
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Welcome' }],
+              });
             } catch (error) {
               console.error('Logout error:', error);
               Alert.alert('Error', 'Failed to logout. Please try again.');

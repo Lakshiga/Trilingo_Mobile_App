@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -24,9 +25,9 @@ interface RouteParams {
   levelId?: number;
 }
 
-interface GroupedActivity {
+interface ActivityWithType {
+  activity: ActivityDto;
   activityType: ActivityTypeDto;
-  activities: ActivityDto[];
 }
 
 const LessonActivitiesScreen: React.FC = () => {
@@ -40,7 +41,7 @@ const LessonActivitiesScreen: React.FC = () => {
   const lessonId = params?.lessonId || 1;
   const lessonName = params?.lessonName || 'Lesson';
 
-  const [groupedActivities, setGroupedActivities] = useState<GroupedActivity[]>([]);
+  const [activities, setActivities] = useState<ActivityWithType[]>([]);
   const [loading, setLoading] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -51,82 +52,33 @@ const LessonActivitiesScreen: React.FC = () => {
         setLoading(true);
         
         // Fetch activities for this lesson (stage)
-        const activities = await apiService.getActivitiesByStage(lessonId);
+        const fetchedActivities = await apiService.getActivitiesByStage(lessonId);
         
-        // Fetch all activity types
+        // Fetch all activity types to get activity type info for navigation
         const activityTypes = await apiService.getAllActivityTypes();
         
-        // Fetch main activities to identify Learning
-        const mainActivities = await apiService.getAllMainActivities();
-        const learningMainActivity = mainActivities.find(ma => 
-          ma.name_en.toLowerCase() === 'learning'
-        );
-        
-        // Group activities by activity type
-        const grouped: GroupedActivity[] = [];
+        // Create activity type map for quick lookup
         const activityTypeMap = new Map<number, ActivityTypeDto>();
-        
         activityTypes.forEach(type => {
           activityTypeMap.set(type.id, type);
         });
         
-        // Create groups
-        const typeGroups = new Map<number, ActivityDto[]>();
-        activities.forEach(activity => {
-          if (!typeGroups.has(activity.activityTypeId)) {
-            typeGroups.set(activity.activityTypeId, []);
-          }
-          typeGroups.get(activity.activityTypeId)!.push(activity);
-        });
+        // Combine activities with their activity types
+        const activitiesWithTypes: ActivityWithType[] = fetchedActivities
+          .map(activity => {
+            const activityType = activityTypeMap.get(activity.activityTypeId);
+            if (!activityType) return null;
+            return {
+              activity,
+              activityType,
+            };
+          })
+          .filter((item): item is ActivityWithType => item !== null);
         
-        // Sort activities within each group by sequenceOrder
-        typeGroups.forEach((acts, typeId) => {
-          acts.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-        });
+        // Sort all activities by sequenceOrder
+        activitiesWithTypes.sort((a, b) => a.activity.sequenceOrder - b.activity.sequenceOrder);
         
-        // Separate Learning activity types from others
-        const learningGroups: GroupedActivity[] = [];
-        const otherGroups: GroupedActivity[] = [];
-        
-        typeGroups.forEach((acts, typeId) => {
-          const activityType = activityTypeMap.get(typeId);
-          if (!activityType) return;
-          
-          // Check if this activity type belongs to Learning main activity
-          const isLearning = learningMainActivity && 
-            activityType.mainActivityId === learningMainActivity.id;
-          
-          const group: GroupedActivity = {
-            activityType,
-            activities: acts,
-          };
-          
-          if (isLearning) {
-            learningGroups.push(group);
-          } else {
-            otherGroups.push(group);
-          }
-        });
-        
-        // Sort Learning groups by activity type name for consistency
-        learningGroups.sort((a, b) => {
-          const nameA = getLearningLanguageField(learningLanguage, a.activityType) || '';
-          const nameB = getLearningLanguageField(learningLanguage, b.activityType) || '';
-          return nameA.localeCompare(nameB);
-        });
-        
-        // Sort other groups by activity type name
-        otherGroups.sort((a, b) => {
-          const nameA = getLearningLanguageField(learningLanguage, a.activityType) || '';
-          const nameB = getLearningLanguageField(learningLanguage, b.activityType) || '';
-          return nameA.localeCompare(nameB);
-        });
-        
-        // Add Learning groups first, then other groups
-        grouped.push(...learningGroups);
-        grouped.push(...otherGroups);
-        
-        setGroupedActivities(grouped);
+        setActivities(activitiesWithTypes);
       } catch (error: any) {
         console.error('Error fetching activities:', error);
         Alert.alert('Error', 'Failed to load activities. Please try again.');
@@ -153,28 +105,14 @@ const LessonActivitiesScreen: React.FC = () => {
   }, [lessonId]);
 
   const handleActivityPress = (activity: ActivityDto, activityType: ActivityTypeDto) => {
-    // Navigate based on activity type JSON method
-    if (activityType.jsonMethod) {
-      (navigation as any).navigate('DynamicActivity', {
-        activityTypeId: activityType.id,
-        jsonMethod: activityType.jsonMethod,
-        activityId: activity.id,
-        activityTitle: getLearningLanguageField(learningLanguage, activity),
-      });
-    } else {
-      // Default navigation to exercise screen
-      (navigation as any).navigate('Exercise', {
-        activityId: activity.id,
-        activity: {
-          id: activity.id,
-          title: getLearningLanguageField(learningLanguage, activity),
-        },
-      });
-    }
-  };
-
-  const getActivityTypeName = (activityType: ActivityTypeDto) => {
-    return getLearningLanguageField(learningLanguage, activityType);
+    // Get activityTypeId and jsonMethod from activityType (already available)
+    // Pass directly to DynamicActivityScreen so it doesn't need to fetch again
+    (navigation as any).navigate('DynamicActivity', {
+      activityId: activity.id,
+      activityTypeId: activityType.id,
+      jsonMethod: activityType.jsonMethod,
+      activityTitle: getLearningLanguageField(learningLanguage, activity),
+    });
   };
 
   const getActivityName = (activity: ActivityDto) => {
@@ -184,7 +122,12 @@ const LessonActivitiesScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+        <LottieView
+          source={require('../../assets/animations/Loading animation.json')}
+          autoPlay
+          loop
+          style={styles.loadingAnimation}
+        />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading activities...
         </Text>
@@ -232,9 +175,9 @@ const LessonActivitiesScreen: React.FC = () => {
               },
             ]}
           >
-            {groupedActivities.length > 0 ? (
-              groupedActivities.map((group, groupIndex) => {
-                const activityTypeName = getActivityTypeName(group.activityType);
+            {activities.length > 0 ? (
+              activities.map((item, index) => {
+                const activityName = getActivityName(item.activity);
                 const gradients: readonly [string, string, ...string[]][] = [
                   ['#FF9A8B', '#FF6B9D'] as const,
                   ['#43BCCD', '#5DD3A1'] as const,
@@ -242,55 +185,34 @@ const LessonActivitiesScreen: React.FC = () => {
                   ['#FFB366', '#FF8C42'] as const,
                   ['#A77BCA', '#BA91DA'] as const,
                 ];
-                const sectionGradient = gradients[groupIndex % gradients.length];
+                const activityGradient = gradients[index % gradients.length];
                 
                 return (
-                  <View key={group.activityType.id} style={styles.activityGroup}>
-                    <View style={styles.sectionHeader}>
-                      <LinearGradient
-                        colors={sectionGradient}
-                        style={styles.sectionHeaderGradient}
-                      >
-                        <Text style={styles.sectionTitle}>{activityTypeName}</Text>
-                        <Text style={styles.sectionSubtitle}>
-                          {group.activities.length} {group.activities.length === 1 ? 'activity' : 'activities'}
-                        </Text>
-                      </LinearGradient>
-                    </View>
-                    
-                    {group.activities.map((activity, activityIndex) => {
-                      const activityName = getActivityName(activity);
-                      const activityGradient = gradients[activityIndex % gradients.length];
-                      
-                      return (
-                        <TouchableOpacity
-                          key={activity.id}
-                          style={styles.activityCard}
-                          onPress={() => handleActivityPress(activity, group.activityType)}
-                          activeOpacity={0.8}
-                        >
-                          <LinearGradient
-                            colors={activityGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.activityGradient}
-                          >
-                            <View style={styles.activityContent}>
-                              <View style={styles.activityIconContainer}>
-                                <MaterialIcons name="extension" size={32} color="#fff" />
-                              </View>
-                              <View style={styles.activityTextContainer}>
-                                <Text style={styles.activityTitle} numberOfLines={2}>
-                                  {activityName}
-                                </Text>
-                              </View>
-                              <MaterialIcons name="chevron-right" size={28} color="#fff" />
-                            </View>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                  <TouchableOpacity
+                    key={item.activity.id}
+                    style={styles.activityCard}
+                    onPress={() => handleActivityPress(item.activity, item.activityType)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={activityGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.activityGradient}
+                    >
+                      <View style={styles.activityContent}>
+                        <View style={styles.activityIconContainer}>
+                          <MaterialIcons name="extension" size={32} color="#fff" />
+                        </View>
+                        <View style={styles.activityTextContainer}>
+                          <Text style={styles.activityTitle} numberOfLines={2}>
+                            {activityName}
+                          </Text>
+                        </View>
+                        <MaterialIcons name="chevron-right" size={28} color="#fff" />
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
                 );
               })
             ) : (
@@ -396,33 +318,6 @@ const styles = StyleSheet.create({
   activitiesContainer: {
     width: '100%',
   },
-  activityGroup: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    marginBottom: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  sectionHeaderGradient: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
   activityCard: {
     marginBottom: 12,
     borderRadius: 16,
@@ -465,6 +360,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFF9E6',
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
     marginTop: 16,

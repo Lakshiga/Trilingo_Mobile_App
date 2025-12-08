@@ -89,7 +89,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
         }
       }
     } catch (error) {
-      console.error('Login error:', error);
       throw error;
     }
   };

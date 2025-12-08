@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -29,8 +31,11 @@ const LevelsScreen: React.FC = () => {
   const [levels, setLevels] = useState<LevelDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [lockedLevels, setLockedLevels] = useState<Set<number>>(new Set());
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchLevels = async () => {
@@ -40,6 +45,22 @@ const LevelsScreen: React.FC = () => {
         // Sort by ID
         const sortedLevels = allLevels.sort((a, b) => a.id - b.id);
         setLevels(sortedLevels);
+
+        // Check lessons count for each level to determine if it should be locked
+        const lockedSet = new Set<number>();
+        for (const level of sortedLevels) {
+          try {
+            const lessons = await apiService.getStagesByLevelId(level.id);
+            if (lessons.length === 0) {
+              lockedSet.add(level.id);
+            }
+          } catch (error) {
+            // If error fetching lessons, consider level locked
+            console.warn(`Failed to fetch lessons for level ${level.id}, locking it`);
+            lockedSet.add(level.id);
+          }
+        }
+        setLockedLevels(lockedSet);
       } catch (error: any) {
         // Check if it's a permissions error
         if (error.name === 'PermissionDeniedError' || 
@@ -75,11 +96,32 @@ const LevelsScreen: React.FC = () => {
     ]).start();
   }, []);
 
+  // Handle modal animation when it becomes visible
+  useEffect(() => {
+    if (showComingSoonModal) {
+      modalScaleAnim.setValue(0);
+      Animated.spring(modalScaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      modalScaleAnim.setValue(0);
+    }
+  }, [showComingSoonModal]);
+
   const handleLevelPress = (level: LevelDto) => {
-    // Allow all levels to be accessible, not just level 1
-    (navigation as any).navigate('Lessons', { 
-      levelId: level.id, 
-      levelName: getLearningLanguageField(learningLanguage, level) 
+    // Check if level is locked (has 0 lessons)
+    if (lockedLevels.has(level.id)) {
+      setShowComingSoonModal(true);
+      return;
+    }
+  
+    // Navigate to lessons if level is not locked
+    (navigation as any).navigate('Lessons', {
+      levelId: level.id,
+      levelName: getLearningLanguageField(learningLanguage, level)
     });
   };
 
@@ -92,7 +134,12 @@ const LevelsScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+        <LottieView
+          source={require('../../assets/animations/Loading animation.json')}
+          autoPlay
+          loop
+          style={styles.loadingAnimation}
+        />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading levels...
         </Text>
@@ -187,30 +234,33 @@ const LevelsScreen: React.FC = () => {
           >
             {levels.map((level, index) => {
               const levelName = getLevelName(level);
+              const isLocked = lockedLevels.has(level.id);
               
               return (
                 <TouchableOpacity
                   key={level.id}
-                  style={styles.levelCard}
+                  style={[styles.levelCard, isLocked && styles.levelCardLocked]}
                   onPress={() => handleLevelPress(level)}
-                  activeOpacity={0.8}
+                  activeOpacity={isLocked ? 1 : 0.8}
+                  disabled={false}
                 >
                   <LinearGradient
-                    colors={['#43BCCD', '#5DD3A1']}
+                    colors={isLocked ? ['#9CA3AF', '#6B7280'] : ['#43BCCD', '#5DD3A1']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.levelGradient}
                   >
                     <View style={styles.levelContent}>
-                      <View style={styles.levelIconContainer}>
-                        <Text style={styles.levelNumber}>{level.id}</Text>
-                      </View>
                       <View style={styles.levelTextContainer}>
-                        <Text style={styles.levelTitle}>
+                        <Text style={[styles.levelTitle, isLocked && styles.levelTitleLocked]}>
                           {levelName}
                         </Text>
                       </View>
-                      <MaterialIcons name="chevron-right" size={responsive.wp(8.5)} color="#fff" />
+                      {isLocked ? (
+                        <MaterialIcons name="lock" size={responsive.wp(8.5)} color="rgba(255, 255, 255, 0.7)" />
+                      ) : (
+                        <MaterialIcons name="chevron-right" size={responsive.wp(8.5)} color="#fff" />
+                      )}
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -219,6 +269,79 @@ const LevelsScreen: React.FC = () => {
           </Animated.View>
         </ScrollView>
       </LinearGradient>
+
+      {/* Coming Soon Modal */}
+      <Modal
+        visible={showComingSoonModal}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => {
+          Animated.timing(modalScaleAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowComingSoonModal(false);
+            modalScaleAnim.setValue(0);
+          });
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              {
+                transform: [{ scale: modalScaleAnim }],
+              },
+            ]}
+          >
+            <View style={styles.modalContent}>
+              {/* Heading */}
+              <Text style={styles.comingSoonTitle}>Coming Soon</Text>
+
+              {/* Lottie Animation */}
+              <View style={styles.lottieContainer}>
+                <LottieView
+                  source={require('../../assets/animations/comming soon.json')}
+                  autoPlay
+                  loop
+                  style={styles.lottieAnimation}
+                />
+              </View>
+
+              {/* Message */}
+              <Text style={styles.comingSoonMessage}>
+                Level will be available soon!
+              </Text>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  Animated.timing(modalScaleAnim, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setShowComingSoonModal(false);
+                    modalScaleAnim.setValue(0);
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#FF6B9D', '#FFB366']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalButtonGradient}
+                >
+                  <Text style={styles.modalButtonText}>OK</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -324,6 +447,10 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     shadowRadius: responsive.wp(2),
     overflow: 'hidden',
   },
+  levelCardLocked: {
+    opacity: 0.7,
+    elevation: 4,
+  },
   
   levelGradient: {
     padding: responsive.wp(5),
@@ -332,22 +459,6 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   levelContent: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  
-  levelIconContainer: {
-    width: responsive.wp(18.5),
-    height: responsive.wp(18.5),
-    borderRadius: responsive.wp(9.25),
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: responsive.wp(4),
-  },
-  
-  levelNumber: {
-    fontSize: responsive.wp(8.5),
-    fontWeight: 'bold',
-    color: '#fff',
   },
   
   levelTextContainer: {
@@ -362,12 +473,19 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     textShadowOffset: { width: responsive.wp(0.25), height: responsive.hp(0.12) },
     textShadowRadius: responsive.wp(0.5),
   },
+  levelTitleLocked: {
+    opacity: 0.8,
+  },
 
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFF9E6',
+  },
+  loadingAnimation: {
+    width: responsive.wp(40),
+    height: responsive.wp(40),
   },
   loadingText: {
     marginTop: responsive.hp(2),
@@ -389,6 +507,76 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontSize: responsive.wp(3.7),
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: responsive.wp(5),
+  },
+  modalContainer: {
+    width: '85%',
+    maxWidth: responsive.wp(90),
+    borderRadius: responsive.wp(7.5),
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: responsive.hp(0.6) },
+    shadowOpacity: 0.3,
+    shadowRadius: responsive.wp(2.5),
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: responsive.wp(7.5),
+    alignItems: 'center',
+  },
+  comingSoonTitle: {
+    fontSize: responsive.wp(8),
+    fontWeight: 'bold',
+    color: '#333333',
+    textAlign: 'center',
+    marginTop: responsive.hp(1),
+    marginBottom: responsive.hp(2.5),
+  },
+  lottieContainer: {
+    width: responsive.wp(62.5),
+    height: responsive.wp(62.5),
+    marginBottom: responsive.hp(2.5),
+  },
+  lottieAnimation: {
+    width: '100%',
+    height: '100%',
+  },
+  comingSoonMessage: {
+    fontSize: responsive.wp(4.5),
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: responsive.hp(3),
+    fontWeight: '600',
+  },
+  modalButton: {
+    borderRadius: responsive.wp(6.25),
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: responsive.hp(0.4) },
+    shadowOpacity: 0.3,
+    shadowRadius: responsive.wp(1.25),
+  },
+  modalButtonGradient: {
+    paddingVertical: responsive.hp(1.5),
+    paddingHorizontal: responsive.wp(10),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonText: {
+    fontSize: responsive.wp(4.5),
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: responsive.wp(0.25), height: responsive.hp(0.12) },
+    textShadowRadius: responsive.wp(0.5),
   },
 });
 

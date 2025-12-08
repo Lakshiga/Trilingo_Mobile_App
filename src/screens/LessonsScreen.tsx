@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -36,8 +38,11 @@ const LessonsScreen: React.FC = () => {
 
   const [lessons, setLessons] = useState<StageDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lockedLessons, setLockedLessons] = useState<Set<number>>(new Set());
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchLessons = async () => {
@@ -61,6 +66,22 @@ const LessonsScreen: React.FC = () => {
         const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
         
         setLessons(sortedLessons);
+
+        // Check activities count for each lesson to determine if it should be locked
+        const lockedSet = new Set<number>();
+        for (const lesson of sortedLessons) {
+          try {
+            const activities = await apiService.getActivitiesByStage(lesson.id);
+            if (activities.length === 0) {
+              lockedSet.add(lesson.id);
+            }
+          } catch (error) {
+            // If error fetching activities, consider lesson locked
+            console.warn(`Failed to fetch activities for lesson ${lesson.id}, locking it`);
+            lockedSet.add(lesson.id);
+          }
+        }
+        setLockedLessons(lockedSet);
       } catch (error: any) {
         // Log error details for debugging
         console.error('❌ Error fetching lessons:', error);
@@ -91,7 +112,28 @@ const LessonsScreen: React.FC = () => {
     ]).start();
   }, [levelId]);
 
+  // Handle modal animation when it becomes visible
+  useEffect(() => {
+    if (showComingSoonModal) {
+      modalScaleAnim.setValue(0);
+      Animated.spring(modalScaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      modalScaleAnim.setValue(0);
+    }
+  }, [showComingSoonModal]);
+
   const handleLessonPress = (lesson: StageDto) => {
+    // Check if lesson is locked (has 0 activities)
+    if (lockedLessons.has(lesson.id)) {
+      setShowComingSoonModal(true);
+      return;
+    }
+
     (navigation as any).navigate('LessonActivities', { 
       lessonId: lesson.id, 
       lessonName: getLearningLanguageField(learningLanguage, lesson),
@@ -106,7 +148,12 @@ const LessonsScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.textPrimary || '#43BCCD'} />
+        <LottieView
+          source={require('../../assets/animations/Loading animation.json')}
+          autoPlay
+          loop
+          style={styles.loadingAnimation}
+        />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading lessons...
         </Text>
@@ -158,6 +205,7 @@ const LessonsScreen: React.FC = () => {
             {lessons.length > 0 ? (
               lessons.map((lesson, index) => {
                 const lessonName = getLessonName(lesson);
+                const isLocked = lockedLessons.has(lesson.id);
                 const gradients = [
                   ['#FF9A8B', '#FF6B9D'] as const,
                   ['#43BCCD', '#5DD3A1'] as const,
@@ -170,16 +218,16 @@ const LessonsScreen: React.FC = () => {
                   ['#A8E6CF', '#56C596'] as const,
                   ['#B4A7D6', '#8E7CC3'] as const,
                 ];
-                const gradient = gradients[index % gradients.length];
+                const gradient = isLocked ? ['#9CA3AF', '#6B7280'] as const : gradients[index % gradients.length];
                 const emojis = ['📖', '🔤', '🔢', '🎨', '🌍', '🎵', '📚', '✏️', '🎯', '🌟'];
                 const emoji = emojis[index % emojis.length];
                 
                 return (
                   <TouchableOpacity
                     key={lesson.id}
-                    style={styles.lessonCard}
+                    style={[styles.lessonCard, isLocked && styles.lessonCardLocked]}
                     onPress={() => handleLessonPress(lesson)}
-                    activeOpacity={0.8}
+                    activeOpacity={isLocked ? 1 : 0.8}
                   >
                     <LinearGradient
                       colors={gradient}
@@ -194,11 +242,15 @@ const LessonsScreen: React.FC = () => {
                           </Text>
                         </View>
                         <View style={styles.lessonTextContainer}>
-                          <Text style={styles.lessonTitle} numberOfLines={2}>
+                          <Text style={[styles.lessonTitle, isLocked && styles.lessonTitleLocked]} numberOfLines={2}>
                             {lessonName || `Lesson ${lesson.id}`}
                           </Text>
                         </View>
-                        <MaterialIcons name="chevron-right" size={32} color="#fff" />
+                        {isLocked ? (
+                          <MaterialIcons name="lock" size={32} color="rgba(255, 255, 255, 0.7)" />
+                        ) : (
+                          <MaterialIcons name="chevron-right" size={32} color="#fff" />
+                        )}
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
@@ -213,6 +265,79 @@ const LessonsScreen: React.FC = () => {
           </Animated.View>
         </ScrollView>
       </LinearGradient>
+
+      {/* Coming Soon Modal */}
+      <Modal
+        visible={showComingSoonModal}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => {
+          Animated.timing(modalScaleAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowComingSoonModal(false);
+            modalScaleAnim.setValue(0);
+          });
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              {
+                transform: [{ scale: modalScaleAnim }],
+              },
+            ]}
+          >
+            <View style={styles.modalContent}>
+              {/* Heading */}
+              <Text style={styles.comingSoonTitle}>Coming Soon</Text>
+
+              {/* Lottie Animation */}
+              <View style={styles.lottieContainer}>
+                <LottieView
+                  source={require('../../assets/animations/comming soon.json')}
+                  autoPlay
+                  loop
+                  style={styles.lottieAnimation}
+                />
+              </View>
+
+              {/* Message */}
+              <Text style={styles.comingSoonMessage}>
+                Lessons will be available soon!
+              </Text>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  Animated.timing(modalScaleAnim, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setShowComingSoonModal(false);
+                    modalScaleAnim.setValue(0);
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#FF6B9D', '#FFB366']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalButtonGradient}
+                >
+                  <Text style={styles.modalButtonText}>OK</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -354,6 +479,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF9E6',
   },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
+  },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
@@ -374,6 +503,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+  lessonCardLocked: {
+    opacity: 0.7,
+    elevation: 4,
+  },
+  lessonTitleLocked: {
+    opacity: 0.8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    width: '85%',
+    maxWidth: 400,
+    borderRadius: 30,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 30,
+    alignItems: 'center',
+  },
+  comingSoonTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#333333',
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  lottieContainer: {
+    width: 250,
+    height: 250,
+    marginBottom: 20,
+  },
+  lottieAnimation: {
+    width: '100%',
+    height: '100%',
+  },
+  comingSoonMessage: {
+    fontSize: 18,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 25,
+    fontWeight: '600',
+  },
+  modalButton: {
+    borderRadius: 25,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  modalButtonGradient: {
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });
 

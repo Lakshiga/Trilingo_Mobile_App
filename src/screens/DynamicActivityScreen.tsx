@@ -10,6 +10,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { Language } from '../utils/translations';
@@ -92,11 +93,20 @@ const DynamicActivityScreen: React.FC = () => {
           }
         }
 
+        // Use activityTypeId from route params (already passed from activity screen)
+        // Only fetch if we don't have activityTypeId or jsonMethod from route
         const typeIdToUse = activityTypeId || fetchedActivity?.activityTypeId;
-        if (typeIdToUse) {
+        if (typeIdToUse && !jsonMethod) {
+          // Only fetch if jsonMethod wasn't passed (to avoid unnecessary API call)
           const fetchedType = await apiService.getActivityTypeById(typeIdToUse);
           if (!isMounted) return;
           setActivityType(fetchedType);
+        } else if (jsonMethod && typeIdToUse) {
+          // If jsonMethod is passed, create activityType object from route params
+          setActivityType({
+            id: typeIdToUse,
+            jsonMethod: jsonMethod,
+          } as ActivityTypeDto);
         } else {
           setActivityType(null);
         }
@@ -126,7 +136,7 @@ const DynamicActivityScreen: React.FC = () => {
 
   const headerTitle =
     activityTitle ||
-    getLearningLanguageField(learningLanguage, activity) ||
+    (activity ? getLearningLanguageField(learningLanguage, activity) : null) ||
     activity?.name_en ||
     'Activity';
 
@@ -334,7 +344,12 @@ const DynamicActivityScreen: React.FC = () => {
     if (loading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.headerGradient[0]} />
+          <LottieView
+            source={require('../../assets/animations/Loading animation.json')}
+            autoPlay
+            loop
+            style={styles.loadingAnimation}
+          />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading activity...</Text>
         </View>
       );
@@ -458,6 +473,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
     marginTop: 12,

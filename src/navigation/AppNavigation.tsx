@@ -63,7 +63,8 @@ const LoginScreenWrapper = () => {
       // Navigate to home after login
       navigation.navigate('Home');
     } catch (error) {
-      console.error('Login error:', error);
+      // Re-throw error so LoginScreen can catch it and show modal
+      throw error;
     }
   };
 
@@ -76,7 +77,7 @@ const LoginScreenWrapper = () => {
     try {
       await handleLogin({ isGuest: true });
     } catch (error) {
-      console.error('Guest login error:', error);
+      // Silent error handling - no logging
     }
   };
 

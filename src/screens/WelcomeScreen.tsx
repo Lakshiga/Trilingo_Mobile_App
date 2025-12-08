@@ -32,7 +32,9 @@ const WelcomeScreen: React.FC = () => {
   };
 
   return (
-    <LinearGradient colors={['#83dce3ff', '#0400ffff']} style={styles.gradient}>
+    <LinearGradient
+  colors={['rgb(248, 248, 248)', 'rgb(21, 21, 21)']}
+  style={styles.gradient}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         <Text style={styles.heading}>Welcome to Q-bit</Text>
@@ -152,7 +154,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       marginBottom: responsive.hp(3),
     },
     primaryButton: {
-      backgroundColor: '#1ac748ff',
+      backgroundColor: 'rgb(199, 119, 119)',
       paddingVertical: responsive.hp(2),
       borderRadius: responsive.wp(7),
       alignItems: 'center',
