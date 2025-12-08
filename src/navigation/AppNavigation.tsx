@@ -16,8 +16,6 @@ import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 
 import HomeScreen from '../screens/HomeScreen';
 
-import ExerciseScreen from '../screens/ExerciseScreen';
-
 import ProfileScreen from '../screens/ProfileScreen';
 
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -35,6 +33,8 @@ import StoriesScreen from '../screens/StoriesScreen';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 
 import DynamicActivityScreen from '../screens/DynamicActivityScreen';
+
+import PlayScreen from '../screens/PlayScreen';
 
 import LevelsScreen from '../screens/LevelsScreen';
 
@@ -132,9 +132,9 @@ export default function AppNavigator() {
       <Stack.Screen name="Songs" component={SongsScreen} />
       <Stack.Screen name="Stories" component={StoriesScreen} />
       <Stack.Screen name="Activities" component={ActivitiesScreen} />
-      <Stack.Screen name="Exercise" component={ExerciseScreen} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
       <Stack.Screen name="DynamicActivity" component={DynamicActivityScreen} />
+      <Stack.Screen name="PlayScreen" component={PlayScreen} />
       <Stack.Screen name="Levels" component={LevelsScreen} />
       <Stack.Screen name="Lessons" component={LessonsScreen} />
       <Stack.Screen name="LessonActivities" component={LessonActivitiesScreen} />

@@ -48,13 +48,21 @@ export const renderActivityByTypeId = (
   activityTypeId: number,
   props: ActivityComponentProps
 ): React.ReactElement | null => {
+  if (!activityTypeId || typeof activityTypeId !== 'number') {
+    return null;
+  }
+  
   const Component = ACTIVITY_TYPE_MAP[activityTypeId];
   
   if (!Component) {
     return null;
   }
   
-  return <Component {...props} />;
+  try {
+    return <Component {...props} />;
+  } catch (error) {
+    return null;
+  }
 };
 
 /**

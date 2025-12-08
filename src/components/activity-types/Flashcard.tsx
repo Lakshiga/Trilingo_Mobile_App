@@ -401,9 +401,9 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
   }
 
   const imageUrl = getImageUrl();
-  const mainWord = getText(currentWord.word);
-  const label = getText(currentWord.label);
-  const referenceTitle = getText(currentWord.referenceTitle);
+  const mainWord = getText(currentWord.word) || '';
+  const label = getText(currentWord.label) || '';
+  const referenceTitle = getText(currentWord.referenceTitle) || '';
 
   // Create responsive styles dynamically
   const responsiveStyles = {
@@ -500,9 +500,9 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
         {/* Flashcard Card Design */}
         <View style={responsiveStyles.flashcardCard}>
           {/* Reference Title as Heading (Center) */}
-          {referenceTitle && (
+          {referenceTitle && referenceTitle.trim() ? (
             <Text style={responsiveStyles.cardHeading}>{referenceTitle}</Text>
-          )}
+          ) : null}
           
           {/* Image in Center (Circular) */}
           {imageUrl ? (
@@ -520,12 +520,14 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
           )}
 
           {/* Word Text */}
-          <Text style={responsiveStyles.cardWord}>{mainWord}</Text>
+          {mainWord && mainWord.trim() ? (
+            <Text style={responsiveStyles.cardWord}>{mainWord}</Text>
+          ) : null}
 
           {/* Label (if exists) */}
-          {label && label.trim() && (
+          {label && label.trim() ? (
             <Text style={responsiveStyles.cardLabel}>{label}</Text>
-          )}
+          ) : null}
 
           {/* Listen Button */}
           {getAudioUrl() && (
@@ -558,7 +560,7 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
         </TouchableOpacity>
         
         <Text style={responsiveStyles.footerCounter}>
-          {currentIndex + 1} / {flashcardData.words.length}
+          {String(currentIndex + 1)} / {String(flashcardData.words.length)}
         </Text>
         
         <TouchableOpacity

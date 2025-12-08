@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
-import { ActivityComponentProps, Language, MultiLingualText, ImageUrl } from './types';
-import { useTheme } from '../../theme/ThemeContext';
+import { ActivityComponentProps, MultiLingualText, ImageUrl } from './types';
 import { useResponsive } from '../../utils/responsive';
-import { getCloudFrontUrl, getImageUrl } from '../../utils/awsUrlHelper';
+import { getCloudFrontUrl, getImageUrl as getImageUrlHelper } from '../../utils/awsUrlHelper';
 import apiService from '../../services/api';
 
 interface Tile {
@@ -30,11 +29,9 @@ interface AnswerGroup {
 }
 
 interface TripleBlastContent {
-  activityId?: string;
-  title: MultiLingualText;
+  contentType: 'word' | 'image';
   instruction: MultiLingualText;
-  contentType: string;
-  data: Tile[];
+  tiles: Tile[];
   answers: AnswerGroup[];
 }
 
@@ -43,168 +40,180 @@ interface GameTile extends Tile {
 }
 
 const TripleBlast: React.FC<ActivityComponentProps> = ({
-  content: initialContent,
   currentLang = 'ta',
-  onComplete,
   activityId,
+  onComplete,
 }) => {
   const responsive = useResponsive();
-  const { theme } = useTheme();
-  const [content, setContent] = useState<any>(initialContent);
-  const [loading, setLoading] = useState<boolean>(!!activityId);
+  const [loading, setLoading] = useState(true);
+  const [allExercises, setAllExercises] = useState<TripleBlastContent[]>([]);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [tiles, setTiles] = useState<GameTile[]>([]);
   const [selectedTileIds, setSelectedTileIds] = useState<string[]>([]);
   const [score, setScore] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [showConfetti, setShowConfetti] = useState(false);
   const [showFail, setShowFail] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState(60); // 1 minute timer
+  const [showCongratulations, setShowCongratulations] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(60);
+  const [showTimeout, setShowTimeout] = useState(false);
+  const [exerciseCompleted, setExerciseCompleted] = useState(false);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const confettiRef = useRef<LottieView>(null);
   const failRef = useRef<LottieView>(null);
+  const congratulationsRef = useRef<LottieView>(null);
 
-  const tripleBlastData = content as TripleBlastContent;
-
-  // Fetch exercises data if activityId is provided
+  // Fetch all exercises for the activity
   useEffect(() => {
-    const fetchTripleBlastData = async () => {
-      if (!activityId) return;
-      
+    const fetchExercises = async () => {
+      if (!activityId) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        
         const exercises = await apiService.getExercisesByActivityId(activityId);
-        
-        if (exercises && exercises.length > 0) {
-          const sortedExercises = exercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-          
-          const tiles: Tile[] = [];
-          const answerGroups: AnswerGroup[] = [];
-          let title = { ta: '', en: '', si: '' };
-          let instruction = { ta: '', en: '', si: '' };
-          let contentType = 'text';
-          
-          sortedExercises.forEach((exercise, index) => {
-            try {
-              if (exercise.jsonData) {
-                const parsedData = JSON.parse(exercise.jsonData);
-                
-                if (index === 0) {
-                  if (parsedData.title) title = parsedData.title;
-                  if (parsedData.instruction) instruction = parsedData.instruction;
-                  if (parsedData.contentType) contentType = parsedData.contentType;
-                }
-                
-                // Parse tiles and answers from exercise
-                if (parsedData.data && Array.isArray(parsedData.data)) {
-                  tiles.push(...parsedData.data);
-                } else if (parsedData.tiles && Array.isArray(parsedData.tiles)) {
-                  tiles.push(...parsedData.tiles);
-                } else if (parsedData.tile) {
-                  tiles.push(parsedData.tile);
-                }
-                
-                if (parsedData.answers && Array.isArray(parsedData.answers)) {
-                  answerGroups.push(...parsedData.answers);
-                } else if (parsedData.answerGroups && Array.isArray(parsedData.answerGroups)) {
-                  answerGroups.push(...parsedData.answerGroups);
-                }
-              }
-            } catch (parseError) {
-              // Silently skip invalid exercise data
+
+        if (!exercises || exercises.length === 0) {
+          setLoading(false);
+          return;
+        }
+
+        const sortedExercises = exercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+        const exerciseContents: TripleBlastContent[] = [];
+
+        // Get contentType from first exercise
+        let globalContentType: 'word' | 'image' = 'word';
+        if (sortedExercises.length > 0 && sortedExercises[0].jsonData) {
+          try {
+            const firstExerciseData = JSON.parse(sortedExercises[0].jsonData);
+            if (firstExerciseData.contentType) {
+              const ctLower = firstExerciseData.contentType.toLowerCase();
+              globalContentType = ctLower === 'image' ? 'image' : 'word';
             }
-          });
-          
-          if (tiles.length > 0) {
-            const combinedContent: TripleBlastContent = {
-              activityId: activityId.toString(),
-              title: title,
-              instruction: instruction,
-              contentType: contentType,
-              data: tiles,
-              answers: answerGroups,
-            };
-            setContent(combinedContent);
+          } catch (e) {
+            // Use default 'word'
           }
         }
+
+        sortedExercises.forEach((exercise) => {
+          try {
+            if (exercise.jsonData) {
+              const parsedData = JSON.parse(exercise.jsonData);
+
+              let contentType: 'word' | 'image' = globalContentType;
+              if (parsedData.contentType) {
+                const ctLower = parsedData.contentType.toLowerCase();
+                contentType = ctLower === 'image' ? 'image' : 'word';
+              }
+
+              const tiles: Tile[] = [];
+              if (parsedData.data && Array.isArray(parsedData.data)) {
+                tiles.push(...parsedData.data);
+              } else if (parsedData.tiles && Array.isArray(parsedData.tiles)) {
+                tiles.push(...parsedData.tiles);
+              }
+
+              const answers: AnswerGroup[] = [];
+              if (parsedData.answers && Array.isArray(parsedData.answers)) {
+                answers.push(...parsedData.answers);
+              } else if (parsedData.answerGroups && Array.isArray(parsedData.answerGroups)) {
+                answers.push(...parsedData.answerGroups);
+              }
+
+              const instruction: MultiLingualText = parsedData.instruction || {
+                ta: '',
+                en: '',
+                si: '',
+              };
+
+              if (tiles.length > 0) {
+                exerciseContents.push({
+                  contentType,
+                  instruction,
+                  tiles,
+                  answers,
+                });
+              }
+            }
+          } catch (parseError) {
+            // Skip invalid exercise
+          }
+        });
+
+        if (exerciseContents.length > 0) {
+          setAllExercises(exerciseContents);
+        }
       } catch (error) {
-        // Error handled silently
+        // Error fetching
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTripleBlastData();
+    fetchExercises();
   }, [activityId]);
 
-  // Parse content - handle multiple content structures
-  const getContent = (): TripleBlastContent | null => {
-    if (!content) return null;
-    
-    // Case 1: Content has data array directly
-    if (content.data && Array.isArray(content.data) && content.data.length > 0) {
-      return {
-        activityId: content.activityId || '',
-        title: content.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || { ta: '', en: '', si: '' },
-        contentType: content.contentType || 'text',
-        data: content.data,
-        answers: content.answers || content.answerGroups || [],
-      } as TripleBlastContent;
-    }
-    
-    // Case 2: Content has tiles array
-    if (content.tiles && Array.isArray(content.tiles)) {
-      return {
-        activityId: content.activityId || '',
-        title: content.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || { ta: '', en: '', si: '' },
-        contentType: content.contentType || 'text',
-        data: content.tiles,
-        answers: content.answers || content.answerGroups || [],
-      } as TripleBlastContent;
-    }
-    
-    return content as TripleBlastContent;
-  };
-
-  const getText = (content: { [key: string]: string | null } | MultiLingualText | undefined | null): string => {
-    if (!content) return 'N/A';
+  const getText = (content: MultiLingualText | { [key: string]: string | null } | undefined | null): string => {
+    if (!content) return '';
     if (typeof content === 'object') {
-      return content[currentLang] || content.en || content.ta || content.si || 'N/A';
+      return content[currentLang] || content.en || content.ta || content.si || '';
     }
     return String(content);
   };
 
   const getTileImageUrl = (tile: Tile): string | null => {
-    if (!tile.imageUrl) return null;
-    
-    // Handle ImageUrl type - could be multilingual object or string
-    let relativePath: string | null = null;
-    
-    if (typeof tile.imageUrl === 'string') {
-      relativePath = tile.imageUrl;
-    } else if (typeof tile.imageUrl === 'object') {
-      // Try to get path for current language
-      const langKey = currentLang === 'ta' ? 'ta' : currentLang === 'si' ? 'si' : 'en';
-      relativePath = tile.imageUrl[langKey] || 
-                     tile.imageUrl.default ||
-                     tile.imageUrl.en || 
-                     tile.imageUrl.ta || 
-                     tile.imageUrl.si ||
-                     null;
+    // First try to get from imageUrl field
+    if (tile.imageUrl) {
+      // Convert ImageUrl to the format expected by getImageUrlHelper
+      const imageUrlData = typeof tile.imageUrl === 'string'
+        ? tile.imageUrl
+        : (tile.imageUrl as any);
       
-      // If still no path, try to find any string value
-      if (!relativePath) {
-        const values = Object.values(tile.imageUrl);
-        relativePath = values.find((v): v is string => typeof v === 'string' && v !== null && v.trim().length > 0) || null;
-      }
+      const imageUrl = getImageUrlHelper(imageUrlData, currentLang);
+      if (imageUrl) return imageUrl;
     }
-    
-    if (!relativePath) return null;
-    
-    // Convert relative path to full CloudFront URL
-    return getCloudFrontUrl(relativePath);
+
+    // If no imageUrl, check if content field contains image path
+    const contentStr = typeof tile.content === 'string'
+      ? tile.content
+      : (typeof tile.content === 'object'
+        ? (tile.content[currentLang] || tile.content.en || tile.content.ta || tile.content.si || '')
+        : '');
+
+    // Check if content looks like an image path
+    if (contentStr && (
+      contentStr.includes('.png') ||
+      contentStr.includes('.jpg') ||
+      contentStr.includes('.jpeg') ||
+      contentStr.includes('.gif') ||
+      contentStr.includes('.webp') ||
+      contentStr.includes('/img/') ||
+      contentStr.includes('level-') ||
+      contentStr.includes('image')
+    )) {
+      return getCloudFrontUrl(contentStr);
+    }
+
+    // Try to extract from content if it's an object with image paths
+    if (typeof tile.content === 'object' && tile.content) {
+      const contentObj = tile.content as any;
+      
+      // Check common image path keys
+      if (contentObj.url || contentObj.uri || contentObj.path || contentObj.image || contentObj.imageUrl) {
+        const imagePath = contentObj.url || contentObj.uri || contentObj.path || contentObj.image || contentObj.imageUrl;
+        if (typeof imagePath === 'string') {
+          return getCloudFrontUrl(imagePath);
+        }
+      }
+      
+      // Try getImageUrl helper on content object
+      const imageFromContent = getImageUrlHelper(contentObj, currentLang);
+      if (imageFromContent) return imageFromContent;
+    }
+
+    return null;
   };
 
   const shuffle = (array: GameTile[]): GameTile[] => {
@@ -216,116 +225,49 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     return shuffled;
   };
 
-  const parsedContent = useMemo(() => getContent(), [content, currentLang]);
+  const currentContent = allExercises[currentExerciseIndex];
 
-  const resetGame = () => {
-    if (!parsedContent?.data) return;
-    
-    const initialTiles: GameTile[] = parsedContent.data.map(tile => ({
+  // Initialize game when exercise changes
+  useEffect(() => {
+    if (!currentContent || !currentContent.tiles || currentContent.tiles.length === 0) return;
+
+    const initialTiles: GameTile[] = currentContent.tiles.map((tile, index) => ({
       ...tile,
+      id: `${tile.id || `tile-${index}`}-${currentExerciseIndex}`,
       status: 'default',
     }));
 
     setTiles(shuffle(initialTiles));
     setSelectedTileIds([]);
     setScore(0);
+    setFeedbackMessage('Select three tiles to form a group');
     setTimeRemaining(60);
-    setFeedbackMessage('Select three tiles to form a group.');
-    
-    // Restart timer
+
+    // Clear existing timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
     }
-    
+
+    // Start timer
     timerIntervalRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
           if (timerIntervalRef.current) {
             clearInterval(timerIntervalRef.current);
           }
-          Alert.alert(
-            'Time Up!',
-            'Your time has run out!',
-            [
-              {
-                text: 'Retry',
-                onPress: () => resetGame(),
-                style: 'default',
-              },
-              {
-                text: 'Close',
-                onPress: () => {
-                  if (onComplete) onComplete();
-                },
-                style: 'cancel',
-              },
-            ]
-          );
+          setShowTimeout(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  };
-
-  // Timer effect
-  useEffect(() => {
-    if (parsedContent?.data && parsedContent.data.length > 0) {
-      // Start timer
-      setTimeRemaining(60);
-      timerIntervalRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            if (timerIntervalRef.current) {
-              clearInterval(timerIntervalRef.current);
-            }
-            Alert.alert(
-              'Time Up!',
-              'Your time has run out!',
-              [
-                {
-                  text: 'Retry',
-                  onPress: () => resetGame(),
-                  style: 'default',
-                },
-                {
-                  text: 'Close',
-                  onPress: () => {
-                    if (onComplete) onComplete();
-                  },
-                  style: 'cancel',
-                },
-              ]
-            );
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
 
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
       }
     };
-  }, [parsedContent]);
-
-  // Initialize game when content loads
-  useEffect(() => {
-    if (parsedContent?.data && parsedContent.data.length > 0) {
-      const initialTiles: GameTile[] = parsedContent.data.map(tile => ({
-        ...tile,
-        status: 'default',
-      }));
-
-      setTiles(shuffle(initialTiles));
-      setSelectedTileIds([]);
-      setScore(0);
-      setFeedbackMessage('Select three tiles to form a group.');
-    }
-  }, [parsedContent]);
-
+  }, [currentExerciseIndex, currentContent]);
 
   const selectTile = (tile: GameTile) => {
     if (tile.status === 'hidden' || selectedTileIds.length >= 3) return;
@@ -336,14 +278,13 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     } else {
       setSelectedTileIds([...selectedTileIds, tile.id]);
       setTiles(tiles.map(t => (t.id === tile.id ? { ...t, status: 'selected' } : t)));
-      setFeedbackMessage('Tile selected...');
     }
   };
 
   const checkMatch = () => {
-    if (!parsedContent) return;
-    
-    const answers = parsedContent.answers || [];
+    if (!currentContent) return;
+
+    const answers = currentContent.answers || [];
     const matchingGroup = answers.find(group =>
       selectedTileIds.every(id => group.tileIds.includes(id))
     );
@@ -351,16 +292,47 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     if (matchingGroup) {
       handleSuccess(selectedTileIds);
     } else {
-      const firstTileContent = getText(tiles.find(t => t.id === selectedTileIds[0])?.content);
-      const contentMatch = selectedTileIds.every(id => {
-        const tile = tiles.find(t => t.id === id);
-        return getText(tile?.content) === firstTileContent;
-      });
+      const isImage = currentContent.contentType === 'image';
+      
+      if (isImage) {
+        // For images, compare by imageUrl
+        const firstTile = tiles.find(t => t.id === selectedTileIds[0]);
+        if (!firstTile) {
+          handleFailure(selectedTileIds);
+          return;
+        }
+        
+        const firstImageUrl = getTileImageUrl(firstTile);
+        if (!firstImageUrl) {
+          handleFailure(selectedTileIds);
+          return;
+        }
+        
+        const imageMatch = selectedTileIds.every(id => {
+          const tile = tiles.find(t => t.id === id);
+          if (!tile) return false;
+          const tileImageUrl = getTileImageUrl(tile);
+          return tileImageUrl === firstImageUrl;
+        });
 
-      if (contentMatch) {
-        handleSuccess(selectedTileIds);
+        if (imageMatch) {
+          handleSuccess(selectedTileIds);
+        } else {
+          handleFailure(selectedTileIds);
+        }
       } else {
-        handleFailure(selectedTileIds);
+        // For words, compare by text content
+        const firstTileContent = getText(tiles.find(t => t.id === selectedTileIds[0])?.content);
+        const contentMatch = selectedTileIds.every(id => {
+          const tile = tiles.find(t => t.id === id);
+          return getText(tile?.content) === firstTileContent;
+        });
+
+        if (contentMatch) {
+          handleSuccess(selectedTileIds);
+        } else {
+          handleFailure(selectedTileIds);
+        }
       }
     }
   };
@@ -373,10 +345,8 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   }, [selectedTileIds]);
 
   const handleSuccess = (matchedIds: string[]) => {
-    // Show confetti animation
     setShowConfetti(true);
-    
-    // Reset and play animation
+
     setTimeout(() => {
       if (confettiRef.current) {
         confettiRef.current.reset();
@@ -384,21 +354,16 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
       }
     }, 100);
 
-    setFeedbackMessage('Blast! Group successfully removed! 🎉');
-
-    // Mark as matched temporarily
     setTiles(prevTiles =>
       prevTiles.map(t =>
         matchedIds.includes(t.id) ? { ...t, status: 'matched_temp' } : t
       )
     );
 
-    // Hide confetti after animation
     setTimeout(() => {
       setShowConfetti(false);
     }, 2000);
 
-    // Remove tiles and rearrange after animation
     setTimeout(() => {
       setTiles(prevTiles => {
         const remainingTiles = prevTiles
@@ -406,25 +371,41 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
           .map(t => ({ ...t, status: 'default' as const }));
         return shuffle(remainingTiles);
       });
-      
+
       setScore(prevScore => prevScore + 3);
       setSelectedTileIds([]);
 
-      // Check if all tiles are removed
       setTiles(prevTiles => {
         const visibleTiles = prevTiles.filter(t => t.status !== 'hidden');
         if (visibleTiles.length === 0) {
           if (timerIntervalRef.current) {
             clearInterval(timerIntervalRef.current);
           }
-          setFeedbackMessage('All done! Game won! 🏆');
+          
+          // Hide content and show congratulations popup
+          setExerciseCompleted(true);
+          setShowCongratulations(true);
           setTimeout(() => {
-            Alert.alert('Congratulations!', 'You completed the game!', [
-              { text: 'OK', onPress: onComplete },
-            ]);
-          }, 1000);
-        } else {
-          setFeedbackMessage('Select the next group.');
+            if (congratulationsRef.current) {
+              congratulationsRef.current.reset();
+              congratulationsRef.current.play();
+            }
+          }, 100);
+
+          // Auto navigate after animation
+          if (allExercises.length > 1 && currentExerciseIndex < allExercises.length - 1) {
+            setTimeout(() => {
+              setShowCongratulations(false);
+              setExerciseCompleted(false);
+              goToNextExercise();
+            }, 3000);
+          } else {
+            setTimeout(() => {
+              setShowCongratulations(false);
+              setExerciseCompleted(false);
+              if (onComplete) onComplete();
+            }, 3000);
+          }
         }
         return prevTiles;
       });
@@ -432,10 +413,8 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   };
 
   const handleFailure = (selectedIds: string[]) => {
-    // Show fail animation
     setShowFail(true);
-    
-    // Reset and play animation
+
     setTimeout(() => {
       if (failRef.current) {
         failRef.current.reset();
@@ -443,7 +422,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
       }
     }, 100);
 
-    setFeedbackMessage('Mismatch! Not the same group. Try again.');
+    setFeedbackMessage('Mismatch! Not the same group. Try again');
 
     setTiles(prevTiles =>
       prevTiles.map(t =>
@@ -451,7 +430,6 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
       )
     );
 
-    // Hide fail animation after it plays
     setTimeout(() => {
       setShowFail(false);
     }, 3000);
@@ -463,62 +441,59 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         )
       );
       setSelectedTileIds([]);
-      setFeedbackMessage('Select three tiles.');
+      setFeedbackMessage('Select three tiles');
     }, 1500);
   };
 
-  // Show loading state
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#1976D2" />
-        <Text style={styles.loadingText}>Loading triple blast...</Text>
-      </View>
-    );
-  }
+  const resetGame = () => {
+    if (!currentContent || !currentContent.tiles) return;
 
-  if (!parsedContent || !parsedContent.data || parsedContent.data.length === 0) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No triple blast content available</Text>
-          {activityId && (
-            <Text style={styles.errorSubtext}>Activity ID: {activityId}</Text>
-          )}
-        </View>
-      </View>
-    );
-  }
+    const initialTiles: GameTile[] = currentContent.tiles.map((tile, index) => ({
+      ...tile,
+      id: `${tile.id || `tile-${index}`}-${currentExerciseIndex}`,
+      status: 'default',
+    }));
 
-  // Create responsive styles
-  const responsiveStyles = {
-    container: {
-      ...styles.container,
-      padding: responsive.wp(5),
-    },
-    header: {
-      ...styles.header,
-      marginBottom: responsive.hp(2.5),
-    },
-    instruction: {
-      ...styles.instruction,
-      fontSize: responsive.moderateScale(16),
-      marginBottom: responsive.hp(1.2),
-    },
-    feedback: {
-      ...styles.feedback,
-      fontSize: responsive.moderateScale(16),
-      marginBottom: responsive.hp(2.5),
-    },
-    tile: {
-      ...styles.tile,
-      borderRadius: responsive.moderateScale(15),
-      padding: responsive.wp(2.5),
-    },
-    tileText: {
-      ...styles.tileText,
-      fontSize: responsive.moderateScale(18),
-    },
+    setTiles(shuffle(initialTiles));
+    setSelectedTileIds([]);
+    setScore(0);
+    setTimeRemaining(60);
+    setFeedbackMessage('Select three tiles to form a group');
+
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    timerIntervalRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+          }
+          setShowTimeout(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const goToNextExercise = () => {
+    if (currentExerciseIndex < allExercises.length - 1) {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+      setCurrentExerciseIndex(currentExerciseIndex + 1);
+    }
+  };
+
+  const goToPrevExercise = () => {
+    if (currentExerciseIndex > 0) {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+      setCurrentExerciseIndex(currentExerciseIndex - 1);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -527,9 +502,29 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1976D2" />
+        <Text style={styles.loadingText}>Loading triple blast...</Text>
+      </View>
+    );
+  }
+
+  if (!currentContent || !currentContent.tiles || currentContent.tiles.length === 0) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>No triple blast content available</Text>
+      </View>
+    );
+  }
+
+  const instructionText = getText(currentContent.instruction);
+  const isImage = currentContent.contentType === 'image';
+
   return (
     <View style={styles.container}>
-      {/* Confetti Animation Overlay */}
+      {/* Confetti Animation */}
       {showConfetti && (
         <View style={styles.animationOverlay}>
           <LottieView
@@ -542,7 +537,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         </View>
       )}
 
-      {/* Fail Animation Overlay */}
+      {/* Fail Animation */}
       {showFail && (
         <View style={styles.animationOverlay}>
           <LottieView
@@ -555,73 +550,181 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         </View>
       )}
 
-      <View style={responsiveStyles.header}>
-        <View style={styles.headerRow}>
-          <Text style={styles.timerText}>⏱ {formatTime(timeRemaining)}</Text>
-          <Text style={styles.scoreText}>Score: {score}</Text>
+      {/* Congratulations Popup Modal */}
+      <Modal
+        visible={showCongratulations}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowCongratulations(false);
+          setExerciseCompleted(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.congratulationsModalContainer}>
+            <LottieView
+              ref={congratulationsRef}
+              source={require('../../../assets/animations/Happy boy.json')}
+              autoPlay={false}
+              loop={false}
+              style={styles.congratulationsAnimation}
+            />
+            <Text style={styles.congratulationsTitle}>Congratulations! 🎉</Text>
+            <Text style={styles.congratulationsScore}>Score: {String(score || 0)}</Text>
+          </View>
         </View>
-        <Text style={responsiveStyles.instruction}>{getText(parsedContent.instruction)}</Text>
-      </View>
+      </Modal>
 
-      <Text style={responsiveStyles.feedback}>{feedbackMessage}</Text>
+      {/* Hide content when exercise is completed */}
+      {!exerciseCompleted && (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerRow}>
+              <Text style={styles.timerText}>⏱ {formatTime(timeRemaining)}</Text>
+              <Text style={styles.scoreText}>Score: {String(score || 0)}</Text>
+            </View>
+            {instructionText && instructionText.trim() ? (
+              <Text style={styles.instruction}>{instructionText}</Text>
+            ) : null}
+          </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.tilesGrid}>
-          {tiles.map(tile => {
-            if (tile.status === 'hidden') return null;
+          {feedbackMessage ? (
+            <Text style={styles.feedback}>{feedbackMessage}</Text>
+          ) : null}
 
-            const tileContent = getText(tile.content);
-            let imageUrl = getTileImageUrl(tile);
+          {/* Tiles Grid */}
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+            <View style={styles.tilesGrid}>
+              {tiles.map((tile) => {
+                if (tile.status === 'hidden') return null;
+
+            const imageUrl = isImage ? getTileImageUrl(tile) : null;
+            const tileContent = isImage ? null : getText(tile.content);
             const isSelected = tile.status === 'selected';
             const isMatched = tile.status === 'matched_temp';
             const isIncorrect = tile.status === 'incorrect_temp';
-            
-            // Strictly follow contentType from JSON
-            const contentType = parsedContent.contentType?.toLowerCase();
-            
-            // If contentType is 'image', try to get image URL from tile.imageUrl or from content
-            if (contentType === 'image' && !imageUrl) {
-              // If imageUrl not found, try to get from content field (might contain image path)
-              const contentStr = typeof tile.content === 'string' 
-                ? tile.content 
-                : (typeof tile.content === 'object' 
-                    ? (tile.content[currentLang] || tile.content.en || tile.content.ta || tile.content.si || '')
-                    : '');
-              
-              // If content looks like an image path, use it
-              if (contentStr && (contentStr.includes('.png') || contentStr.includes('.jpg') || contentStr.includes('.jpeg') || contentStr.includes('/img/'))) {
-                imageUrl = getCloudFrontUrl(contentStr);
-              }
-            }
-            
-            // If contentType is 'image', show image; if 'word' or anything else, show word
-            const shouldShowImage = contentType === 'image' && !!imageUrl;
 
             return (
               <TouchableOpacity
                 key={tile.id}
-                style={[
-                  responsiveStyles.tile,
-                  isSelected && styles.tileSelected,
-                  isMatched && styles.tileMatched,
-                  isIncorrect && styles.tileIncorrect,
-                ]}
+                style={styles.tileTouchable}
+                activeOpacity={0.8}
                 onPress={() => selectTile(tile)}
               >
-                {shouldShowImage ? (
-                  <Image 
-                    source={{ uri: imageUrl! }} 
-                    style={styles.tileImage} 
-                    resizeMode="contain" 
-                  />
-                ) : (
-                  <Text style={responsiveStyles.tileText}>{tileContent}</Text>
-                )}
+                <View
+                  style={[
+                    styles.tile,
+                    isImage && styles.tileImageContainer,
+                    !isImage && isSelected && styles.tileSelected,
+                    !isImage && isMatched && styles.tileMatched,
+                    !isImage && isIncorrect && styles.tileIncorrect,
+                    isImage && isSelected && styles.tileImageSelected,
+                  ]}
+                >
+                  {isImage && imageUrl ? (
+                    <Image
+                      key={`${tile.id}-${imageUrl}-${currentExerciseIndex}`}
+                      source={{ uri: imageUrl }}
+                      style={styles.tileImage}
+                      resizeMode="contain"
+                      onError={() => {
+                        // Image failed to load
+                      }}
+                    />
+                  ) : tileContent && tileContent.trim() ? (
+                    <Text style={styles.tileText}>{tileContent}</Text>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
+            </View>
+          </ScrollView>
+
+          {/* Navigation Buttons */}
+          {allExercises.length > 1 && (
+            <View style={styles.navigationFooter}>
+          <TouchableOpacity
+            style={[styles.navButton, currentExerciseIndex === 0 && styles.navButtonDisabled]}
+            onPress={goToPrevExercise}
+            disabled={currentExerciseIndex === 0}
+          >
+            <MaterialIcons
+              name="chevron-left"
+              size={24}
+              color={currentExerciseIndex === 0 ? '#CCCCCC' : '#1976D2'}
+            />
+            <View style={{ width: 8 }} />
+            <Text style={[styles.navButtonText, currentExerciseIndex === 0 && styles.navButtonTextDisabled]}>
+              Back
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.exerciseCounter}>
+            {String(currentExerciseIndex + 1)} / {String(allExercises.length)}
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.navButton, currentExerciseIndex === allExercises.length - 1 && styles.navButtonDisabled]}
+            onPress={goToNextExercise}
+            disabled={currentExerciseIndex === allExercises.length - 1}
+          >
+            <Text style={[styles.navButtonText, currentExerciseIndex === allExercises.length - 1 && styles.navButtonTextDisabled]}>
+              Next
+            </Text>
+            <View style={{ width: 8 }} />
+            <MaterialIcons
+              name="chevron-right"
+              size={24}
+              color={currentExerciseIndex === allExercises.length - 1 ? '#CCCCCC' : '#1976D2'}
+            />
+          </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
+
+      {/* Timeout Modal */}
+      <Modal
+        visible={showTimeout}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTimeout(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <LinearGradient
+            colors={['#FF6B6B', '#FFD93D', '#6BCF7F', '#4ECDC4']}
+            style={styles.modalContainer}
+          >
+            <Text style={styles.modalEmoji}>⏰😅</Text>
+            <Text style={styles.modalTitle}>Time Up!</Text>
+            <Text style={styles.modalMessage}>
+              Your time has run out!{'\n'}Don't worry, try again! 💪
+            </Text>
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => {
+                  setShowTimeout(false);
+                  resetGame();
+                }}
+              >
+                <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>Retry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  setShowTimeout(false);
+                  if (onComplete) onComplete();
+                }}
+              >
+                <Text style={styles.modalButtonText}>Exit</Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
         </View>
-      </ScrollView>
+      </Modal>
     </View>
   );
 };
@@ -653,9 +756,9 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   instruction: {
+    fontSize: 16,
     color: '#374151',
     textAlign: 'center',
-    fontSize: 16,
   },
   feedback: {
     color: '#4B5563',
@@ -663,6 +766,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 20,
     paddingHorizontal: 20,
+    fontSize: 16,
   },
   animationOverlay: {
     position: 'absolute',
@@ -683,11 +787,43 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
   },
+  congratulationsAnimation: {
+    width: 300,
+    height: 300,
+  },
+  congratulationsModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+    width: '85%',
+  },
+  congratulationsTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#1976D2',
+    marginTop: 20,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  congratulationsScore: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    textAlign: 'center',
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 100,
+    paddingHorizontal: 16,
   },
   tilesGrid: {
     flexDirection: 'row',
@@ -695,26 +831,40 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     gap: 15,
   },
-  tile: {
+  tileTouchable: {
     width: '30%',
     aspectRatio: 1,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+  },
+  tile: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
     borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    overflow: 'hidden',
   },
   tileSelected: {
     backgroundColor: '#E3F2FD',
     borderColor: '#1976D2',
-    borderWidth: 3,
-    transform: [{ scale: 1.05 }],
+    borderWidth: 2,
+  },
+  tileImageContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  tileImageSelected: {
+    backgroundColor: '#ffcc00',
+    borderColor: '#ffcc00',
+    borderWidth: 2,
   },
   tileMatched: {
     backgroundColor: '#E8F5E9',
@@ -728,12 +878,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 18,
   },
   tileImage: {
-    width: '90%',
-    height: '90%',
-    borderRadius: 10,
+    width: '100%',
+    height: '100%',
   },
   loadingContainer: {
     flex: 1,
@@ -755,14 +904,129 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 10,
   },
-  errorSubtext: {
+  navigationFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E3F2FD',
+    borderColor: '#1976D2',
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  navButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E0E0E0',
+  },
+  navButtonText: {
+    color: '#1976D2',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  navButtonTextDisabled: {
+    color: '#CCCCCC',
+  },
+  exerciseCounter: {
     color: '#6B7280',
-    fontSize: 14,
+    fontWeight: 'bold',
+    fontSize: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    borderRadius: 30,
+    padding: 30,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 15,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
+  },
+  modalMessage: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 28,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 15,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  modalButton: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
+    minWidth: 120,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#FFD700',
+  },
+  modalButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1976D2',
+  },
+  modalButtonTextSecondary: {
+    color: '#FF6347',
   },
 });
 
 export default TripleBlast;
-
