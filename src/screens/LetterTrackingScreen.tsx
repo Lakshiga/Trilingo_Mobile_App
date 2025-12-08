@@ -45,6 +45,8 @@ const LetterTrackingScreen: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [guidePosition, setGuidePosition] = useState<Point | null>(null);
 
   const canvasRef = useRef<View>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -52,6 +54,7 @@ const LetterTrackingScreen: React.FC = () => {
   const currentPathRef = useRef<Point[]>([]);
   const isDrawingRef = useRef(false);
   const isCompleteRef = useRef(false);
+  const guideAnim = useRef(new Animated.Value(0)).current;
 
   // Get the correct path for the letter
   const correctPath = getLetterPath(letter, language);
@@ -70,10 +73,19 @@ const LetterTrackingScreen: React.FC = () => {
         const startPoint = { x: locationX, y: locationY };
         isDrawingRef.current = true;
         setIsDrawing(true);
-        currentPathRef.current = [startPoint];
-        setUserPath([startPoint]);
-        setScore(null);
-        setShowSuccess(false);
+        
+        // If there's already a path, append to it; otherwise start new
+        if (currentPathRef.current.length > 0) {
+          currentPathRef.current = [...currentPathRef.current, startPoint];
+        } else {
+          currentPathRef.current = [startPoint];
+        }
+        setUserPath([...currentPathRef.current]);
+        // Clear result when starting to draw again (if not completed)
+        if (!isComplete) {
+          setShowResult(false);
+          setShowSuccess(false);
+        }
       },
       onPanResponderMove: (evt) => {
         if (isCompleteRef.current || !isDrawingRef.current) return;
@@ -97,11 +109,7 @@ const LetterTrackingScreen: React.FC = () => {
         if (isCompleteRef.current) return;
         isDrawingRef.current = false;
         setIsDrawing(false);
-        // Use the ref to get the current path immediately
-        const pathToCheck = [...currentPathRef.current];
-        if (pathToCheck.length > 0) {
-          checkLetterAccuracy(pathToCheck);
-        }
+        // Don't check accuracy automatically - wait for button click
       },
       onPanResponderTerminate: () => {
         isDrawingRef.current = false;
@@ -120,18 +128,193 @@ const LetterTrackingScreen: React.FC = () => {
     ]).start();
   }, []);
 
+  // Animate guide pointer along the path
+  useEffect(() => {
+    if (!isComplete && !isDrawing && userPath.length === 0) {
+      // Animate guide along the correct path
+      const guideAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(guideAnim, {
+            toValue: 1,
+            duration: 3000,
+            useNativeDriver: false,
+          }),
+          Animated.timing(guideAnim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+      guideAnimation.start();
+
+      // Calculate guide position based on animation value
+      const listener = guideAnim.addListener(({ value }) => {
+        // Sample points along the correct path for guide
+        const pathPoints = samplePathPoints(correctPath, canvasSize, centerX, centerY);
+        if (pathPoints.length > 0) {
+          const index = Math.floor(value * (pathPoints.length - 1));
+          setGuidePosition(pathPoints[index] || pathPoints[0]);
+        }
+      });
+
+      return () => {
+        guideAnimation.stop();
+        guideAnim.removeListener(listener);
+      };
+    } else {
+      setGuidePosition(null);
+    }
+  }, [isComplete, isDrawing, userPath.length, correctPath, canvasSize, centerX, centerY]);
+
+  // Parse SVG path and extract points for guide animation
+  const parseSVGPath = (pathString: string): Point[] => {
+    const points: Point[] = [];
+    if (!pathString) return points;
+
+    // Normalize the path string - handle commas and multiple spaces
+    const normalized = pathString
+      .replace(/,/g, ' ')
+      .replace(/([MmLlHhVvCcSsQqTtAaZz])/g, ' $1 ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const tokens = normalized.split(' ').filter(t => t.length > 0);
+
+    let currentX = 0;
+    let currentY = 0;
+    let startX = 0;
+    let startY = 0;
+    let i = 0;
+
+    const getNextNumber = (): number | null => {
+      while (i < tokens.length) {
+        const num = parseFloat(tokens[i]);
+        if (!isNaN(num)) {
+          i++;
+          return num;
+        }
+        i++;
+      }
+      return null;
+    };
+
+    while (i < tokens.length) {
+      const token = tokens[i];
+      if (!token) {
+        i++;
+        continue;
+      }
+
+      // Check if token is a command
+      if (!/^[MmLlHhVvCcSsQqTtAaZz]$/.test(token)) {
+        i++;
+        continue;
+      }
+
+      const cmd = token.toUpperCase();
+      i++;
+
+      if (cmd === 'M') {
+        // Move to (absolute)
+        const x = getNextNumber();
+        const y = getNextNumber();
+        if (x === null || y === null) break;
+        
+        currentX = x;
+        currentY = y;
+        startX = x;
+        startY = y;
+        points.push({ x, y });
+      } else if (cmd === 'L') {
+        // Line to
+        const x = getNextNumber();
+        const y = getNextNumber();
+        if (x === null || y === null) break;
+        
+        // Add intermediate points for smooth animation
+        const distance = Math.sqrt(Math.pow(x - currentX, 2) + Math.pow(y - currentY, 2));
+        const steps = Math.max(5, Math.min(30, Math.floor(distance / 3)));
+        for (let j = 1; j <= steps; j++) {
+          const t = j / steps;
+          points.push({
+            x: currentX + (x - currentX) * t,
+            y: currentY + (y - currentY) * t,
+          });
+        }
+        currentX = x;
+        currentY = y;
+      } else if (cmd === 'Q') {
+        // Quadratic curve
+        const cx = getNextNumber();
+        const cy = getNextNumber();
+        const x = getNextNumber();
+        const y = getNextNumber();
+        if (cx === null || cy === null || x === null || y === null) break;
+        
+        // Sample points along the curve
+        const steps = 25;
+        for (let j = 1; j <= steps; j++) {
+          const t = j / steps;
+          const px = (1 - t) * (1 - t) * currentX + 2 * (1 - t) * t * cx + t * t * x;
+          const py = (1 - t) * (1 - t) * currentY + 2 * (1 - t) * t * cy + t * t * y;
+          points.push({ x: px, y: py });
+        }
+        currentX = x;
+        currentY = y;
+      } else if (cmd === 'Z') {
+        // Close path - line back to start
+        if (points.length > 0 && (currentX !== startX || currentY !== startY)) {
+          const distance = Math.sqrt(Math.pow(startX - currentX, 2) + Math.pow(startY - currentY, 2));
+          const steps = Math.max(5, Math.min(30, Math.floor(distance / 3)));
+          for (let j = 1; j <= steps; j++) {
+            const t = j / steps;
+            points.push({
+              x: currentX + (startX - currentX) * t,
+              y: currentY + (startY - currentY) * t,
+            });
+          }
+        }
+        currentX = startX;
+        currentY = startY;
+      }
+      // Skip other commands for now
+    }
+
+    return points;
+  };
+
+  // Sample points from SVG path for guide animation
+  const samplePathPoints = (pathString: string, size: number, cx: number, cy: number): Point[] => {
+    // Parse the actual SVG path
+    const rawPoints = parseSVGPath(pathString);
+    if (rawPoints.length === 0) return [];
+
+    // Apply the same transformation as used in SVG rendering
+    const scale = size * 0.7 / 200;
+    const offsetX = cx - size * 0.35;
+    const offsetY = cy - size * 0.35;
+
+    // Transform points to canvas coordinates
+    return rawPoints.map((point) => ({
+      x: offsetX + point.x * scale,
+      y: offsetY + point.y * scale,
+    }));
+  };
+
   // Check if the drawn path matches the letter
-  const checkLetterAccuracy = (pathToCheck: Point[] = userPath) => {
+  const checkLetterAccuracy = () => {
+    const pathToCheck = [...currentPathRef.current];
+    
     if (pathToCheck.length < 10) {
-      Alert.alert('Try Again!', 'Please trace the complete letter.');
-      setUserPath([]);
-      currentPathRef.current = [];
+      Alert.alert('Try Again!', 'Please trace the complete letter before checking.');
       return;
     }
 
     const accuracy = calculateAccuracy(pathToCheck, correctPath, canvasSize);
     setScore(accuracy);
     setAttempts((prev) => prev + 1);
+    setShowResult(true);
 
     if (accuracy >= 70) {
       isCompleteRef.current = true;
@@ -149,21 +332,6 @@ const LetterTrackingScreen: React.FC = () => {
           useNativeDriver: true,
         }),
       ]).start();
-    } else {
-      Alert.alert(
-        'Good Try!',
-        `Your accuracy: ${accuracy.toFixed(1)}%\nTry again to improve!`,
-        [
-          {
-            text: 'Try Again',
-            onPress: () => {
-              setUserPath([]);
-              currentPathRef.current = [];
-              setScore(null);
-            },
-          },
-        ]
-      );
     }
   };
 
@@ -219,6 +387,7 @@ const LetterTrackingScreen: React.FC = () => {
     currentPathRef.current = [];
     setScore(null);
     setShowSuccess(false);
+    setShowResult(false);
     isCompleteRef.current = false;
     setIsComplete(false);
     isDrawingRef.current = false;
@@ -273,12 +442,22 @@ const LetterTrackingScreen: React.FC = () => {
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
           <Text style={styles.instructionsText}>
-            👆 Use your finger to trace the letter outline
+            {userPath.length === 0 
+              ? '👆 Follow the pointer guide to trace the letter'
+              : '✍️ Continue tracing the letter outline'}
           </Text>
-          {score !== null && (
-            <Text style={styles.scoreText}>
-              Accuracy: {score}% {score >= 70 ? '✅' : '🔄'}
-            </Text>
+          {showResult && score !== null && (
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultTitle}>Result:</Text>
+              <Text style={styles.resultText}>
+                Accuracy: {score}% {score >= 70 ? '✅ Correct!' : '❌ Try Again'}
+              </Text>
+              {score >= 70 ? (
+                <Text style={styles.successMessage}>Excellent! You traced {letter} correctly!</Text>
+              ) : (
+                <Text style={styles.retryMessage}>Keep practicing to improve your accuracy!</Text>
+              )}
+            </View>
           )}
         </View>
 
@@ -314,10 +493,12 @@ const LetterTrackingScreen: React.FC = () => {
                 <Path
                   d={correctPath}
                   fill="none"
-                  stroke="rgba(255,255,255,0.6)"
-                  strokeWidth="6"
-                  strokeDasharray="8,4"
-                  transform={`translate(${centerX - canvasSize * 0.3}, ${centerY - canvasSize * 0.3}) scale(${canvasSize * 0.6 / 200})`}
+                  stroke="rgba(255,255,255,0.8)"
+                  strokeWidth="16"
+                  strokeDasharray="14,7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  transform={`translate(${centerX - canvasSize * 0.35}, ${centerY - canvasSize * 0.35}) scale(${canvasSize * 0.7 / 200})`}
                 />
               )}
 
@@ -327,7 +508,7 @@ const LetterTrackingScreen: React.FC = () => {
                   d={pathToSvg(userPath)}
                   fill="none"
                   stroke={score && score >= 70 ? '#4ECDC4' : '#FFD700'}
-                  strokeWidth="6"
+                  strokeWidth="12"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -355,6 +536,22 @@ const LetterTrackingScreen: React.FC = () => {
                 </>
               )}
             </Svg>
+
+            {/* Guide pointer emoji */}
+            {guidePosition && !isDrawing && userPath.length === 0 && !isComplete && (
+              <Animated.View
+                style={[
+                  styles.guidePointer,
+                  {
+                    left: guidePosition.x - responsive.wp(5),
+                    top: guidePosition.y - responsive.wp(5),
+                    opacity: fadeAnim,
+                  },
+                ]}
+              >
+                <Text style={styles.guideEmoji}>👆</Text>
+              </Animated.View>
+            )}
 
             {/* Success overlay */}
             {showSuccess && (
@@ -384,6 +581,22 @@ const LetterTrackingScreen: React.FC = () => {
               <Text style={styles.buttonText}>Reset</Text>
             </LinearGradient>
           </TouchableOpacity>
+
+          {userPath.length > 0 && !isComplete && (
+            <TouchableOpacity
+              style={styles.checkButton}
+              onPress={checkLetterAccuracy}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#FFD700', '#FFA500']}
+                style={styles.buttonGradient}
+              >
+                <MaterialIcons name="check-circle" size={responsive.wp(6)} color="#fff" />
+                <Text style={styles.buttonText}>Check Endura</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
 
           {isComplete && (
             <TouchableOpacity
@@ -598,6 +811,62 @@ const getStyles = (
       color: '#4ECDC4',
       fontWeight: 'bold',
       marginTop: responsive.hp(0.5),
+    },
+    guidePointer: {
+      position: 'absolute',
+      width: responsive.wp(10),
+      height: responsive.wp(10),
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+    },
+    guideEmoji: {
+      fontSize: responsive.wp(8),
+    },
+    resultContainer: {
+      marginTop: responsive.hp(1.5),
+      padding: responsive.wp(4),
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      borderRadius: responsive.wp(4),
+      alignItems: 'center',
+    },
+    resultTitle: {
+      fontSize: responsive.wp(5.5),
+      fontWeight: 'bold',
+      color: '#fff',
+      marginBottom: responsive.hp(0.5),
+    },
+    resultText: {
+      fontSize: responsive.wp(6),
+      fontWeight: 'bold',
+      color: '#FFD700',
+      marginBottom: responsive.hp(0.5),
+      textShadowColor: 'rgba(0, 0, 0, 0.3)',
+      textShadowOffset: { width: responsive.wp(0.2), height: responsive.hp(0.1) },
+      textShadowRadius: responsive.wp(0.5),
+    },
+    successMessage: {
+      fontSize: responsive.wp(4.5),
+      color: '#4ECDC4',
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    retryMessage: {
+      fontSize: responsive.wp(4.5),
+      color: '#FFD700',
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    checkButton: {
+      flex: 1,
+      maxWidth: responsive.wp(40),
+      borderRadius: responsive.wp(6),
+      overflow: 'hidden',
+      elevation: 5,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: responsive.hp(0.3) },
+      shadowOpacity: 0.3,
+      shadowRadius: responsive.wp(2),
     },
   });
 
