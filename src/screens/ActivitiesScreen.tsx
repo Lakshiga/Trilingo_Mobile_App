@@ -291,13 +291,12 @@ const ActivitiesScreen: React.FC = () => {
     };
 
     const handlePress = () => {
-      // Get activityTypeId and jsonMethod from activity (already available)
-      // Pass directly to DynamicActivityScreen so it doesn't need to fetch again
-      (navigation as any).navigate('DynamicActivity', {
+      // Navigate to PlayScreen for all activities
+      (navigation as any).navigate('PlayScreen', {
         activityId: activity.id,
-        activityTypeId: activity.activityTypeId,
-        jsonMethod: activity.activityType?.jsonMethod,
+        activityTypeId: activity.activityTypeId || 1,
         activityTitle: activity.title,
+        jsonMethod: activity.activityType?.jsonMethod,
       });
     };
 

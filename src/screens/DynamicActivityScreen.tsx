@@ -153,19 +153,6 @@ const DynamicActivityScreen: React.FC = () => {
     };
   };
 
-  const handleOpenExercises = () => {
-    if (!activityId) return;
-    navigation.navigate('Exercise', {
-      activityId,
-      activity: {
-        id: activityId,
-        title: headerTitle,
-        description: headerSubtitle,
-      },
-      activityTypeId: activityType?.id || activityTypeId,
-      jsonMethod: activityType?.jsonMethod || jsonMethod,
-    });
-  };
 
   // Helper function to build content with proper structure for each activity type
   const buildActivityContent = (activityTypeId: number) => {
@@ -249,12 +236,6 @@ const DynamicActivityScreen: React.FC = () => {
           ? `Activity Type: ${activityType?.jsonMethod || jsonMethod}`
           : 'No activity type information provided.'}
       </Text>
-      {activityId && (
-        <TouchableOpacity style={styles.genericButton} onPress={handleOpenExercises}>
-          <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
-          <Text style={styles.genericButtonText}>View Exercises</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 
@@ -292,7 +273,9 @@ const DynamicActivityScreen: React.FC = () => {
       const renderedComponent = renderActivityByTypeId(typeId, {
         content: activityContent,
         currentLang: currentLang as any,
-        onComplete: () => {},
+        onComplete: () => {
+          navigation.goBack();
+        },
         activityId: activityId, // Pass activityId so component can fetch its own data
       });
 
@@ -311,7 +294,9 @@ const DynamicActivityScreen: React.FC = () => {
       return renderActivityByTypeId(7, {
         content: buildActivityContent(7),
         currentLang: currentLang as any,
-        onComplete: () => {},
+        onComplete: () => {
+          navigation.goBack();
+        },
       });
     }
 
@@ -319,7 +304,9 @@ const DynamicActivityScreen: React.FC = () => {
       return renderActivityByTypeId(14, {
         content: buildActivityContent(14),
         currentLang: currentLang as any,
-        onComplete: () => {},
+        onComplete: () => {
+          navigation.goBack();
+        },
       });
     }
 
@@ -347,7 +334,9 @@ const DynamicActivityScreen: React.FC = () => {
         return renderActivityByTypeId(id, {
           content: buildActivityContent(id),
           currentLang: currentLang as any,
-          onComplete: () => {},
+          onComplete: () => {
+            navigation.goBack();
+          },
         });
       }
     }

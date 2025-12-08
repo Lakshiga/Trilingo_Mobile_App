@@ -164,7 +164,9 @@ const BubbleBlast: React.FC<ActivityComponentProps> = ({
         <Text style={styles.score}>Score: {score}</Text>
       </View>
 
-      <Text style={styles.feedback}>{feedbackMessage}</Text>
+      {feedbackMessage ? (
+        <Text style={styles.feedback}>{feedbackMessage}</Text>
+      ) : null}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Fixed Bubbles (Targets) */}

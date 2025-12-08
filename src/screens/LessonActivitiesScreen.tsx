@@ -105,13 +105,12 @@ const LessonActivitiesScreen: React.FC = () => {
   }, [lessonId]);
 
   const handleActivityPress = (activity: ActivityDto, activityType: ActivityTypeDto) => {
-    // Get activityTypeId and jsonMethod from activityType (already available)
-    // Pass directly to DynamicActivityScreen so it doesn't need to fetch again
-    (navigation as any).navigate('DynamicActivity', {
+    // Navigate to PlayScreen for all activities
+    (navigation as any).navigate('PlayScreen', {
       activityId: activity.id,
       activityTypeId: activityType.id,
-      jsonMethod: activityType.jsonMethod,
       activityTitle: getLearningLanguageField(learningLanguage, activity),
+      jsonMethod: activityType.jsonMethod,
     });
   };
 
