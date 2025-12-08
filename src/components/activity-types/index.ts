@@ -18,3 +18,6 @@ export { default as GroupSorter } from './GroupSorter';
 // Export types
 export * from './types';
 
+// Export render utilities
+export * from './render';
+

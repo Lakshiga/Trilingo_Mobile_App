@@ -17,21 +17,8 @@ import { Language } from '../utils/translations';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
 import {
-  StoryPlayer,
-  ConversationPlayer,
-  MCQActivity,
-  Flashcard,
-  Matching,
-  MemoryPair,
-  FillInTheBlanks,
-  TrueFalse,
-  ScrambleActivity,
-  PronunciationActivity,
-  TripleBlast,
-  BubbleBlast,
-  GroupSorter,
-  SongPlayer,
-  VideoPlayer,
+  renderActivityByTypeId,
+  isActivityTypeSupported,
 } from '../components/activity-types';
 
 type DynamicActivityRouteParams = {
@@ -86,6 +73,8 @@ const DynamicActivityScreen: React.FC = () => {
           if (fetchedActivity.details_JSON) {
             try {
               const parsed = JSON.parse(fetchedActivity.details_JSON);
+              console.log('DynamicActivityScreen: Parsed JSON content keys:', Object.keys(parsed));
+              console.log('DynamicActivityScreen: Numeric keys count:', Object.keys(parsed).filter(k => /^\d+$/.test(k)).length);
               setContent(parsed);
             } catch (parseError) {
               console.warn('Failed to parse activity JSON', parseError);
@@ -178,147 +167,76 @@ const DynamicActivityScreen: React.FC = () => {
     });
   };
 
-  const renderStoryActivity = () => {
-    const storyPayload = {
-      title: ensureMultilingual(content?.title, headerTitle),
-      instruction: ensureMultilingual(content?.instruction, 'Enjoy the story!'),
-      storyData: content?.storyData || content || storyData,
-    };
+  // Helper function to build content with proper structure for each activity type
+  const buildActivityContent = (activityTypeId: number) => {
+    // Special handling for Story (ID: 7)
+    if (activityTypeId === 7) {
+      return {
+        title: ensureMultilingual(content?.title, headerTitle),
+        instruction: ensureMultilingual(content?.instruction, 'Enjoy the story!'),
+        storyData: content?.storyData || content || storyData,
+      };
+    }
 
-    return (
-      <StoryPlayer
-        content={storyPayload}
-        currentLang={currentLang as any}
-        onComplete={() => {}}
-      />
-    );
-  };
+    // Special handling for Conversation (ID: 14)
+    if (activityTypeId === 14) {
+      return {
+        title: ensureMultilingual(content?.title, headerTitle),
+        instruction: ensureMultilingual(content?.instruction, 'Listen and follow the conversation.'),
+        conversationData: content?.conversationData || content || conversationData,
+      };
+    }
 
-  const renderConversationActivity = () => {
-    const conversationPayload = {
-      title: ensureMultilingual(content?.title, headerTitle),
-      instruction: ensureMultilingual(content?.instruction, 'Listen and follow the conversation.'),
-      conversationData: content?.conversationData || content || conversationData,
-    };
-
-    return (
-      <ConversationPlayer
-        content={conversationPayload}
-        currentLang={currentLang as any}
-        onComplete={() => {}}
-      />
-    );
-  };
-
-  const renderSongActivity = () => (
-    <SongPlayer
-      content={{
+    // Special handling for Song (ID: 6)
+    if (activityTypeId === 6) {
+      return {
         ...buildGenericContent('Listen to the song and sing along!'),
         songData: content?.songData || content,
-      }}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
+      };
+    }
 
-  const renderVideoActivity = () => (
-    <VideoPlayer
-      content={{
+    // Special handling for Video (ID: 15)
+    if (activityTypeId === 15) {
+      return {
         ...buildGenericContent('Watch the video carefully.'),
         videoData: content?.videoData || content,
-      }}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
+      };
+    }
 
-  const renderMCQActivity = () => (
-    <MCQActivity
-      content={buildGenericContent('Select the correct answer.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
+    // Default content building for other activity types
+    const fallbackInstructions: Record<number, string> = {
+      1: 'Flip the card to reveal the translation.',
+      2: 'Match the related pairs.',
+      3: 'Complete the sentence.',
+      4: 'Select the correct answer.',
+      5: 'Decide if each statement is True or False.',
+      8: 'Practice the pronunciation.',
+      9: 'Unscramble the words.',
+      10: 'Match three related tiles.',
+      11: 'Pop the bubbles with correct answers.',
+      12: 'Remember and match the cards.',
+      13: 'Sort the items into the correct group.',
+    };
 
-  const renderFlashcardActivity = () => (
-    <Flashcard
-      content={buildGenericContent('Flip the card to reveal the translation.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
+    // For Flashcard (ID: 1), ensure we preserve the entire content structure
+    if (activityTypeId === 1) {
+      // Flashcard needs the full content object with words array
+      if (content && typeof content === 'object') {
+        return {
+          ...content, // Preserve all content properties including words
+          title: ensureMultilingual(content.title, headerTitle),
+          instruction: ensureMultilingual(content.instruction, fallbackInstructions[1]),
+        };
+      }
+      // If no content, return empty structure
+      return {
+        title: ensureMultilingual(null, headerTitle),
+        instruction: ensureMultilingual(null, fallbackInstructions[1]),
+      };
+    }
 
-  const renderMatchingActivity = () => (
-    <Matching
-      content={buildGenericContent('Match the related pairs.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderMemoryActivity = () => (
-    <MemoryPair
-      content={buildGenericContent('Remember and match the cards.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderFillInTheBlanksActivity = () => (
-    <FillInTheBlanks
-      content={buildGenericContent('Complete the sentence.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderTrueFalseActivity = () => (
-    <TrueFalse
-      content={buildGenericContent('Decide if each statement is True or False.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderScrambleActivity = () => (
-    <ScrambleActivity
-      content={buildGenericContent('Unscramble the words.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderPronunciationActivity = () => (
-    <PronunciationActivity
-      content={buildGenericContent('Practice the pronunciation.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderTripleBlastActivity = () => (
-    <TripleBlast
-      content={buildGenericContent('Match three related tiles.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderBubbleBlastActivity = () => (
-    <BubbleBlast
-      content={buildGenericContent('Pop the bubbles with correct answers.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
-
-  const renderGroupSorterActivity = () => (
-    <GroupSorter
-      content={buildGenericContent('Sort the items into the correct group.')}
-      currentLang={currentLang as any}
-      onComplete={() => {}}
-    />
-  );
+    return buildGenericContent(fallbackInstructions[activityTypeId] || 'Complete the activity.');
+  };
 
   const renderUnsupportedActivity = (message?: string) => (
     <View style={styles.genericContainer}>
@@ -359,69 +277,117 @@ const DynamicActivityScreen: React.FC = () => {
       return renderUnsupportedActivity(error);
     }
 
+    // Primary method: Use Activity Type ID to render component
+    const typeId = activityType?.id || activityTypeId;
+    
+    if (typeId && isActivityTypeSupported(typeId)) {
+      const activityContent = buildActivityContent(typeId);
+      
+      // Debug: Log content for Flashcard (ID: 1)
+      if (typeId === 1) {
+        console.log('DynamicActivityScreen: Flashcard content being passed:', JSON.stringify(activityContent, null, 2));
+        console.log('DynamicActivityScreen: Raw content state:', JSON.stringify(content, null, 2));
+      }
+      
+      const renderedComponent = renderActivityByTypeId(typeId, {
+        content: activityContent,
+        currentLang: currentLang as any,
+        onComplete: () => {},
+        activityId: activityId, // Pass activityId so component can fetch its own data
+      });
+
+      if (renderedComponent) {
+        return renderedComponent;
+      }
+    }
+
+    // Fallback: Use jsonMethod if activityTypeId mapping doesn't work
+    // This is for backward compatibility with older navigation flows
     const hasStoryPayload = storyData || content?.storyData || normalizedMethod.includes('story');
     const hasConversationPayload =
       conversationData || content?.conversationData || normalizedMethod.includes('conversation');
 
-    if (hasStoryPayload) {
-      return renderStoryActivity();
+    if (hasStoryPayload && isActivityTypeSupported(7)) {
+      return renderActivityByTypeId(7, {
+        content: buildActivityContent(7),
+        currentLang: currentLang as any,
+        onComplete: () => {},
+      });
     }
 
-    if (hasConversationPayload) {
-      return renderConversationActivity();
+    if (hasConversationPayload && isActivityTypeSupported(14)) {
+      return renderActivityByTypeId(14, {
+        content: buildActivityContent(14),
+        currentLang: currentLang as any,
+        onComplete: () => {},
+      });
     }
 
-    switch (true) {
-      case normalizedMethod.includes('song'):
-        return renderSongActivity();
-      case normalizedMethod.includes('video'):
-        return renderVideoActivity();
-      case normalizedMethod === 'mcq':
-      case normalizedMethod === 'multiple_choice':
-        return renderMCQActivity();
-      case normalizedMethod.includes('flash'):
-        return renderFlashcardActivity();
-      case normalizedMethod.includes('matching'):
-        return renderMatchingActivity();
-      case normalizedMethod.includes('memory'):
-        return renderMemoryActivity();
-      case normalizedMethod.includes('fill'):
-        return renderFillInTheBlanksActivity();
-      case normalizedMethod.includes('true'):
-      case normalizedMethod.includes('false'):
-        return renderTrueFalseActivity();
-      case normalizedMethod.includes('scramble'):
-        return renderScrambleActivity();
-      case normalizedMethod.includes('pronunciation'):
-        return renderPronunciationActivity();
-      case normalizedMethod.includes('triple'):
-        return renderTripleBlastActivity();
-      case normalizedMethod.includes('bubble'):
-        return renderBubbleBlastActivity();
-      case normalizedMethod.includes('group'):
-        return renderGroupSorterActivity();
-      default:
-        return renderUnsupportedActivity();
+    // Last resort: Try to map jsonMethod to activity type ID
+    const jsonMethodToIdMap: Record<string, number> = {
+      song: 6,
+      video: 15,
+      mcq: 4,
+      multiple_choice: 4,
+      flashcard: 1,
+      flash: 1,
+      matching: 2,
+      memory: 12,
+      fill: 3,
+      true_false: 5,
+      scramble: 9,
+      pronunciation: 8,
+      triple_blast: 10,
+      bubble_blast: 11,
+      group_sorter: 13,
+    };
+
+    for (const [method, id] of Object.entries(jsonMethodToIdMap)) {
+      if (normalizedMethod.includes(method) && isActivityTypeSupported(id)) {
+        return renderActivityByTypeId(id, {
+          content: buildActivityContent(id),
+          currentLang: currentLang as any,
+          onComplete: () => {},
+        });
+      }
     }
+
+    // If nothing matches, show unsupported message
+    return renderUnsupportedActivity();
   };
+
+  // Hide header for Flashcard activity (ID: 1) - component handles its own display
+  const shouldHideHeader = (activityType?.id || activityTypeId) === 1;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background[0] }]}>
-      <LinearGradient colors={theme.headerGradient} style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {headerTitle}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {normalizedMethod ? `Activity Type: ${activityType?.jsonMethod || jsonMethod}` : headerSubtitle}
-          </Text>
-        </View>
-      </LinearGradient>
+      {!shouldHideHeader && (
+        <LinearGradient colors={theme.headerGradient} style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <MaterialIcons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {headerTitle}
+            </Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {normalizedMethod ? `Activity Type: ${activityType?.jsonMethod || jsonMethod}` : headerSubtitle}
+            </Text>
+          </View>
+        </LinearGradient>
+      )}
 
-      <View style={styles.contentWrapper}>{renderContent()}</View>
+      {/* Show back button for Flashcard even when header is hidden */}
+      {shouldHideHeader && (
+        <TouchableOpacity 
+          style={[styles.backButton, { position: 'absolute', top: 50, left: 20, zIndex: 10, backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: 25, padding: 10 }]} 
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialIcons name="arrow-back" size={22} color="#1976D2" />
+        </TouchableOpacity>
+      )}
+
+      <View style={[styles.contentWrapper, shouldHideHeader && { paddingTop: 0 }]}>{renderContent()}</View>
     </View>
   );
 };

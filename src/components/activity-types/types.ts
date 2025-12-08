@@ -17,8 +17,9 @@ export interface ImageUrl {
 }
 
 export interface ActivityComponentProps {
-  content: any; // JSON content from database
+  content?: any; // JSON content from database (optional - can fetch internally)
   currentLang?: Language;
   onComplete?: () => void;
+  activityId?: number; // Activity ID to fetch data (if content not provided)
 }
 
