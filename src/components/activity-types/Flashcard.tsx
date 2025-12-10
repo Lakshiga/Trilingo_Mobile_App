@@ -36,7 +36,8 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
   content: initialContent, 
   currentLang = 'ta',
   onComplete,
-  activityId
+  activityId,
+  currentExerciseIndex: propExerciseIndex = 0,
 }) => {
   const responsive = useResponsive();
   const { theme } = useTheme();
@@ -70,33 +71,29 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
           let title = { ta: '', en: '', si: '' };
           let instruction = { ta: '', en: '', si: '' };
           
-          sortedExercises.forEach((exercise, index) => {
+          // Get the current exercise based on propExerciseIndex
+          const currentExercise = sortedExercises[propExerciseIndex];
+          if (currentExercise && currentExercise.jsonData) {
             try {
-              if (exercise.jsonData) {
-                const parsedData = JSON.parse(exercise.jsonData);
-                
-                // First exercise might have title/instruction
-                if (index === 0) {
-                  if (parsedData.title) title = parsedData.title;
-                  if (parsedData.instruction) instruction = parsedData.instruction;
-                }
-                
-                // Extract word data from exercise
-                // Handle different structures
-                if (parsedData.word) {
-                  wordsArray.push(parsedData as FlashcardWord);
-                } else if (parsedData.words && Array.isArray(parsedData.words)) {
-                  wordsArray.push(...parsedData.words);
-                } else if (parsedData.id || parsedData.word) {
-                  wordsArray.push(parsedData as FlashcardWord);
-                }
+              const parsedData = JSON.parse(currentExercise.jsonData);
+              
+              if (parsedData.title) title = parsedData.title;
+              if (parsedData.instruction) instruction = parsedData.instruction;
+              
+              // Extract word data from current exercise
+              if (parsedData.word) {
+                wordsArray.push(parsedData as FlashcardWord);
+              } else if (parsedData.words && Array.isArray(parsedData.words)) {
+                wordsArray.push(...parsedData.words);
+              } else if (parsedData.id || parsedData.word) {
+                wordsArray.push(parsedData as FlashcardWord);
               }
             } catch (parseError) {
               // Silently skip invalid exercise data
             }
-          });
+          }
           
-          // Create content structure with all words
+          // Create content structure with words from current exercise
           const combinedContent = {
             title: title,
             instruction: instruction,
@@ -116,7 +113,7 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
     };
 
     fetchFlashcardData();
-  }, [activityId]);
+  }, [activityId, propExerciseIndex]);
 
   // Parse content - handle multiple content structures
   const getContent = (): FlashcardContent | null => {
@@ -343,20 +340,10 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
     };
   }, [sound]);
 
-  // Navigation
-  const goToNext = () => {
-    if (flashcardData && currentIndex < flashcardData.words.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else if (onComplete) {
-      onComplete();
-    }
-  };
-
-  const goToPrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-    }
-  };
+  // Reset word index when exercise changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [propExerciseIndex]);
 
   // Responsive styles for loading and error states
   const responsiveErrorStyles = {
@@ -547,31 +534,6 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
         </View>
       </LinearGradient>
 
-      {/* Navigation Footer - Fixed at Bottom */}
-      <View style={responsiveStyles.navigationFooter}>
-        <TouchableOpacity
-          style={[responsiveStyles.footerButton, currentIndex === 0 && styles.footerButtonDisabled]}
-          onPress={goToPrev}
-          disabled={currentIndex === 0}
-        >
-          <MaterialIcons name="chevron-left" size={iconSize} color={currentIndex === 0 ? "#999" : "#1976D2"} />
-          <View style={{ width: responsive.wp(2) }} />
-          <Text style={[responsiveStyles.footerButtonText, currentIndex === 0 && styles.footerButtonTextDisabled]}>Back</Text>
-        </TouchableOpacity>
-        
-        <Text style={responsiveStyles.footerCounter}>
-          {String(currentIndex + 1)} / {String(flashcardData.words.length)}
-        </Text>
-        
-        <TouchableOpacity
-          style={responsiveStyles.footerButton}
-          onPress={goToNext}
-        >
-          <Text style={responsiveStyles.footerButtonText}>Next</Text>
-          <View style={{ width: responsive.wp(2) }} />
-          <MaterialIcons name="chevron-right" size={iconSize} color="#1976D2" />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 };

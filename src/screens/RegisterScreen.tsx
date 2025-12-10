@@ -1,26 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Image,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Animated,
   ActivityIndicator,
+  ImageBackground,
+  Keyboard,
+  ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { useUser } from '../context/UserContext';
-import { getTranslation, Language } from '../utils/translations';
+import LottieView from 'lottie-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { getTranslation, Language } from '../utils/translations'; // Ensure this path is correct
 import { useResponsive } from '../utils/responsive';
-import { Video,ResizeMode } from 'expo-av';
-import apiService from '../services/api';
 
-// Age options for adult selection
+// Age options
 const ADULT_AGE_OPTIONS = ['0-1', '2', '3', '4', '5', '6+'];
 
 type RegisterScreenProps = {
@@ -38,285 +38,282 @@ interface UserData {
   learningLanguage: string;
 }
 
+// Validation Item Component - Shows validation and hides when valid
+const ValidationItem: React.FC<{ label: string; isValid: boolean }> = ({ label, isValid }) => {
+  if (isValid) return null; // Hide when valid (one by one hide)
+  
+  return (
+    <View style={{ marginTop: 4 }}>
+      <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '500' }}>• {label}</Text>
+    </View>
+  );
+};
+
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onBack }) => {
-  const { currentUser } = useUser();
   const responsive = useResponsive();
   
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [userData, setUserData] = useState<UserData>({
-    name: '',
-    age: '',
-    email: '',
-    username: '',
-    password: '',
-    nativeLanguage: '',
-    learningLanguage: '',
+    name: '', age: '', email: '', username: '', password: '', nativeLanguage: '', learningLanguage: '',
   });
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
-  const [emailErrors, setEmailErrors] = useState<string[]>([]);
-  const [showPassword, setShowPassword] = useState(false);
+
+  // --- ANIMATION REFS ---
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
   
+  // Lottie Animation Refs
+  const womanWorkRef = useRef<LottieView>(null);
+  const lottieOpacity = useRef(new Animated.Value(0)).current; // Initially Hidden
 
-  // Get current language - use selected native language if available, otherwise default to English
-  const getCurrentLanguage = (): Language => {
-    if (userData.nativeLanguage) {
-      return userData.nativeLanguage as Language;
-    }
-    return (currentUser?.nativeLanguage as Language) || 'English';
+  const [passwordValidations, setPasswordValidations] = useState<{
+    minLength: boolean;
+    hasUppercase: boolean;
+    hasLowercase: boolean;
+    hasNumber: boolean;
+    hasSpecialChar: boolean;
+  }>({
+    minLength: false,
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    hasSpecialChar: false,
+  });
+  const [emailError, setEmailError] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // --- FIX 2: DYNAMIC LANGUAGE LOGIC ---
+  // If user selects Tamil in Step 0, 'activeLanguage' becomes 'Tamil' immediately.
+  const activeLanguage = (userData.nativeLanguage as Language) || 'English';
+
+  // --- QUESTIONS ARRAY (Updates when activeLanguage changes) ---
+  const questions = useMemo(() => [
+    { 
+      key: 'nativeLanguage', 
+      // Step 0 is always in English or default, or you can translate it too
+      question: getTranslation('English', 'whatIsYourNativeLanguage'), 
+      isLanguageSelection: true, 
+      options: ['English', 'Tamil', 'Sinhala'], 
+      icon: 'translate' 
+    },
+    { 
+      key: 'learningLanguage', 
+      // From Step 1 onwards, use 'activeLanguage'
+      question: getTranslation(activeLanguage, 'whichLanguageToLearn'), 
+      isLanguageSelection: true, 
+      options: ['Tamil', 'Sinhala', 'English'], 
+      icon: 'school' 
+    },
+    { 
+      key: 'name', 
+      question: getTranslation(activeLanguage, 'whatIsYourName'), 
+      placeholder: getTranslation('English', 'enterYourFullName'), 
+      icon: 'account' 
+    },
+    { 
+      key: 'age', 
+      question: getTranslation(activeLanguage, 'whatIsYourAge'), 
+      isAgeSelection: true, 
+      icon: 'cake-variant' 
+    },
+    { 
+      key: 'email', 
+      question: getTranslation(activeLanguage, 'whatIsYourEmail'), 
+      placeholder: "name@example.com", 
+      keyboardType: 'email-address', 
+      icon: 'email' 
+    },
+    { 
+      key: 'username', 
+      question: getTranslation(activeLanguage, 'createAccount') + " - Username", // Adjust key if needed
+      placeholder: "cool_user123", 
+      icon: 'at' 
+    },
+    { 
+      key: 'password', 
+      question: getTranslation(activeLanguage, 'createAccount') + " - Password", // Adjust key if needed
+      placeholder: "••••••••", 
+      secure: true, 
+      icon: 'lock' 
+    },
+  ], [activeLanguage]); 
+
+  // --- VALIDATIONS ---
+  const checkPasswordValidations = (password: string) => {
+    return {
+      minLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+    };
   };
 
-  const currentLanguage = getCurrentLanguage();
-
-  const validatePassword = (password: string): string[] => {
-    const errors: string[] = [];
-    if (password.length < 8) {
-      errors.push(getTranslation(currentLanguage, 'passwordMinLength'));
-    }
-    if (!/[A-Z]/.test(password)) {
-      errors.push(getTranslation(currentLanguage, 'passwordUppercase'));
-    }
-    if (!/[a-z]/.test(password)) {
-      errors.push(getTranslation(currentLanguage, 'passwordLowercase'));
-    }
-    if (!/[0-9]/.test(password)) {
-      errors.push(getTranslation(currentLanguage, 'passwordNumber'));
-    }
-    if (!/[^a-zA-Z0-9]/.test(password)) {
-      errors.push(getTranslation(currentLanguage, 'passwordSpecialChar'));
-    }
-    return errors;
+  const checkEmailValidation = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const validateEmail = (email: string): string[] => {
-    const errors: string[] = [];
-    // Email regex pattern for validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      errors.push(getTranslation(currentLanguage, 'emailInvalid'));
-    }
-    return errors;
+  const isPasswordValid = (validations: typeof passwordValidations) => {
+    return validations.minLength && 
+           validations.hasUppercase && 
+           validations.hasLowercase && 
+           validations.hasNumber && 
+           validations.hasSpecialChar;
   };
 
-  const questions = React.useMemo(() => [
-    {
-      key: 'nativeLanguage',
-      question: getTranslation(currentLanguage, 'whatIsYourNativeLanguage'),
-      placeholder: '',
-      keyboardType: 'default',
-      isLanguageSelection: true,
-      options: ['English', 'Tamil', 'Sinhala'],
-    },
-    {
-      key: 'learningLanguage',
-      question: getTranslation(currentLanguage, 'whichLanguageToLearn'),
-      placeholder: '',
-      keyboardType: 'default',
-      isLanguageSelection: true,
-      options: ['Tamil', 'Sinhala', 'English'],
-    },
-    {
-      key: 'name',
-      question: getTranslation(currentLanguage, 'whatIsYourName'),
-      placeholder: getTranslation('English', 'enterYourFullName'),
-      keyboardType: 'default',
-    },
-    {
-      key: 'age',
-      question: getTranslation(currentLanguage, 'whatIsYourAge'),
-      placeholder: getTranslation('English', 'enterYourAge'),
-      keyboardType: 'numeric',
-    },
-    {
-      key: 'email',
-      question: getTranslation(currentLanguage, 'whatIsYourEmail'),
-      placeholder: getTranslation('English', 'enterYourEmail'),
-      keyboardType: 'email-address',
-    },
-    {
-      key: 'username',
-      question: getTranslation(currentLanguage, 'createAccount'),
-      subquestion: getTranslation(currentLanguage, 'username'),
-      placeholder: getTranslation('English', 'chooseUsername'),
-      keyboardType: 'default',
-    },
-    {
-      key: 'password',
-      question: getTranslation(currentLanguage, 'createAccount'),
-      subquestion: getTranslation(currentLanguage, 'password'),
-      placeholder: getTranslation('English', 'choosePassword'),
-      keyboardType: 'default',
-      secure: true,
-    },
-  ], [currentLanguage]);
+  // --- KEYBOARD LISTENERS ---
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
+
+  // --- STEP TRANSITION ANIMATION ---
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(30);
+    scaleAnim.setValue(0.95);
+    // Reset password visibility when step changes
+    setShowPassword(false);
+
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
+    ]).start();
+  }, [currentStep]);
+
+  // --- FIX 1: ANIMATION CONTROL LOGIC ---
+  const currentQ = questions[currentStep];
+  // Check if the current field has data
+  const hasData = !!userData[currentQ.key as keyof UserData];
 
   useEffect(() => {
-    // Fade in animation for each question
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [currentStep, fadeAnim]);
+    // Reset animation state when step changes - keep it hidden
+    lottieOpacity.setValue(0);
+    if (womanWorkRef.current) {
+      womanWorkRef.current.pause();
+      womanWorkRef.current.reset();
+    }
+    // Reset validations when step changes
+    setPasswordValidations({
+      minLength: false,
+      hasUppercase: false,
+      hasLowercase: false,
+      hasNumber: false,
+      hasSpecialChar: false,
+    });
+    setEmailError('');
+  }, [currentStep]);
 
-  const handleNext = async () => {
-    const currentQuestion = questions[currentStep];
-    
-    // Validation
-    if (!userData[currentQuestion.key as keyof UserData]) {
-      Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'pleaseAnswer'));
+  // --- HANDLERS ---
+  const handleNext = () => {
+    // Hide keyboard when continue is clicked
+    Keyboard.dismiss();
+
+    if (!hasData) {
+      Alert.alert("Required", "Please fill in the details to proceed.");
+      Keyboard.dismiss(); // Hide keyboard on error
       return;
     }
 
-    // Email validation
-    if (currentQuestion.key === 'email') {
-      const errors = validateEmail(userData.email);
-      if (errors.length > 0) {
-        setEmailErrors(errors);
-        Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'emailInvalid'));
-        return;
-      }
-      setEmailErrors([]);
-      
-      // Check if email already exists - THIS MUST HAPPEN ON EMAIL STEP
-      setIsLoading(true);
-      try {
-        // Try to register with a dummy username and password to check if email exists
-        // The backend will return an error if email is already taken
-        await apiService.register({
-          username: `temp_check_${Date.now()}`,
-          email: userData.email,
-          password: 'TempCheck123!@#',
+    // Validate email and password on continue click
+    let hasValidationErrors = false;
+
+    if (currentQ.key === 'email') {
+      const isValid = checkEmailValidation(userData.email);
+      if (!isValid) { 
+        setEmailError('Invalid Email');
+        Keyboard.dismiss();
+        hasValidationErrors = true;
+      } else {
+        setEmailError('');
+        // Show animation only on continue click when email is valid
+        Animated.timing(lottieOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          if (womanWorkRef.current) {
+            womanWorkRef.current.play();
+          }
         });
-        // If registration succeeds (unlikely), email is available - continue
-        setIsLoading(false);
-      } catch (error: any) {
-        setIsLoading(false);
-        const errorMessage = error.message || '';
-        // Check if error indicates email already taken
-        if (
-          errorMessage.toLowerCase().includes('email') && 
-          (errorMessage.toLowerCase().includes('already') || 
-           errorMessage.toLowerCase().includes('taken') ||
-           errorMessage.toLowerCase().includes('exists') ||
-           errorMessage.toLowerCase().includes('duplicate') ||
-           errorMessage.toLowerCase().includes('registered'))
-        ) {
-          setEmailErrors([getTranslation(currentLanguage, 'emailAlreadyTaken')]);
-          Alert.alert(
-            getTranslation(currentLanguage, 'error'),
-            getTranslation(currentLanguage, 'emailAlreadyTaken')
-          );
-          return; // Stop here, don't proceed to next step
-        }
-        // Other errors (like validation for dummy data) are okay, means email might be available
-        // Continue to next step
       }
     }
-
-    // Password validation
-    if (currentQuestion.key === 'password') {
-      const errors = validatePassword(userData.password);
-      if (errors.length > 0) {
-        setPasswordErrors(errors);
-        Alert.alert(getTranslation(currentLanguage, 'error'), getTranslation(currentLanguage, 'pleaseAnswer'));
-        return;
+    
+    if (currentQ.key === 'password') {
+      const validations = checkPasswordValidations(userData.password);
+      if (!isPasswordValid(validations)) { 
+        Keyboard.dismiss();
+        hasValidationErrors = true;
+        return; // Don't proceed if validation fails
       }
-    }
-
-    // Check if it's the last question
-    if (currentStep === questions.length - 1) {
-      handleRegisterComplete();
-    } else {
-      // Fade out and move to next question
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
+      // Password valid - Show animation only on continue click
+      Animated.timing(lottieOpacity, {
+        toValue: 1,
+        duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        setCurrentStep(currentStep + 1);
-        fadeAnim.setValue(0);
+        if (womanWorkRef.current) {
+          womanWorkRef.current.play();
+        }
       });
+    }
+
+    // For other fields - Show animation on continue click (if data exists)
+    if (currentQ.key !== 'email' && currentQ.key !== 'password') {
+      Animated.timing(lottieOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        if (womanWorkRef.current) {
+          womanWorkRef.current.play();
+        }
+      });
+    }
+
+    // Only proceed if validations pass
+    if (hasValidationErrors) {
+      return; // Don't proceed
+    }
+
+    if (currentStep === questions.length - 1) {
+      // Last step - wait 2 seconds then complete
+      setTimeout(() => {
+        handleRegisterComplete();
+      }, 2000);
+    } else {
+      // Wait 2 seconds, then navigate to next step
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: -20, duration: 200, useNativeDriver: true }),
+        ]).start(() => {
+          setCurrentStep(prev => prev + 1);
+        });
+      }, 2000);
     }
   };
 
   const handleRegisterComplete = async () => {
     setIsLoading(true);
-    
     try {
-      // Register user with backend
-      await onRegisterComplete({
-        ...userData,
-        isAdmin: false,
-        isGuest: false,
-      });
-      
-      // Show success message - if we get here, registration succeeded
-      Alert.alert(
-        'Registration Successful!',
-        'Your account has been created successfully.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigation handled by parent component
-            },
-          },
-        ]
-      );
+      await onRegisterComplete({ ...userData, isAdmin: false, isGuest: false });
     } catch (error: any) {
-      console.error('Registration failed:', error);
-      
-      // Don't show error if it's actually a success message
-      if (error.message && (
-        error.message.includes('successful') || 
-        error.message.includes('Login successful') ||
-        error.message.includes('Registration successful')
-      )) {
-        // This is actually a success, show success message instead
-        Alert.alert(
-          'Registration Successful!',
-          'Your account has been created successfully.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigation handled by parent component
-              },
-            },
-          ]
-        );
-      } else {
-        // Check if error is about email already taken
-        const errorMessage = error.message || '';
-        if (
-          errorMessage.toLowerCase().includes('email') && 
-          (errorMessage.toLowerCase().includes('already') || 
-           errorMessage.toLowerCase().includes('taken') ||
-           errorMessage.toLowerCase().includes('exists') ||
-           errorMessage.toLowerCase().includes('duplicate') ||
-           errorMessage.toLowerCase().includes('registered'))
-        ) {
-          // Go back to email step and show error
-          const emailStepIndex = questions.findIndex(q => q.key === 'email');
-          if (emailStepIndex !== -1) {
-            setCurrentStep(emailStepIndex);
-          }
-          setEmailErrors([getTranslation(currentLanguage, 'emailAlreadyTaken')]);
-          Alert.alert(
-            getTranslation(currentLanguage, 'error'),
-            getTranslation(currentLanguage, 'emailAlreadyTaken')
-          );
-        } else {
-          // Genuine error - show error message
-          Alert.alert(
-            'Registration Failed',
-            error.message || 'Failed to create account. Please try again.',
-            [{ text: 'OK' }]
-          );
-        }
-      }
+      Alert.alert('Error', error.message);
     } finally {
       setIsLoading(false);
     }
@@ -324,692 +321,472 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
 
   const handleBack = () => {
     if (currentStep > 0) {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentStep(currentStep - 1);
-        fadeAnim.setValue(0);
-      });
+      setCurrentStep(prev => prev - 1);
     } else {
       onBack();
     }
   };
 
-  const handleLanguageSelect = (language: string) => {
-    setUserData({
-      ...userData,
-      [questions[currentStep].key]: language,
-    });
-  };
-
-  const handleAgeSelect = (age: string) => {
-    setUserData({
-      ...userData,
-      age: age,
-    });
-  };
-
-  const currentQuestion = questions[currentStep];
-  const totalSteps = questions.length;
-  const progress = (currentStep + 1) / totalSteps;
+  const progress = (currentStep + 1) / questions.length;
   const styles = getStyles(responsive);
-  const isPurpleScreen = currentQuestion.key === 'name' || currentQuestion.key === 'age' || currentQuestion.key === 'email' || currentQuestion.key === 'nativeLanguage' || currentQuestion.key === 'learningLanguage' || currentQuestion.key === 'username' || currentQuestion.key === 'password';
-  const showTopBarAndGif = true; // Show on all screens
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.backgroundContainer}>
-      <Video
-        source={require('../../assets/register.mp4')}
-        style={StyleSheet.absoluteFill}
-        shouldPlay
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        isMuted
-      />
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <ImageBackground
+        source={require('../../assets/registerimage.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['rgba(255,255,255,0.85)', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.95)']}
+          style={StyleSheet.absoluteFill}
+        />
 
-      <BlurView intensity={40} style={styles.blurContainer}>
-        <View style={styles.container}>
-          {/* Top Navigation Bar: Shown on All Screens */}
-          {showTopBarAndGif && (
-            <View style={styles.purpleTopBar}>
-              <TouchableOpacity onPress={handleBack} style={styles.purpleBackButton}>
-                <MaterialCommunityIcons name="chevron-left" size={responsive.wp(10)} color="#FFFFFF" />
-              </TouchableOpacity>
-              <View style={styles.purpleProgressBarWrapper}>
-                <View style={styles.purpleProgressBar}>
-                  <Animated.View
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+        <View style={styles.contentSafeArea}>
+          
+          {/* TOP BAR */}
+          <View style={styles.topBar}>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+              <MaterialCommunityIcons name="arrow-left" size={28} color="#002D62" />
+            </TouchableOpacity>
+            <View style={styles.progressBarContainer}>
+              <View style={styles.progressBarBg}>
+                <Animated.View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+              </View>
+              {/* Step Indicators (Dots) */}
+              <View style={styles.stepIndicators}>
+                {questions.map((_, index) => (
+                  <View
+                    key={index}
                     style={[
-                      styles.purpleProgressFill,
-                      { width: `${progress * 100}%` },
+                      styles.stepDot,
+                      index <= currentStep && styles.stepDotActive,
                     ]}
                   />
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Character + Speech Bubble: Shown on All Screens */}
-          {showTopBarAndGif && (
-            <View style={styles.purpleCharacterBubbleRow}>
-              <Image
-                source={
-                  (currentQuestion.key === 'name' && userData.name && userData.name.length > 0) ||
-                  (currentQuestion.key === 'age' && userData.age && userData.age.length > 0) ||
-                  (currentQuestion.key === 'email' && userData.email && userData.email.length > 0)||
-                  (currentQuestion.key === 'nativeLanguage' && userData.nativeLanguage && userData.nativeLanguage.length > 0) ||
-                  (currentQuestion.key === 'learningLanguage' && userData.learningLanguage && userData.learningLanguage.length > 0) ||
-                  (currentQuestion.key === 'username' && userData.username && userData.username.length > 0) ||
-                  (currentQuestion.key === 'password' && userData.password && userData.password.length > 0) ?
-                    require('../../assets/type.gif')
-                    : require('../../assets/phonesee.gif')
-                }
-                style={styles.purpleCharacterImage}
-                resizeMode="contain"
-              />
-              <View style={styles.purpleSpeechBubble}>
-                <Text style={styles.purpleSpeechBubbleText}>{currentQuestion.question}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* NAME Screen: Purple Design with Auto-focused Input */}
-          {currentQuestion.key === 'name' && (
-            <View style={styles.purpleInputContainer}>
-              <TextInput
-                autoFocus={true}
-                style={styles.purpleNameInput}
-                value={userData.name}
-                onChangeText={(text) => setUserData({ ...userData, name: text })}
-                placeholder={currentQuestion.placeholder}
-                placeholderTextColor="rgba(76, 160, 228, 0.62)"
-                keyboardType={currentQuestion.keyboardType as any}
-                autoCapitalize="words"
-              />
-            </View>
-          )}
-
-          {/* EMAIL Screen: Purple Design with Auto-focused Input */}
-          {currentQuestion.key === 'email' && (
-            <View style={styles.purpleInputContainer}>
-              <TextInput
-                autoFocus={true}
-                style={[
-                  styles.purpleNameInput,
-                  emailErrors.length > 0 && styles.purpleInputError
-                ]}
-                value={userData.email}
-                onChangeText={(text) => {
-                  setUserData({ ...userData, email: text });
-                  const errors = validateEmail(text);
-                  setEmailErrors(errors);
-                }}
-                placeholder={currentQuestion.placeholder}
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                keyboardType={currentQuestion.keyboardType as any}
-                autoCapitalize="none"
-              />
-              {emailErrors.length > 0 && (
-                <View style={styles.purpleErrorContainer}>
-                  {emailErrors.map((error, index) => (
-                    <Text key={index} style={styles.purpleErrorText}>
-                      • {error}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* AGE Screen: Purple Design with Grid Selection */}
-          {currentQuestion.key === 'age' && (
-            <View style={styles.purpleAgeContainer}>
-              <View style={styles.ageGridContainer}>
-                {ADULT_AGE_OPTIONS.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.ageButton,
-                      userData.age === option && styles.ageButtonSelected,
-                    ]}
-                    onPress={() => handleAgeSelect(option)}
-                  >
-                    <Text
-                      style={[
-                        styles.ageButtonText,
-                        userData.age === option && styles.ageButtonTextSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </TouchableOpacity>
                 ))}
               </View>
             </View>
-             
-          )}
+          </View>
 
-          {/* LANGUAGE SELECTION Screens: Grid Layout with Top Bar */}
-          {(currentQuestion.key === 'nativeLanguage' || currentQuestion.key === 'learningLanguage') && (
-            <View style={styles.purpleAgeContainer}>
-              <View style={styles.ageGridContainer}>
-                {currentQuestion.options?.map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.ageButton,
-                      userData[currentQuestion.key as keyof UserData] === option &&
-                      styles.ageButtonSelected,
-                    ]}
-                    onPress={() => handleLanguageSelect(option)}
-                  >
-                    <Text
-                      style={[
-                        styles.ageButtonText,
-                        userData[currentQuestion.key as keyof UserData] === option &&
-                        styles.ageButtonTextSelected,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* USERNAME Screen: Purple Design with Auto-focused Input */}
-          {currentQuestion.key === 'username' && (
-            <View style={styles.purpleInputContainer}>
-              <TextInput
-                autoFocus={true}
-                style={styles.purpleNameInput}
-                value={userData.username}
-                onChangeText={(text) => setUserData({ ...userData, username: text })}
-                placeholder={currentQuestion.placeholder}
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                keyboardType={currentQuestion.keyboardType as any}
-                autoCapitalize="none"
-              />
-            </View>
-          )}
-
-          {/* PASSWORD Screen: Purple Design with Auto-focused Input */}
-          {currentQuestion.key === 'password' && (
-            <View style={styles.purpleInputContainer}>
-              <View style={styles.purplePasswordInputContainer}>
-                <TextInput
-                  autoFocus={true}
-                  style={styles.purplePasswordInput}
-                  value={userData.password}
-                  onChangeText={(text) => {
-                    setUserData({ ...userData, password: text });
-                    const errors = validatePassword(text);
-                    setPasswordErrors(errors);
-                  }}
-                  placeholder={currentQuestion.placeholder}
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                  keyboardType={currentQuestion.keyboardType as any}
-                  autoCapitalize="none"
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity
-                  style={styles.purpleEyeIcon}
-                  onPress={() => setShowPassword(!showPassword)}
-                  activeOpacity={0.7}
-                >
-                  <MaterialCommunityIcons
-                    name={showPassword ? 'eye-off' : 'eye'}
-                    size={responsive.wp(6)}
-                    color="rgba(255, 255, 255, 0.7)"
-                  />
-                </TouchableOpacity>
-              </View>
-              {passwordErrors.length > 0 && (
-                <View style={styles.purpleErrorContainer}>
-                  {passwordErrors.map((error, index) => (
-                    <Text key={index} style={styles.purpleErrorText}>
-                      • {error}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-          {currentQuestion.key !== 'name' && currentQuestion.key !== 'age' && currentQuestion.key !== 'email' && currentQuestion.key !== 'nativeLanguage' && currentQuestion.key !== 'learningLanguage' && currentQuestion.key !== 'username' && currentQuestion.key !== 'password' && (
-            <Animated.View style={[styles.questionContainer, { opacity: fadeAnim }]}>
-              <Text style={styles.question}>{currentQuestion.question}</Text>
-              {currentQuestion.subquestion && (
-                <Text style={styles.subquestion}>{currentQuestion.subquestion}</Text>
-              )}
-
-              {/* Input or Language Selection */}
-              {currentQuestion.isLanguageSelection ? (
-                <View style={styles.languageContainer}>
-                  {currentQuestion.options?.map((option) => (
-                    <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.ageButton,
-                        userData[currentQuestion.key as keyof UserData] === option &&
-                        styles.ageButtonSelected,
-                      ]}
-                      onPress={() => handleLanguageSelect(option)}
-                    >
-                      <Text
-                        style={[
-                          styles.ageButtonText,
-                          userData[currentQuestion.key as keyof UserData] === option &&
-                          styles.ageButtonTextSelected,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <>
-                  {currentQuestion.key === 'password' ? (
-                    <View style={styles.passwordInputWrapper}>
-                      <View style={styles.passwordInputRow}>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            styles.passwordInputField,
-                            passwordErrors.length > 0 && styles.inputError
-                          ]}
-                          value={userData.password}
-                          onChangeText={(text) => {
-                            setUserData({
-                              ...userData,
-                              password: text,
-                            });
-                            const errors = validatePassword(text);
-                            setPasswordErrors(errors);
-                          }}
-                          placeholder={currentQuestion.placeholder}
-                          placeholderTextColor="#999"
-                          keyboardType={currentQuestion.keyboardType as any}
-                          secureTextEntry={!showPassword}
-                          autoCapitalize="none"
-                        />
-                        <TouchableOpacity
-                          style={styles.eyeIconButton}
-                          onPress={() => setShowPassword(!showPassword)}
-                          activeOpacity={0.7}
-                        >
-                          <MaterialCommunityIcons
-                            name={showPassword ? 'eye-off' : 'eye'}
-                            size={responsive.wp(5)}
-                            color="#666"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                      {passwordErrors.length > 0 && (
-                        <View style={styles.errorContainer}>
-                          {passwordErrors.map((error, index) => (
-                            <Text key={index} style={styles.errorText}>
-                              • {error}
-                            </Text>
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  ) : (
-                    <TextInput
-                      style={styles.input}
-                      value={userData[currentQuestion.key as keyof UserData]}
-                      onChangeText={(text) => {
-                        setUserData({
-                          ...userData,
-                          [currentQuestion.key]: text,
-                        });
-                      }}
-                      placeholder={currentQuestion.placeholder}
-                      placeholderTextColor="#999"
-                      keyboardType={currentQuestion.keyboardType as any}
-                      autoCapitalize="none"
+          {/* INPUT AREA - Moves to top when keyboard opens */}
+          <View style={[styles.inputAreaWrapper, isKeyboardVisible && styles.inputAreaWrapperKeyboard]}>
+            
+            {/* --- ANIMATION AREA (Hidden when keyboard is open) --- */}
+            {!isKeyboardVisible && (
+              <View style={styles.mascotArea}>
+                  {/* Animation - Always rendered but hidden until continue click */}
+                  <Animated.View style={{ 
+                    opacity: lottieOpacity, 
+                    transform: [{ scale: lottieOpacity }],
+                    width: '100%',
+                    height: '100%',
+                    position: 'absolute',
+                  }}>
+                    <LottieView
+                      ref={womanWorkRef}
+                      source={require('../../assets/animations/Woman work from home with laptops.json')}
+                      style={styles.lottieFile}
+                      autoPlay={false} 
+                      loop={true}
+                      speed={1}
                     />
-                  )}
-                </>
-              )}
-            </Animated.View>
-          )}
-
-          {/* Navigation Buttons */}
-          <View style={[styles.buttonContainer, isPurpleScreen && styles.purpleButtonContainer]}>
-            {/* Back Button (Hidden on Purple Screens, shown on others) */}
-            {!isPurpleScreen && (
-              <TouchableOpacity 
-                style={[styles.backButton, isLoading && styles.buttonDisabled]} 
-                onPress={handleBack}
-                disabled={isLoading}
-              >
-                <Text style={styles.backButtonText}>{getTranslation(currentLanguage, 'back')}</Text>
-              </TouchableOpacity>
+                  </Animated.View>
+                  
+                  {/* Placeholder Icon when Animation is Hidden */}
+                  <Animated.View style={{ 
+                    opacity: lottieOpacity.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0],
+                    }),
+                    position: 'absolute',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    width: '100%',
+                    height: '100%',
+                  }}>
+                    <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#002D62" style={{ opacity: 0.15 }} />
+                  </Animated.View>
+              </View>
             )}
 
-            {/* Continue/Next Button */}
-            <TouchableOpacity 
+            {/* --- GLASSMORPHIC CARD --- */}
+            <Animated.View 
               style={[
-                styles.nextButton,
-                isPurpleScreen && styles.nextButtonFullWidth,
-                isPurpleScreen && styles.purpleNextButton,
-                isLoading && styles.buttonDisabled
-              ]} 
-              onPress={handleNext}
-              disabled={isLoading}
+                styles.questionCard, 
+                { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }
+              ]}
             >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={[styles.nextButtonText, isPurpleScreen && styles.purpleNextButtonText]}>
-                  {isPurpleScreen ? getTranslation(currentLanguage, 'continue') : (currentStep === questions.length - 1 ? getTranslation(currentLanguage, 'complete') : getTranslation(currentLanguage, 'next'))}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </BlurView>
-    </KeyboardAvoidingView>
+              <Text style={styles.questionText}>{currentQ.question}</Text>
+              
+              <View style={styles.inputContainer}>
+                
+                {/* 1. SELECTION GRIDS */}
+                {(currentQ.isLanguageSelection || currentQ.isAgeSelection) && (
+                  <View style={styles.gridContainer}>
+                    {(currentQ.isLanguageSelection ? currentQ.options : ADULT_AGE_OPTIONS)?.map((option) => {
+                      const isSelected = userData[currentQ.key as keyof UserData] === option;
+                      return (
+                        <TouchableOpacity
+                          key={option}
+                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                          onPress={() => {
+                            setUserData({ ...userData, [currentQ.key]: option });
+                            // No animation on selection - only on continue click
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                            {option}
+                          </Text>
+                          {isSelected && <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
 
+                {/* 2. TEXT INPUTS */}
+                {(!currentQ.isLanguageSelection && !currentQ.isAgeSelection) && (
+                  <View style={styles.inputWrapperContainer}>
+                    <View style={styles.textInputWrapper}>
+                      <MaterialCommunityIcons name={currentQ.icon as any} size={24} color="#002D62" style={styles.inputIcon} />
+                      <TextInput
+                        key={currentQ.key + showPassword} // Force re-render when showPassword changes
+                        style={styles.modernInput}
+                        value={userData[currentQ.key as keyof UserData] as string}
+                        onChangeText={(text) => {
+                          setUserData({ ...userData, [currentQ.key]: text });
+                          
+                          // Email validation - Show error only, no animation
+                          if(currentQ.key === 'email') {
+                            if (text.length > 0) {
+                              const isValid = checkEmailValidation(text);
+                              setEmailError(isValid ? '' : 'Invalid Email');
+                            } else {
+                              setEmailError('');
+                            }
+                          }
+                          // Password validation - Show validations only, no animation
+                          else if(currentQ.key === 'password') {
+                            const validations = checkPasswordValidations(text);
+                            setPasswordValidations(validations);
+                          }
+                          // Other fields - No animation on input
+                        }}
+                        placeholder={currentQ.placeholder}
+                        placeholderTextColor="#94A3B8"
+                        autoFocus={true}
+                        keyboardType={currentQ.keyboardType as any}
+                        secureTextEntry={currentQ.secure ? !showPassword : false}
+                        autoCapitalize={currentQ.key === 'email' ? 'none' : 'words'}
+                      />
+                      {currentQ.secure && (
+                        <TouchableOpacity 
+                          onPress={() => {
+                            setShowPassword(prev => !prev);
+                          }}
+                          style={styles.eyeToggleButton}
+                          activeOpacity={0.6}
+                          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                          onPressIn={() => {}}
+                          onPressOut={() => {}}
+                        >
+                          <MaterialCommunityIcons 
+                            name={showPassword ? "eye-off" : "eye"} 
+                            size={24} 
+                            color="#002D62" 
+                          />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    
+                    {/* VALIDATIONS - Show below text box (real-time) */}
+                    {currentQ.key === 'email' && (
+                      <View style={styles.validationContainer}>
+                        {emailError ? (
+                          <Text style={styles.validationError}>Invalid Email</Text>
+                        ) : userData.email.length > 0 ? (
+                          <Text style={styles.validationSuccess}>✓ Valid Email</Text>
+                        ) : null}
+                      </View>
+                    )}
+                    {currentQ.key === 'password' && (
+                      <View style={styles.validationContainer}>
+                        <ValidationItem 
+                          label="Minimum 8 characters" 
+                          isValid={passwordValidations.minLength}
+                        />
+                        <ValidationItem 
+                          label="One uppercase letter" 
+                          isValid={passwordValidations.hasUppercase}
+                        />
+                        <ValidationItem 
+                          label="One lowercase letter" 
+                          isValid={passwordValidations.hasLowercase}
+                        />
+                        <ValidationItem 
+                          label="One number" 
+                          isValid={passwordValidations.hasNumber}
+                        />
+                        <ValidationItem 
+                          label="One special character" 
+                          isValid={passwordValidations.hasSpecialChar}
+                        />
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </Animated.View>
+
+          </View>
+
+        </View>
+        </ScrollView>
+        
+        {/* BOTTOM BUTTON - Stays above keyboard */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={[styles.continueButton, isLoading && styles.disabledButton]} 
+            onPress={handleNext}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>Continue</Text>}
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+    </KeyboardAvoidingView>
   );
 };
 
+// --- STYLES ---
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
-  backgroundContainer: {
-    flex: 1,
-    width: responsive.width,
-    height: responsive.height,
-    overflow: 'hidden',
-    position: 'relative',
+  container: { flex: 1 },
+  backgroundImage: { flex: 1, width: '100%', height: '100%' },
+  scrollContent: {
+    flexGrow: 1,
   },
-  blurContainer: {
+  contentSafeArea: {
     flex: 1,
-    position: 'relative',
-  },
-  container: {
-    flex: 1,
-    paddingTop: responsive.hp(2),
+    paddingTop: responsive.hp(4),
     paddingHorizontal: responsive.wp(6),
-    position: 'relative',
-    justifyContent: 'space-between',
+    paddingBottom: responsive.hp(1),
   },
-  
-  // ===== PURPLE THEME: TOP BAR =====
-  purpleTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: responsive.hp(2),
-    paddingVertical: responsive.hp(1),
-  },
-  purpleBackButton: {
-    padding: responsive.wp(2),
-    marginRight: responsive.wp(3),
-  },
-  purpleProgressBarWrapper: {
-    flex: 1,
-  },
-  purpleProgressBar: {
-    height: responsive.hp(1),
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: responsive.wp(1.5),
-    overflow: 'hidden',
-  },
-  purpleProgressFill: {
-    height: '100%',
-    backgroundColor: '#2196F3',
-    borderRadius: responsive.wp(1.5),
-  },
-  // ===== PURPLE THEME: CHARACTER + BUBBLE =====
-  purpleCharacterBubbleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: responsive.hp(3),
-    marginTop: responsive.hp(1),
-  },
-  purpleCharacterImage: {
-    width: responsive.wp(28),
-    height: responsive.wp(28),
-    marginRight: responsive.wp(2),
-    flexShrink: 0,
-  },
-  purpleSpeechBubble: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: responsive.wp(5),
-    padding: responsive.wp(4),
+  inputAreaWrapper: {
     flex: 1,
     justifyContent: 'center',
-    shadowColor: '#000',
+    alignItems: 'center',
+    paddingTop: responsive.hp(2),
+  },
+  inputAreaWrapperKeyboard: {
+    justifyContent: 'flex-start',
+    paddingTop: responsive.hp(1),
+  },
+
+  // Header
+  topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  backButton: { padding: 10, backgroundColor: '#FFF', borderRadius: 12, elevation: 3 },
+  progressBarContainer: { 
+    flex: 1, 
+    marginLeft: 15, 
+  },
+  progressBarBg: { 
+    height: 8, 
+    backgroundColor: 'rgba(0,45,98,0.1)', 
+    borderRadius: 4, 
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarFill: { height: '100%', backgroundColor: '#002D62', borderRadius: 4 },
+  stepIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,45,98,0.2)',
+    marginHorizontal: 2,
+  },
+  stepDotActive: {
+    backgroundColor: '#002D62',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+
+  // Animation Area
+  mascotArea: {
+    height: responsive.hp(18),
+    width: responsive.hp(18),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: responsive.hp(2),
+  },
+  lottieFile: { width: '100%', height: '100%' },
+
+  // Card
+  questionCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingVertical: responsive.hp(4),
+    paddingHorizontal: responsive.wp(6),
+    shadowColor: "#002D62",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+    alignItems: 'center',
+  },
+  questionText: {
+    fontSize: responsive.wp(5.5),
+    fontWeight: '800',
+    color: '#002D62',
+    textAlign: 'center',
+    marginBottom: responsive.hp(3),
+    lineHeight: responsive.wp(7),
+  },
+  inputContainer: { width: '100%', alignItems: 'center' },
+
+  // Inputs
+  inputWrapperContainer: {
+    width: '100%',
+  },
+  textInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  inputIcon: { marginRight: 10 },
+  modernInput: {
+    flex: 1,
+    fontSize: responsive.wp(4.5),
+    color: '#334155',
+    fontWeight: '600',
+  },
+  eyeToggleButton: {
+    padding: 8,
+    marginLeft: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
+    minHeight: 40,
+    zIndex: 10,
+    backgroundColor: 'transparent',
+  },
+
+  // Options
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  optionButton: {
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    minWidth: '40%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+    flexDirection: 'row',
+  },
+  optionButtonSelected: {
+    backgroundColor: '#002D62',
+    borderColor: '#002D62',
+    shadowColor: "#002D62",
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
   },
-  purpleSpeechBubbleText: {
-    fontSize: responsive.wp(4.2),
-    fontWeight: '700',
-    color: '#0062ffff',
-    textAlign: 'center',
-  },
-  // ===== PURPLE THEME: NAME INPUT =====
-  purpleInputContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  purpleNameInput: {
-    fontSize: responsive.wp(8.5),
-    color: '#0a0ab8ff',
-    textAlign: 'center',
-    fontWeight: '700',
-    paddingHorizontal: responsive.wp(4),
-    paddingVertical: responsive.hp(1),
-  },
-  purplePasswordInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  optionText: { fontSize: responsive.wp(4), color: '#64748B', fontWeight: '600' },
+  optionTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
+  checkmark: { marginLeft: 6 },
+
+  // Errors
+  errorContainer: { marginTop: 10, width: '100%' },
+  errorText: { color: '#EF4444', fontSize: 13, marginLeft: 5 },
+  errorContainerBelow: { 
+    marginTop: 8, 
     width: '100%',
+    paddingLeft: 5,
   },
-  purplePasswordInput: {
-    flex: 1,
-    fontSize: responsive.wp(8.5),
-    color: '#0a0ab8ff',
-    textAlign: 'center',
-    fontWeight: '700',
-    paddingHorizontal: responsive.wp(4),
-    paddingVertical: responsive.hp(1),
+  errorTextBelow: { 
+    color: '#EF4444', 
+    fontSize: 12, 
+    marginTop: 4,
+    fontWeight: '500',
   },
-  purpleEyeIcon: {
-    padding: responsive.wp(2),
-    marginLeft: responsive.wp(2),
-  },
-  // ===== PURPLE THEME: AGE GRID =====
-  purpleAgeContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  ageGridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: responsive.wp(3),
-    marginBottom: responsive.hp(3),
-    paddingHorizontal: responsive.wp(2),
-  },
-  ageButton: {
-    width: '30%',
-    paddingVertical: responsive.hp(2),
-    paddingHorizontal: responsive.wp(3),
-    backgroundColor: 'rgba(46, 126, 192, 0.78)',
-    borderWidth: 2,
-    borderColor: 'rgba(29, 175, 223, 0.3)',
-    borderRadius: responsive.wp(3),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ageButtonSelected: {
-    backgroundColor: 'rgba(102, 164, 206, 0.6)',
-    borderColor: '#ffffffff',
-    borderWidth: 3,
-  },
-  ageButtonText: {
-    fontSize: responsive.wp(4.5),
-    fontWeight: '600',
-    color: 'rgba(0, 0, 0, 0.7)',
-    textAlign: 'center',
-  },
-  ageButtonTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  // ===== STANDARD QUESTION CONTAINER (Non-Purple) =====
-  questionContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: responsive.wp(5),
-    padding: responsive.wp(8),
-    marginBottom: responsive.hp(3),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(1.2) },
-    shadowOpacity: 0.3,
-    shadowRadius: responsive.wp(5),
-    elevation: 10,
-  },
-  question: {
-    fontSize: responsive.wp(6.4),
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginBottom: responsive.hp(1.2),
-    textAlign: 'center',
-  },
-  subquestion: {
-    fontSize: responsive.wp(4.8),
-    fontWeight: '600',
-    color: '#43BCCD',
-    marginBottom: responsive.hp(2.5),
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(4),
-    fontSize: responsive.wp(4.2),
-    color: '#2C3E50',
-    marginTop: responsive.hp(1.2),
-  },
-  passwordInputWrapper: {
+  validationContainer: {
+    marginTop: 8,
     width: '100%',
-    marginTop: responsive.hp(1.2),
+    paddingLeft: 5,
   },
-  passwordInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: responsive.wp(3),
-    paddingRight: responsive.wp(2),
+  validationItem: {
+    marginTop: 4,
   },
-  passwordInputField: {
-    flex: 1,
-    marginTop: 0,
-    borderWidth: 0,
-    paddingRight: responsive.wp(1),
+  validationText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '500',
   },
-  eyeIconButton: {
-    padding: responsive.wp(2),
+  validationError: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
   },
-  languageContainer: {
-    marginTop: responsive.hp(2.5),
+  validationSuccess: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
-  
-  // ===== BUTTON STYLES =====
+
+  // Button Container - Stays above keyboard
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingHorizontal: responsive.wp(2),
+    paddingHorizontal: responsive.wp(6),
     paddingBottom: responsive.hp(2),
-    gap: responsive.wp(2),
-  },
-  purpleButtonContainer: {
+    paddingTop: responsive.hp(1),
     backgroundColor: 'transparent',
   },
-  backButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(4.2),
+  // Continue Button
+  continueButton: {
+    backgroundColor: '#002D62',
+    width: '100%',
+    paddingVertical: 18,
+    borderRadius: 16,
     alignItems: 'center',
-    flex: 1,
+    shadowColor: "#002D62",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  backButtonText: {
-    color: '#2C3E50',
-    fontSize: responsive.wp(4.2),
-    fontWeight: 'bold',
-  },
-  nextButton: {
-    backgroundColor: '#2196F3',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(4),
-    alignItems: 'center',
-    flex: 1,
-  },
-  purpleNextButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: responsive.hp(2),
-  },
-  nextButtonFullWidth: {
-    flex: 1,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontSize: responsive.wp(5),
-    fontWeight: 'bold',
-  },
-  purpleNextButtonText: {
-    color: '#FFFFFF',
-    fontSize: responsive.wp(5.2),
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-    borderWidth: 2,
-  },
-  errorContainer: {
-    marginTop: responsive.hp(1),
-    padding: responsive.wp(2),
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: responsive.wp(2),
-  },
-  errorText: {
-    color: '#EF4444',
-    fontSize: responsive.wp(3.2),
-    marginBottom: responsive.hp(0.5),
-  },
-  // ===== PURPLE THEME: ERROR STYLES =====
-  purpleErrorContainer: {
-    marginTop: responsive.hp(1.5),
-    padding: responsive.wp(3),
-    backgroundColor: 'rgba(255, 0, 0, 0.15)',
-    borderRadius: responsive.wp(2),
-  },
-  purpleErrorText: {
-    color: '#FF6B6B',
-    fontSize: responsive.wp(3),
-    marginBottom: responsive.hp(0.4),
-  },
-  purpleInputError: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#FF6B6B',
-  },
+  disabledButton: { opacity: 0.7 },
+  continueText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', letterSpacing: 0.5 },
 });
-
 
 export default RegisterScreen;

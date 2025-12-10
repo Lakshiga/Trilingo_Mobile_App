@@ -21,5 +21,8 @@ export interface ActivityComponentProps {
   currentLang?: Language;
   onComplete?: () => void;
   activityId?: number; // Activity ID to fetch data (if content not provided)
+  currentExerciseIndex?: number; // Current exercise index (for multi-exercise activities)
+  onExerciseComplete?: () => void; // Callback when exercise is completed
+  onExit?: () => void; // Callback to exit/go back (always exits)
 }
 
