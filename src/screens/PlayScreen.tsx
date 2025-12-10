@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -99,7 +99,7 @@ const PlayScreen: React.FC = () => {
             <MaterialIcons name="arrow-back" size={24} color="#1976D2" />
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {displayTitle || 'Activity'}
+            {displayTitle}
           </Text>
           <View style={{ width: 40 }} />
         </View>
@@ -122,7 +122,7 @@ const PlayScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {displayTitle || 'Activity'}
+            {displayTitle}
           </Text>
           {exerciseCount > 1 && (
             <Text style={styles.exerciseCounter}>
@@ -182,8 +182,56 @@ const PlayScreen: React.FC = () => {
               );
             }
 
-            return activityComponent;
+            // IIFE Result Check: Handle different return types safely
+            // Handle null/undefined first
+            if (activityComponent == null) {
+              return (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>Activity component is null or undefined</Text>
+                </View>
+              );
+            }
+
+            // If activityComponent is a string, wrap it in Text
+            if (typeof activityComponent === 'string') {
+              return <Text>{activityComponent}</Text>;
+            }
+
+            // If it's a number or boolean, convert to string and wrap in Text
+            if (typeof activityComponent === 'number' || typeof activityComponent === 'boolean') {
+              return <Text>{String(activityComponent)}</Text>;
+            }
+
+            // Handle arrays (React fragments or arrays of elements)
+            if (Array.isArray(activityComponent)) {
+              // Check if array contains any strings
+              const hasStrings = activityComponent.some(item => typeof item === 'string');
+              if (hasStrings) {
+                console.warn('Activity component array contains strings, wrapping in Text:', activityComponent);
+                return (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>Invalid activity component: array contains strings</Text>
+                  </View>
+                );
+              }
+              // If it's an array of valid React elements, wrap in Fragment
+              return <Fragment>{activityComponent}</Fragment>;
+            }
+
+            // Ensure it's a valid React element before rendering
+            if (React.isValidElement(activityComponent)) {
+              return activityComponent;
+            }
+
+            // Fallback for invalid component (objects, functions, etc.)
+            console.warn('Invalid activity component type:', typeof activityComponent, activityComponent);
+            return (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>Invalid activity component format</Text>
+              </View>
+            );
           } catch (error) {
+            console.error('Error rendering activity:', error);
             return (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>Error loading activity</Text>
@@ -204,17 +252,11 @@ const PlayScreen: React.FC = () => {
             onPress={handlePrevExercise}
             disabled={currentExerciseIndex === 0 || loadingExercises}
           >
-            <MaterialIcons 
-              name="arrow-back" 
-              size={24} 
-              color={currentExerciseIndex === 0 ? '#999' : '#000000'} 
-            />
+            <MaterialIcons name="arrow-back" size={24} color={currentExerciseIndex === 0 ? '#999' : '#000000'} />
             <Text style={[
               styles.bottomNavButtonText,
               currentExerciseIndex === 0 && styles.bottomNavButtonTextDisabled
-            ]}>
-              Previous
-            </Text>
+            ]}>Previous</Text>
           </TouchableOpacity>
 
           <View style={styles.bottomNavCenter}>
@@ -235,14 +277,8 @@ const PlayScreen: React.FC = () => {
             <Text style={[
               styles.bottomNavButtonText,
               (currentExerciseIndex >= exerciseCount - 1) && styles.bottomNavButtonTextDisabled
-            ]}>
-              Next
-            </Text>
-            <MaterialIcons 
-              name="arrow-forward" 
-              size={24} 
-              color={(currentExerciseIndex >= exerciseCount - 1) ? '#999' : '#000000'} 
-            />
+            ]}>Next</Text>
+            <MaterialIcons name="arrow-forward" size={24} color={(currentExerciseIndex >= exerciseCount - 1) ? '#999' : '#000000'} />
           </TouchableOpacity>
         </View>
       )}

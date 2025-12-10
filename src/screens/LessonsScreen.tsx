@@ -5,13 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Alert,
   Animated,
   Modal,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
@@ -19,6 +19,10 @@ import { useUser } from '../context/UserContext';
 import apiService, { StageDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
+import { useResponsive } from '../utils/responsive';
+import { findMainActivityIds, LEARNING_MAIN_ACTIVITY_NAMES, filterActivitiesByIds } from '../utils/activityMappings';
+
+const { width } = Dimensions.get('window');
 
 interface RouteParams {
   levelId: number;
@@ -28,8 +32,9 @@ interface RouteParams {
 const LessonsScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { theme } = useTheme();
+  const { theme } = useTheme(); // Optional if fully overriding
   const { currentUser } = useUser();
+  const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   
   const params = route.params as RouteParams;
@@ -40,100 +45,84 @@ const LessonsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [lockedLessons, setLockedLessons] = useState<Set<number>>(new Set());
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
+  
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchLessons = async () => {
       try {
         setLoading(true);
-        console.log(`📚 Fetching lessons for levelId: ${levelId}`);
-        
-        // Fetch all lessons (stages) for this level
         const allLessons = await apiService.getStagesByLevelId(levelId);
-        
-        if (allLessons.length === 0) {
-          console.warn(`⚠️ No lessons found for level ${levelId}. This could mean:`);
-          console.warn('   1. No lessons exist for this level in database');
-          console.warn('   2. User does not have permission (check console for 403 errors)');
-          console.warn('   3. Authentication token is missing or invalid');
-        } else {
-          console.log(`✅ Found ${allLessons.length} lessons for level ${levelId}`);
-        }
-        
-        // Sort by ID (since sequenceOrder is not in backend DTO)
         const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
-        
-        setLessons(sortedLessons);
 
-        // Check activities count for each lesson to determine if it should be locked
+        // Fetch main activities to filter Learning, Practice, and Game only
+        const mainActivities = await apiService.getAllMainActivities();
+        const learningMainActivityIds = findMainActivityIds(
+          mainActivities,
+          LEARNING_MAIN_ACTIVITY_NAMES
+        );
+
+        // Filter lessons to only show those with Learning/Practice/Game activities
+        const validLessons: StageDto[] = [];
         const lockedSet = new Set<number>();
+        
         for (const lesson of sortedLessons) {
           try {
-            const activities = await apiService.getActivitiesByStage(lesson.id);
-            if (activities.length === 0) {
+            const allActivities = await apiService.getActivitiesByStage(lesson.id);
+            
+            // Filter activities to only include Learning, Practice, and Game
+            // Exclude Conversation, Listening, Video activities
+            const filteredActivities = learningMainActivityIds.size > 0
+              ? filterActivitiesByIds(allActivities, learningMainActivityIds)
+              : allActivities;
+            
+            // Only show lessons that have Learning/Practice/Game activities
+            if (filteredActivities.length > 0) {
+              validLessons.push(lesson);
+            } else {
+              // Hide lessons that only have Conversation/Listening/Video activities
               lockedSet.add(lesson.id);
             }
           } catch (error) {
-            // If error fetching activities, consider lesson locked
-            console.warn(`Failed to fetch activities for lesson ${lesson.id}, locking it`);
+            // If error, hide the lesson
             lockedSet.add(lesson.id);
           }
         }
+        
+        // Set only lessons with Learning/Practice/Game activities
+        setLessons(validLessons);
         setLockedLessons(lockedSet);
       } catch (error: any) {
-        // Log error details for debugging
-        console.error('❌ Error fetching lessons:', error);
-        console.error('   Error message:', error.message);
-        console.error('   Check console above for detailed API error information');
-        setLessons([]); // Set empty array on error
+        console.error('Error fetching lessons:', error);
+        setLessons([]);
       } finally {
         setLoading(false);
       }
     };
 
-    if (levelId) {
-      fetchLessons();
-    }
+    if (levelId) fetchLessons();
 
-    // Animate header
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, [levelId]);
 
-  // Handle modal animation when it becomes visible
   useEffect(() => {
     if (showComingSoonModal) {
       modalScaleAnim.setValue(0);
-      Animated.spring(modalScaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      modalScaleAnim.setValue(0);
+      Animated.spring(modalScaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }).start();
     }
   }, [showComingSoonModal]);
 
   const handleLessonPress = (lesson: StageDto) => {
-    // Check if lesson is locked (has 0 activities)
     if (lockedLessons.has(lesson.id)) {
       setShowComingSoonModal(true);
       return;
     }
-
     (navigation as any).navigate('LessonActivities', { 
       lessonId: lesson.id, 
       lessonName: getLearningLanguageField(learningLanguage, lesson),
@@ -141,200 +130,134 @@ const LessonsScreen: React.FC = () => {
     });
   };
 
-  const getLessonName = (lesson: StageDto) => {
-    return getLearningLanguageField(learningLanguage, lesson);
-  };
+  const getLessonName = (lesson: StageDto) => getLearningLanguageField(learningLanguage, lesson);
 
+  const styles = getStyles(responsive);
+
+  // --- LOADING STATE ---
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centerContainer}>
         <LottieView
           source={require('../../assets/animations/Loading animation.json')}
-          autoPlay
-          loop
-          style={styles.loadingAnimation}
+          autoPlay loop style={styles.loadingAnimation}
         />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Loading lessons...
-        </Text>
+        <Text style={styles.loadingText}>Loading Lessons...</Text>
       </View>
     );
   }
 
-
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={theme.lessonsBackground || ['#FFF9E6', '#FFE5CC', '#FFD9B3']}
-        style={styles.gradient}
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
+      {/* --- HEADER --- */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={24} color="#002D62" />
+        </TouchableOpacity>
+        <View style={{alignItems: 'center'}}>
+          <Text style={styles.headerTitle}>{levelName}</Text>
+          <Text style={styles.headerSubtitle}>Select a lesson to begin</Text>
+        </View>
+        <View style={{ width: 40 }} /> {/* Spacer */}
+      </View>
+
+      {/* --- CONTENT --- */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Decorative elements */}
-        <View style={[styles.decorativeCircle1, { backgroundColor: theme.decorativeCircle1 || 'rgba(255, 182, 193, 0.3)' }]} />
-        <View style={[styles.decorativeCircle2, { backgroundColor: theme.decorativeCircle2 || 'rgba(173, 216, 230, 0.3)' }]} />
-        <View style={[styles.decorativeCircle3, { backgroundColor: theme.decorativeCircle3 || 'rgba(255, 218, 185, 0.3)' }]} />
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {lessons.length > 0 ? (
+            lessons.map((lesson, index) => {
+              const lessonName = getLessonName(lesson);
+              const isLocked = lockedLessons.has(lesson.id);
+              
+              return (
+                <TouchableOpacity
+                  key={lesson.id}
+                  style={[styles.lessonCard, isLocked && styles.lessonCardLocked]}
+                  onPress={() => handleLessonPress(lesson)}
+                  activeOpacity={isLocked ? 1 : 0.8}
+                >
+                  {/* Left Icon / Number */}
+                  <View style={[styles.iconBox, isLocked ? styles.iconBoxLocked : styles.iconBoxActive]}>
+                    {isLocked ? (
+                      <MaterialIcons name="lock" size={24} color="#94A3B8" />
+                    ) : (
+                      <Text style={styles.lessonNumber}>{index + 1}</Text>
+                    )}
+                  </View>
 
-        {/* Header */}
-        <LinearGradient colors={theme.headerGradient || ['#FF9A8B', '#FF6B9D', '#FF8C94']} style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <MaterialIcons name="arrow-back" size={28} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerEmoji}>📚</Text>
-              <Text style={styles.headerTitle}>{levelName}</Text>
-              <Text style={styles.headerEmoji}>🎓</Text>
+                  {/* Text Content */}
+                  <View style={styles.textContainer}>
+                    <Text style={[styles.lessonTitle, isLocked && styles.lessonTitleLocked]} numberOfLines={1}>
+                      {lessonName || `Lesson ${lesson.id}`}
+                    </Text>
+                    <Text style={styles.lessonSubtitle}>
+                      {isLocked ? 'Not Available' : 'Tap to start'}
+                    </Text>
+                  </View>
+
+                  {/* Right Action Icon */}
+                  <View style={styles.actionIcon}>
+                    {isLocked ? (
+                       <MaterialIcons name="lock-outline" size={20} color="#CBD5E1" />
+                    ) : (
+                       <View style={styles.playButton}>
+                          <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
+                       </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="menu-book" size={64} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No lessons available</Text>
+              <Text style={styles.emptySubtext}>Check back later for updates.</Text>
             </View>
-            <Text style={styles.headerSubtitle}>Select a lesson to begin</Text>
-          </View>
-        </LinearGradient>
+          )}
+        </Animated.View>
+        
+        <View style={{height: responsive.hp(5)}} />
+      </ScrollView>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View
-            style={[
-              styles.lessonsContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
-            {lessons.length > 0 ? (
-              lessons.map((lesson, index) => {
-                const lessonName = getLessonName(lesson);
-                const isLocked = lockedLessons.has(lesson.id);
-                const gradients = [
-                  ['#FF9A8B', '#FF6B9D'] as const,
-                  ['#43BCCD', '#5DD3A1'] as const,
-                  ['#6A8EFF', '#8A6BFF'] as const,
-                  ['#FFB366', '#FF8C42'] as const,
-                  ['#A77BCA', '#BA91DA'] as const,
-                  ['#FF6B6B', '#FF4757'] as const,
-                  ['#4ECDC4', '#44A08D'] as const,
-                  ['#FFD93D', '#F9A826'] as const,
-                  ['#A8E6CF', '#56C596'] as const,
-                  ['#B4A7D6', '#8E7CC3'] as const,
-                ];
-                const gradient = isLocked ? ['#9CA3AF', '#6B7280'] as const : gradients[index % gradients.length];
-                const emojis = ['📖', '🔤', '🔢', '🎨', '🌍', '🎵', '📚', '✏️', '🎯', '🌟'];
-                const emoji = emojis[index % emojis.length];
-                
-                return (
-                  <TouchableOpacity
-                    key={lesson.id}
-                    style={[styles.lessonCard, isLocked && styles.lessonCardLocked]}
-                    onPress={() => handleLessonPress(lesson)}
-                    activeOpacity={isLocked ? 1 : 0.8}
-                  >
-                    <LinearGradient
-                      colors={gradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.lessonGradient}
-                    >
-                      <View style={styles.lessonContent}>
-                        <View style={styles.lessonIconContainer}>
-                          <Text style={styles.lessonEmoji}>
-                            {emoji}
-                          </Text>
-                        </View>
-                        <View style={styles.lessonTextContainer}>
-                          <Text style={[styles.lessonTitle, isLocked && styles.lessonTitleLocked]} numberOfLines={2}>
-                            {lessonName || `Lesson ${lesson.id}`}
-                          </Text>
-                        </View>
-                        {isLocked ? (
-                          <MaterialIcons name="lock" size={32} color="rgba(255, 255, 255, 0.7)" />
-                        ) : (
-                          <MaterialIcons name="chevron-right" size={32} color="#fff" />
-                        )}
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No lessons available for this level.</Text>
-                <Text style={styles.emptySubtext}>Lessons will appear here once they are added in the admin panel.</Text>
-              </View>
-            )}
-          </Animated.View>
-        </ScrollView>
-      </LinearGradient>
-
-      {/* Coming Soon Modal */}
+      {/* --- MODAL --- */}
       <Modal
         visible={showComingSoonModal}
         transparent={true}
         animationType="none"
-        onRequestClose={() => {
-          Animated.timing(modalScaleAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            setShowComingSoonModal(false);
-            modalScaleAnim.setValue(0);
-          });
-        }}
+        onRequestClose={() => setShowComingSoonModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              {
-                transform: [{ scale: modalScaleAnim }],
-              },
-            ]}
-          >
-            <View style={styles.modalContent}>
-              {/* Heading */}
-              <Text style={styles.comingSoonTitle}>Coming Soon</Text>
-
-              {/* Lottie Animation */}
-              <View style={styles.lottieContainer}>
-                <LottieView
-                  source={require('../../assets/animations/comming soon.json')}
-                  autoPlay
-                  loop
-                  style={styles.lottieAnimation}
-                />
-              </View>
-
-              {/* Message */}
-              <Text style={styles.comingSoonMessage}>
-                Lessons will be available soon!
-              </Text>
-
-              {/* Close Button */}
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => {
-                  Animated.timing(modalScaleAnim, {
-                    toValue: 0,
-                    duration: 200,
-                    useNativeDriver: true,
-                  }).start(() => {
-                    setShowComingSoonModal(false);
-                    modalScaleAnim.setValue(0);
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#FF6B9D', '#FFB366']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.modalButtonGradient}
-                >
-                  <Text style={styles.modalButtonText}>OK</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+          <Animated.View style={[styles.modalCard, { transform: [{ scale: modalScaleAnim }] }]}>
+            <View style={styles.modalIconContainer}>
+               <MaterialCommunityIcons name="clock-alert-outline" size={40} color="#FFFFFF" />
             </View>
+
+            <Text style={styles.comingSoonTitle}>Coming Soon</Text>
+            
+            <View style={styles.lottieContainer}>
+              <LottieView
+                source={require('../../assets/animations/comming soon.json')}
+                autoPlay loop style={styles.lottieAnimation}
+              />
+            </View>
+
+            <Text style={styles.comingSoonMessage}>
+              We are working on this lesson!
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowComingSoonModal(false)}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
           </Animated.View>
         </View>
       </Modal>
@@ -342,248 +265,233 @@ const LessonsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F8FAFC', // Professional Light Gray
   },
-  gradient: {
-    flex: 1,
-  },
-  decorativeCircle1: {
-    position: 'absolute',
-    top: -60,
-    right: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-  },
-  decorativeCircle2: {
-    position: 'absolute',
-    top: 150,
-    left: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  decorativeCircle3: {
-    position: 'absolute',
-    bottom: 200,
-    right: -30,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
+  
+  // --- HEADER ---
   header: {
-    paddingTop: 50,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 45,
-    left: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 25,
-    padding: 12,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  headerContent: {
-    alignItems: 'center',
-  },
-  headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: responsive.wp(5),
+    paddingTop: responsive.hp(6), // Safe area
+    paddingBottom: responsive.hp(2),
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
-  headerEmoji: {
-    fontSize: 32,
-    marginHorizontal: 8,
+  backButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: responsive.wp(5),
+    fontWeight: '800',
+    color: '#002D62', // Brand Blue
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#fff',
+    fontSize: responsive.wp(3.5),
+    color: '#64748B',
     textAlign: 'center',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    marginTop: 2,
   },
+
+  // --- LOADING ---
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingAnimation: {
+    width: 150,
+    height: 150,
+  },
+  loadingText: {
+    marginTop: 20,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+
+  // --- CONTENT ---
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 15,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: responsive.wp(5),
+    paddingTop: responsive.hp(3),
   },
-  lessonsContainer: {
-    width: '100%',
-  },
+
+  // --- LESSON CARD ---
   lessonCard: {
-    marginBottom: 18,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    overflow: 'hidden',
-  },
-  lessonGradient: {
-    padding: 20,
-  },
-  lessonContent: {
+    marginBottom: responsive.hp(2),
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
+    // Soft Shadow
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  lessonIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  lessonCardLocked: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    elevation: 0,
+  },
+  
+  // Icon Box (Left)
+  iconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 16,
   },
-  lessonEmoji: {
-    fontSize: 36,
+  iconBoxActive: {
+    backgroundColor: '#E0F2FE', // Very Light Blue
+    borderWidth: 1,
+    borderColor: '#002D62',
   },
-  lessonTextContainer: {
+  iconBoxLocked: {
+    backgroundColor: '#E2E8F0',
+  },
+  lessonNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#002D62',
+  },
+
+  // Text Content (Middle)
+  textContainer: {
     flex: 1,
   },
   lessonTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontSize: responsive.wp(4.5),
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
   },
-  loadingContainer: {
-    flex: 1,
+  lessonTitleLocked: {
+    color: '#94A3B8',
+  },
+  lessonSubtitle: {
+    fontSize: responsive.wp(3.2),
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  // Action Icon (Right)
+  actionIcon: {
+    marginLeft: 10,
+  },
+  playButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#002D62',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF9E6',
+    shadowColor: "#002D62",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  loadingAnimation: {
-    width: 200,
-    height: 200,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-  },
+
+  // --- EMPTY STATE ---
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 50,
   },
   emptyText: {
     fontSize: 18,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginTop: 20,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
+    color: '#94A3B8',
+    marginTop: 8,
   },
-  lessonCardLocked: {
-    opacity: 0.7,
-    elevation: 4,
-  },
-  lessonTitleLocked: {
-    opacity: 0.8,
-  },
+
+  // --- MODAL ---
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
-  modalContainer: {
+  modalCard: {
     width: '85%',
-    maxWidth: 400,
-    borderRadius: 30,
-    overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-  },
-  modalContent: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 24,
     padding: 30,
     alignItems: 'center',
+    elevation: 10,
+  },
+  modalIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#F59E0B', // Amber for "Coming Soon"
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: -50,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   comingSoonTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333333',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 10,
   },
   lottieContainer: {
-    width: 250,
-    height: 250,
-    marginBottom: 20,
+    width: 150,
+    height: 150,
+    marginBottom: 15,
   },
   lottieAnimation: {
     width: '100%',
     height: '100%',
   },
   comingSoonMessage: {
-    fontSize: 18,
-    color: '#666666',
+    fontSize: 16,
+    color: '#64748B',
     textAlign: 'center',
     marginBottom: 25,
-    fontWeight: '600',
   },
   modalButton: {
-    borderRadius: 25,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  modalButtonGradient: {
-    paddingVertical: 12,
-    paddingHorizontal: 40,
+    backgroundColor: '#002D62',
+    paddingVertical: 14,
+    paddingHorizontal: 50,
+    borderRadius: 16,
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   modalButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 
 export default LessonsScreen;
-
-
-
