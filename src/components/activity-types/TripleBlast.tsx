@@ -43,11 +43,12 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   currentLang = 'ta',
   activityId,
   onComplete,
+  currentExerciseIndex: propExerciseIndex = 0,
+  onExerciseComplete,
 }) => {
   const responsive = useResponsive();
   const [loading, setLoading] = useState(true);
   const [allExercises, setAllExercises] = useState<TripleBlastContent[]>([]);
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [tiles, setTiles] = useState<GameTile[]>([]);
   const [selectedTileIds, setSelectedTileIds] = useState<string[]>([]);
   const [score, setScore] = useState(0);
@@ -225,7 +226,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     return shuffled;
   };
 
-  const currentContent = allExercises[currentExerciseIndex];
+  const currentContent = allExercises[propExerciseIndex];
 
   // Initialize game when exercise changes
   useEffect(() => {
@@ -233,7 +234,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
 
     const initialTiles: GameTile[] = currentContent.tiles.map((tile, index) => ({
       ...tile,
-      id: `${tile.id || `tile-${index}`}-${currentExerciseIndex}`,
+      id: `${tile.id || `tile-${index}`}-${propExerciseIndex}`,
       status: 'default',
     }));
 
@@ -267,7 +268,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         clearInterval(timerIntervalRef.current);
       }
     };
-  }, [currentExerciseIndex, currentContent]);
+  }, [propExerciseIndex, currentContent]);
 
   const selectTile = (tile: GameTile) => {
     if (tile.status === 'hidden' || selectedTileIds.length >= 3) return;
@@ -392,12 +393,14 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
             }
           }, 100);
 
-          // Auto navigate after animation
-          if (allExercises.length > 1 && currentExerciseIndex < allExercises.length - 1) {
+          // Notify parent that exercise is completed
+          if (allExercises.length > 1 && propExerciseIndex < allExercises.length - 1) {
             setTimeout(() => {
               setShowCongratulations(false);
               setExerciseCompleted(false);
-              goToNextExercise();
+              if (onExerciseComplete) {
+                onExerciseComplete();
+              }
             }, 3000);
           } else {
             setTimeout(() => {
@@ -450,7 +453,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
 
     const initialTiles: GameTile[] = currentContent.tiles.map((tile, index) => ({
       ...tile,
-      id: `${tile.id || `tile-${index}`}-${currentExerciseIndex}`,
+      id: `${tile.id || `tile-${index}`}-${propExerciseIndex}`,
       status: 'default',
     }));
 
@@ -478,23 +481,6 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
     }, 1000);
   };
 
-  const goToNextExercise = () => {
-    if (currentExerciseIndex < allExercises.length - 1) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
-      setCurrentExerciseIndex(currentExerciseIndex + 1);
-    }
-  };
-
-  const goToPrevExercise = () => {
-    if (currentExerciseIndex > 0) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
-      setCurrentExerciseIndex(currentExerciseIndex - 1);
-    }
-  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -624,7 +610,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
                 >
                   {isImage && imageUrl ? (
                     <Image
-                      key={`${tile.id}-${imageUrl}-${currentExerciseIndex}`}
+                      key={`${tile.id}-${imageUrl}-${propExerciseIndex}`}
                       source={{ uri: imageUrl }}
                       style={styles.tileImage}
                       resizeMode="contain"
@@ -642,46 +628,6 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
             </View>
           </ScrollView>
 
-          {/* Navigation Buttons */}
-          {allExercises.length > 1 && (
-            <View style={styles.navigationFooter}>
-          <TouchableOpacity
-            style={[styles.navButton, currentExerciseIndex === 0 && styles.navButtonDisabled]}
-            onPress={goToPrevExercise}
-            disabled={currentExerciseIndex === 0}
-          >
-            <MaterialIcons
-              name="chevron-left"
-              size={24}
-              color={currentExerciseIndex === 0 ? '#CCCCCC' : '#1976D2'}
-            />
-            <View style={{ width: 8 }} />
-            <Text style={[styles.navButtonText, currentExerciseIndex === 0 && styles.navButtonTextDisabled]}>
-              Back
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.exerciseCounter}>
-            {String(currentExerciseIndex + 1)} / {String(allExercises.length)}
-          </Text>
-
-          <TouchableOpacity
-            style={[styles.navButton, currentExerciseIndex === allExercises.length - 1 && styles.navButtonDisabled]}
-            onPress={goToNextExercise}
-            disabled={currentExerciseIndex === allExercises.length - 1}
-          >
-            <Text style={[styles.navButtonText, currentExerciseIndex === allExercises.length - 1 && styles.navButtonTextDisabled]}>
-              Next
-            </Text>
-            <View style={{ width: 8 }} />
-            <MaterialIcons
-              name="chevron-right"
-              size={24}
-              color={currentExerciseIndex === allExercises.length - 1 ? '#CCCCCC' : '#1976D2'}
-            />
-          </TouchableOpacity>
-            </View>
-          )}
         </>
       )}
 

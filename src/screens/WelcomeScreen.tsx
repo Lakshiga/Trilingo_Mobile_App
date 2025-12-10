@@ -1,17 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Image,
   Linking,
-  SafeAreaView,
+  Dimensions,
+  Animated,
+  Easing,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
-import { useResponsive } from '../utils/responsive';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import LottieView from 'lottie-react-native';
+// If useResponsive is in a different path, adjust accordingly
+import { useResponsive } from '../utils/responsive'; 
+
+const { width, height } = Dimensions.get('window');
 
 const TERMS_LINKS = {
   privacy: 'https://example.com/privacy',
@@ -22,188 +26,279 @@ const TERMS_LINKS = {
 const WelcomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const responsive = useResponsive();
-
   const styles = getStyles(responsive);
 
+  // Blue curve animation (slide up from bottom)
+  // Start from below the screen (positive value pushes it down)
+  const curveTranslateY = useRef(new Animated.Value(width * 1.5)).current;
   
+  // Lottie animation ref
+  const familyLottieRef = useRef<LottieView>(null);
+
+  const animateCircleUp = () => {
+    // Reset to bottom position first
+    curveTranslateY.setValue(width * 1.5);
+    
+    // Animate curve sliding up from bottom
+    Animated.timing(curveTranslateY, {
+      toValue: 0,
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    
+    // Start Lottie animation
+    familyLottieRef.current?.play();
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      // Animate when screen comes into focus (including when navigating back)
+      animateCircleUp();
+    }, [])
+  );
 
   const openLink = (url: string) => {
     Linking.openURL(url).catch(console.warn);
   };
 
-  return (
-    <LinearGradient
-  colors={['rgb(248, 248, 248)', 'rgb(21, 21, 21)']}
-  style={styles.gradient}>
-      <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.heading}>Welcome to Q-bit</Text>
-        <Text style={styles.description}>
-          We help parents around the world raise children with ease
-        </Text>
+  const handleGetStarted = () => {
+    // Animate curve sliding down before navigation
+    Animated.timing(curveTranslateY, {
+      toValue: width * 1.5,
+      duration: 500,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      navigation.navigate('StepsAnimation');
+    });
+  };
 
-        <View style={styles.animationWrapper}>
-          <View style={styles.characterWrapper}>
-            <Image
-              source={require('../../assets/elephant1.gif')}
-              resizeMode="contain"
-              style={styles.character}
-            />
-          </View>
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      {/* --- TOP SECTION (White Background) --- */}
+      <View style={styles.topSection}>
+        
+        {/* Title & Description */}
+        <View style={styles.textContainer}>
+          <Text style={styles.heading}>Welcome to <Text style={styles.brandColor}>Q-bit</Text></Text>
+          <Text style={styles.description}>
+            We help parents around the world raise children with ease
+          </Text>
         </View>
 
-        <View style={styles.buttonsContainer}>
+        {/* Family Lottie Animation */}
+        <View style={styles.imageContainer}>
+          <LottieView
+            ref={familyLottieRef}
+            source={require('../../assets/animations/family.json')}
+            style={styles.character}
+            autoPlay={true}
+            loop={true}
+            speed={1}
+          />
+        </View>
+      </View>
+
+      {/* --- BOTTOM SECTION (Blue Curve Background) --- */}
+      <View style={styles.bottomSectionContainer}>
+        {/* The Blue Curved Background */}
+        <Animated.View 
+          style={[
+            styles.blueCurveBackground,
+            {
+              transform: [{ translateY: curveTranslateY }],
+            },
+          ]} 
+        />
+
+        {/* Content inside the Blue Section */}
+        <View style={styles.bottomContent}>
+          
+          {/* Primary Button */}
           <TouchableOpacity
             style={styles.primaryButton}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('StepsAnimation')}
+            onPress={handleGetStarted}
           >
             <Text style={styles.primaryButtonText}>Get started</Text>
           </TouchableOpacity>
 
+          {/* Login Option */}
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.secondaryButtonText}>I already have an account-<Text style={styles.registerHighlight}>Login</Text></Text>
+            <Text style={styles.secondaryButtonText}>
+              I already have an account? <Text style={styles.registerHighlight}>Log in</Text>
+            </Text>
           </TouchableOpacity>
-        </View>
 
-        <View style={styles.termsContainer}>
-          <Text style={styles.termsText}>By continuing you accept our: </Text>
-          <Text style={styles.linksRow}>
-            <Text style={styles.linkText} onPress={() => openLink(TERMS_LINKS.privacy)}>
-              Privacy policy
-            </Text>
-            <Text style={styles.termsText}>, </Text>
-            <Text style={styles.linkText} onPress={() => openLink(TERMS_LINKS.terms)}>
-              Terms of use
-            </Text>
-            <Text style={styles.termsText}> and </Text>
-            <Text style={styles.linkText} onPress={() => openLink(TERMS_LINKS.subscription)}>
-              Subscription terms
-            </Text>
-          </Text>
+          {/* Terms and Links */}
+          <View style={styles.termsContainer}>
+            <Text style={styles.termsText}>By continuing you accept our:</Text>
+            <View style={styles.linksRow}>
+              <TouchableOpacity onPress={() => openLink(TERMS_LINKS.privacy)}>
+                <Text style={styles.linkText}>Privacy Policy</Text>
+              </TouchableOpacity>
+              <Text style={styles.termsText}>, </Text>
+              <TouchableOpacity onPress={() => openLink(TERMS_LINKS.terms)}>
+                <Text style={styles.linkText}>Terms</Text>
+              </TouchableOpacity>
+              <Text style={styles.termsText}> & </Text>
+              <TouchableOpacity onPress={() => openLink(TERMS_LINKS.subscription)}>
+                <Text style={styles.linkText}>Subscription</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
         </View>
-      </SafeAreaView>
-    </LinearGradient>
+      </View>
+    </View>
   );
 };
 
 const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
   StyleSheet.create({
-    gradient: {
-      flex: 1,
-    },
     container: {
       flex: 1,
+      backgroundColor: '#FFFFFF', // Top half base color
+    },
+    
+    // --- TOP SECTION STYLES ---
+    topSection: {
+      flex: 0.6, // Occupies top 60%
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: responsive.hp(8),
+      zIndex: 1,
+    },
+    textContainer: {
       alignItems: 'center',
       paddingHorizontal: responsive.wp(8),
-      paddingBottom: responsive.hp(4),
+      marginBottom: responsive.hp(1.5),
     },
     heading: {
-      marginTop: responsive.hp(10),
-      fontSize: responsive.wp(10),
-      color: '#413939ff',
-      fontWeight: '900',
+      fontSize: responsive.wp(9), // slightly smaller for elegance
+      color: '#1A202C', // Dark Slate
+      fontWeight: '800',
       textAlign: 'center',
-      marginBottom: responsive.hp(1),
+      marginBottom: responsive.hp(0.5),
+    },
+    brandColor: {
+      color: '#002D62', // Matches Splash Screen Blue
     },
     description: {
-      marginTop: responsive.hp(2),
-      fontSize: responsive.wp(4.2),
-      color: 'rgba(0, 0, 0, 0.85)',
+      fontSize: responsive.wp(4),
+      color: '#718096', // Cool Gray
       textAlign: 'center',
-      marginBottom: responsive.hp(4),
+      lineHeight: responsive.wp(6),
     },
-    animationWrapper: {
-      flex: 1,
+    imageContainer: {
+      width: responsive.wp(90),
+      height: responsive.wp(90),
       justifyContent: 'center',
       alignItems: 'center',
-      width: '100%',
-    },
-    characterWrapper: {
-      width: responsive.wp(75),
-      height: responsive.wp(75),
-      borderRadius: responsive.wp(27.5),
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(255,255,255,0.08)',
     },
     character: {
-      width: '200%',
-      height: '200%',
-    },
-    sparkle: {
-      position: 'absolute',
-      width: responsive.wp(4),
-      height: responsive.wp(4),
-      borderRadius: responsive.wp(2),
-      backgroundColor: '#F8F0FF',
-    },
-    sparkleLeft: {
-      top: responsive.hp(25),
-      left: responsive.wp(18),
-    },
-    sparkleRight: {
-      top: responsive.hp(20),
-      right: responsive.wp(18),
-    },
-    buttonsContainer: {
       width: '100%',
-      marginBottom: responsive.hp(3),
+      height: '100%',
     },
+
+    // --- BOTTOM SECTION STYLES ---
+    bottomSectionContainer: {
+      flex: 0.4, // Occupies bottom 40%
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    // The Curve Shape
+    blueCurveBackground: {
+      position: 'absolute',
+      backgroundColor: '#002D62', // Professional Deep Royal Blue
+      width: width * 1.5, // Wider than screen to create gentle curve
+      height: width * 1.5,
+      borderRadius: width * 0.75, // Perfect circle
+      top: 0, // Starts at the beginning of this section container
+      alignSelf: 'center',
+      // Shadow for depth
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -5 },
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      elevation: 10,
+    },
+    bottomContent: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'center', // Centers buttons vertically in the blue area
+      alignItems: 'center',
+      paddingHorizontal: responsive.wp(8),
+      paddingTop: responsive.hp(4), // Push content down a bit into the curve
+    },
+
+    // --- BUTTONS & LINKS ---
     primaryButton: {
-      backgroundColor: 'rgb(199, 119, 119)',
+      backgroundColor: '#FFFFFF', // White button stands out on Blue bg
+      width: '100%',
       paddingVertical: responsive.hp(2),
-      borderRadius: responsive.wp(7),
+      borderRadius: responsive.wp(4),
       alignItems: 'center',
       marginBottom: responsive.hp(2),
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: responsive.hp(0.6) },
+      shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.2,
-      shadowRadius: responsive.wp(2),
+      shadowRadius: 4,
       elevation: 5,
     },
     primaryButtonText: {
-      color: '#FFFFFF',
-      fontWeight: '700',
-      fontSize: responsive.wp(4.8),
+      color: '#002D62', // Blue text
+      fontWeight: '800',
+      fontSize: responsive.wp(4.5),
+      textTransform: 'uppercase',
+      letterSpacing: 1,
     },
     secondaryButton: {
       alignItems: 'center',
-      paddingVertical: responsive.hp(1.5),
+      paddingVertical: responsive.hp(1),
+      marginBottom: responsive.hp(3),
     },
     secondaryButtonText: {
-      color: '#FFFFFF',
-      fontSize: responsive.wp(4.4),
-      fontWeight: '600',
+      color: '#A0AEC0', // Light Gray
+      fontSize: responsive.wp(3.8),
+      fontWeight: '500',
     },
+    registerHighlight: {
+      color: '#43BCCD', // Cyan/Teal for "Log in" pop
+      fontWeight: 'bold',
+      textDecorationLine: 'underline',
+    },
+
+    // --- FOOTER LINKS ---
     termsContainer: {
-      width: '100%',
+      alignItems: 'center',
+      position: 'absolute',
+      bottom: responsive.hp(3), // Stick to very bottom
     },
     termsText: {
-      color: 'rgba(255,255,255,0.8)',
-      fontSize: responsive.wp(3.4),
+      color: 'rgba(255,255,255,0.6)', // Semi-transparent white
+      fontSize: responsive.wp(3),
       textAlign: 'center',
     },
     linksRow: {
-      color: 'rgba(255,255,255,0.8)',
-      fontSize: responsive.wp(3.4),
-      textAlign: 'center',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
       marginTop: responsive.hp(0.5),
     },
     linkText: {
       color: '#FFFFFF',
-      textDecorationLine: 'underline',
+      fontSize: responsive.wp(3),
       fontWeight: '600',
-    },
-    registerHighlight: {
-    color: '#43BCCD',
-    fontWeight: 'bold',
+      textDecorationLine: 'underline',
     },
   });
 
 export default WelcomeScreen;
-
-

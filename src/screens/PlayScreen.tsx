@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { Language } from '../utils/translations';
 import { renderActivityByTypeId, isActivityTypeSupported } from '../components/activity-types';
+import apiService from '../services/api';
 
 type PlayScreenRouteParams = {
   activityId: number;
@@ -23,6 +24,11 @@ const PlayScreen: React.FC = () => {
   const activityTypeId = params.activityTypeId;
   const activityTitle = params.activityTitle;
   
+  const [exerciseCount, setExerciseCount] = useState(0);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [loadingExercises, setLoadingExercises] = useState(true);
+  const [exerciseCompleted, setExerciseCompleted] = useState(false);
+  
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const currentLang: string = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
 
@@ -31,10 +37,55 @@ const PlayScreen: React.FC = () => {
     ? activityTitle.trim() 
     : 'Activity';
 
+  // Fetch exercise count
+  useEffect(() => {
+    const fetchExerciseCount = async () => {
+      if (!activityId) {
+        setLoadingExercises(false);
+        return;
+      }
+
+      try {
+        setLoadingExercises(true);
+        const exercises = await apiService.getExercisesByActivityId(activityId);
+        if (exercises && exercises.length > 0) {
+          setExerciseCount(exercises.length);
+        } else {
+          setExerciseCount(0);
+        }
+      } catch (error) {
+        console.error('Error fetching exercises:', error);
+        setExerciseCount(0);
+      } finally {
+        setLoadingExercises(false);
+      }
+    };
+
+    fetchExerciseCount();
+  }, [activityId]);
+
   if (!activityId || !activityTypeId) {
     navigation.goBack();
     return null;
   }
+
+  const handleNextExercise = () => {
+    if (currentExerciseIndex < exerciseCount - 1) {
+      setCurrentExerciseIndex(prev => prev + 1);
+      setExerciseCompleted(false);
+    }
+  };
+
+  const handlePrevExercise = () => {
+    if (currentExerciseIndex > 0) {
+      setCurrentExerciseIndex(prev => prev - 1);
+      setExerciseCompleted(false);
+    }
+  };
+
+  const handleExerciseComplete = () => {
+    setExerciseCompleted(true);
+  };
 
   // Check if activity type is supported
   if (!isActivityTypeSupported(activityTypeId)) {
@@ -69,9 +120,16 @@ const PlayScreen: React.FC = () => {
         >
           <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {displayTitle || 'Activity'}
-        </Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {displayTitle || 'Activity'}
+          </Text>
+          {exerciseCount > 1 && (
+            <Text style={styles.exerciseCounter}>
+              {currentExerciseIndex + 1} / {exerciseCount}
+            </Text>
+          )}
+        </View>
         <View style={{ width: 40 }} /> {/* Spacer for balance */}
       </View>
 
@@ -90,8 +148,30 @@ const PlayScreen: React.FC = () => {
             const activityComponent = renderActivityByTypeId(activityTypeId, {
               content: null, // Components will fetch their own data using activityId
               currentLang: currentLang as any,
-              onComplete: () => navigation.goBack(),
+              onComplete: () => {
+                // When all exercises are done, go back
+                if (currentExerciseIndex === exerciseCount - 1) {
+                  navigation.goBack();
+                } else {
+                  handleExerciseComplete();
+                }
+              },
               activityId: activityId,
+              currentExerciseIndex: currentExerciseIndex,
+              onExerciseComplete: () => {
+                // Move to next exercise automatically
+                if (currentExerciseIndex < exerciseCount - 1) {
+                  setCurrentExerciseIndex(prev => prev + 1);
+                  setExerciseCompleted(false);
+                } else {
+                  // Last exercise, go back
+                  navigation.goBack();
+                }
+              },
+              onExit: () => {
+                // Always exit/go back when Exit button is clicked
+                navigation.goBack();
+              },
             });
 
             if (!activityComponent) {
@@ -112,6 +192,60 @@ const PlayScreen: React.FC = () => {
           }
         })()}
       </View>
+
+      {/* Bottom Navigation Bar */}
+      {exerciseCount > 1 && (
+        <View style={styles.bottomNavBar}>
+          <TouchableOpacity
+            style={[
+              styles.bottomNavButton,
+              currentExerciseIndex === 0 && styles.bottomNavButtonDisabled
+            ]}
+            onPress={handlePrevExercise}
+            disabled={currentExerciseIndex === 0 || loadingExercises}
+          >
+            <MaterialIcons 
+              name="arrow-back" 
+              size={24} 
+              color={currentExerciseIndex === 0 ? '#999' : '#000000'} 
+            />
+            <Text style={[
+              styles.bottomNavButtonText,
+              currentExerciseIndex === 0 && styles.bottomNavButtonTextDisabled
+            ]}>
+              Previous
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.bottomNavCenter}>
+            <Text style={styles.bottomNavCounter}>
+              {currentExerciseIndex + 1} / {exerciseCount}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.bottomNavButton,
+              styles.bottomNavButtonNext,
+              (currentExerciseIndex >= exerciseCount - 1) && styles.bottomNavButtonDisabled
+            ]}
+            onPress={handleNextExercise}
+            disabled={currentExerciseIndex >= exerciseCount - 1 || loadingExercises}
+          >
+            <Text style={[
+              styles.bottomNavButtonText,
+              (currentExerciseIndex >= exerciseCount - 1) && styles.bottomNavButtonTextDisabled
+            ]}>
+              Next
+            </Text>
+            <MaterialIcons 
+              name="arrow-forward" 
+              size={24} 
+              color={(currentExerciseIndex >= exerciseCount - 1) ? '#999' : '#000000'} 
+            />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -144,16 +278,83 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 20,
   },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginHorizontal: 10,
+  },
+  exerciseCounter: {
+    fontSize: 14,
+    color: '#FFD700',
+    marginTop: 2,
+    fontWeight: '600',
   },
   contentContainer: {
     flex: 1,
+    paddingBottom: 90, // Add padding to prevent content from being hidden behind buttons
+  },
+  bottomNavBar: {
+    position: 'absolute',
+    bottom: 20, // Position higher from bottom
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1976D2',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    marginHorizontal: 10, // Add margin on sides
+    borderRadius: 15, // Rounded corners
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  bottomNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    gap: 8,
+    minWidth: 120,
+  },
+  bottomNavButtonNext: {
+    backgroundColor: '#FFFFFF',
+  },
+  bottomNavButtonDisabled: {
+    opacity: 0.4,
+    backgroundColor: '#FFFFFF',
+  },
+  bottomNavButtonText: {
+    color: '#000000',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  bottomNavButtonTextDisabled: {
+    color: '#999',
+  },
+  bottomNavCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomNavCounter: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
   },
   errorContainer: {
     flex: 1,
