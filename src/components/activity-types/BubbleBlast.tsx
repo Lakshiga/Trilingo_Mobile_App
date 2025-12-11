@@ -351,8 +351,6 @@ const BubbleBlast: React.FC<ActivityComponentProps> = ({
   const playSound = async (soundName: string) => {
     try {
       // For now, we'll use system sounds or skip if not available
-      // In production, you'd load actual sound files
-      console.log(`Playing sound: ${soundName}`);
     } catch (error) {
       console.error('Error playing sound:', error);
     }

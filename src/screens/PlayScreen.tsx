@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment } from 'react';
+import React, { useState, useEffect, Fragment, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Dimensions, StatusBar, SafeAreaView, ActivityIndicator } from 'react-native';
 import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -6,6 +6,7 @@ import { useUser } from '../context/UserContext';
 import { Language } from '../utils/translations';
 import { renderActivityByTypeId, isActivityTypeSupported } from '../components/activity-types';
 import apiService from '../services/api';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +31,8 @@ const PlayScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: PlayScreenRouteParams }, 'params'>>();
   const { currentUser } = useUser();
+  const { requestAudioFocus, resumeBackground } = useBackgroundAudio();
+  const releaseRef = useRef<(() => void) | null>(null);
   
   const params = route.params || {};
   const activityId = params.activityId;
@@ -46,6 +49,15 @@ const PlayScreen: React.FC = () => {
   const displayTitle: string = (activityTitle && typeof activityTitle === 'string' && activityTitle.trim()) 
     ? activityTitle.trim() 
     : 'Activity';
+
+  useEffect(() => {
+    releaseRef.current = requestAudioFocus();
+    return () => {
+      releaseRef.current?.();
+      releaseRef.current = null;
+      resumeBackground().catch(() => null);
+    };
+  }, [requestAudioFocus, resumeBackground]);
 
   useEffect(() => {
     const fetchExerciseCount = async () => {

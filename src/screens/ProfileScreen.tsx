@@ -24,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { getTranslation, Language } from '../utils/translations';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 // Assuming useResponsive exists based on previous context, otherwise standard dimensions work
 const { width } = Dimensions.get('window');
 
@@ -69,6 +70,7 @@ export default function ProfileScreen() {
   const { currentUser, logout, updateUser } = useUser();
   const navigation = useNavigation();
   const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const { isBackgroundEnabled, enableBackground, disableBackground } = useBackgroundAudio();
   
   const [notifications, setNotifications] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -196,12 +198,12 @@ export default function ProfileScreen() {
       color: '#00C9FF', // Cyan
     },
     {
-      id: 'notifications',
-      title: 'Sounds & Alerts',
-      icon: 'bell-ring',
+      id: 'bg-music',
+      title: 'Background Music',
+      icon: 'music',
       type: 'toggle',
-      value: notifications,
-      color: '#FF9F43', // Orange
+      value: isBackgroundEnabled,
+      color: '#7C3AED', // Purple
     },
     {
       id: 'dark-mode',
@@ -234,6 +236,14 @@ export default function ProfileScreen() {
     if (item.type === 'navigate') {
       if (item.id === 'edit-profile') (navigation as any).navigate('EditProfile');
       // Add other navigations here
+    } else if (item.type === 'action') {
+      if (item.id === 'bg-music') {
+        if (isBackgroundEnabled) {
+          disableBackground();
+        } else {
+          enableBackground();
+        }
+      }
     }
   };
 
@@ -324,6 +334,13 @@ export default function ProfileScreen() {
                   onValueChange={(val) => {
                      if (item.id === 'dark-mode') setDarkMode(val);
                      if (item.id === 'notifications') setNotifications(val);
+                     if (item.id === 'bg-music') {
+                       if (val) {
+                         enableBackground();
+                       } else {
+                         disableBackground();
+                       }
+                     }
                   }}
                   trackColor={{ false: '#E2E8F0', true: item.color }}
                   thumbColor={'#FFF'}

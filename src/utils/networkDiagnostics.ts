@@ -7,8 +7,6 @@ export class NetworkDiagnostics {
    */
   static async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      console.log(`Testing connection to: ${API_BASE_URL}`);
-      
       // Test the auth endpoint with invalid credentials (should return 401 if server is running)
       const response = await axios.post(
         `${API_BASE_URL}/auth/login`,
@@ -37,11 +35,9 @@ export class NetworkDiagnostics {
       }
       
       // Try CloudFront first (most reliable in production)
-      console.log('Trying fallback URLs...');
       const cloudFrontUrl = API_CONFIG.PRODUCTION;
       if (cloudFrontUrl !== API_BASE_URL) {
         try {
-          console.log(`Testing fallback URL: ${cloudFrontUrl}`);
           const response = await axios.post(
             `${cloudFrontUrl}/auth/login`,
             { identifier: 'test', password: 'test' },
@@ -64,7 +60,6 @@ export class NetworkDiagnostics {
               message: `CloudFront URL works! Use: ${cloudFrontUrl} (401 = expected for invalid credentials)`,
             };
           }
-          console.log(`CloudFront ${cloudFrontUrl} failed:`, fallbackError.message);
         }
       }
       
@@ -73,7 +68,6 @@ export class NetworkDiagnostics {
         if (url === API_BASE_URL || url === cloudFrontUrl) continue; // Skip ones we already tried
         
         try {
-          console.log(`Testing fallback URL: ${url}`);
           const response = await axios.post(
             `${url}/auth/login`,
             { identifier: 'test', password: 'test' },
@@ -96,7 +90,6 @@ export class NetworkDiagnostics {
               message: `Fallback URL works! Use: ${url} (401 = expected for invalid credentials)`,
             };
           }
-          console.log(`Fallback ${url} failed:`, fallbackError.message);
         }
       }
       
@@ -128,8 +121,6 @@ export class NetworkDiagnostics {
    */
   static async testAuthEndpoint(): Promise<{ success: boolean; message: string }> {
     try {
-      console.log(`Testing auth endpoint: ${API_BASE_URL}/auth/login`);
-      
       const response = await axios.post(
         `${API_BASE_URL}/auth/login`,
         { identifier: 'test', password: 'test' },
@@ -190,14 +181,8 @@ Change the return value in getApiBaseUrl()
 
 // Export a simple test function that can be called from the app
 export const testBackendConnection = async () => {
-  console.log(NetworkDiagnostics.getNetworkInfo());
-  
   const connectionTest = await NetworkDiagnostics.testConnection();
-  console.log('Connection Test:', connectionTest);
-  
   const authTest = await NetworkDiagnostics.testAuthEndpoint();
-  console.log('Auth Test:', authTest);
-  
   return {
     connection: connectionTest,
     auth: authTest,

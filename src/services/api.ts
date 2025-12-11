@@ -127,8 +127,6 @@ class ApiService {
   constructor() {
     // Ensure API_BASE_URL is never undefined
     const baseUrl = API_BASE_URL || API_CONFIG.PRODUCTION;
-    console.log('Initializing API Service with base URL:', baseUrl);
-    
     if (!baseUrl) {
       console.error('API_BASE_URL is undefined! Using fallback:', API_CONFIG.PRODUCTION);
     }
@@ -192,10 +190,7 @@ class ApiService {
       // Check if user is logged in (lazy import to avoid circular dependency)
       const UserStorageClass = await getUserStorage();
       const currentUser = await UserStorageClass.getCurrentUser();
-      console.log('Current user:', currentUser);
-      // Use public API for guest users or when no user is logged in
       const usePublic = !currentUser || currentUser.isGuest === true;
-      console.log('Using public API:', usePublic);
       return usePublic;
     } catch (error) {
       console.error('Error checking user status:', error);
@@ -352,7 +347,6 @@ class ApiService {
 
   async put<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
     try {
-      console.log(`Trying authenticated API for PUT ${endpoint}`);
       const response = await this.api.put<ApiResponse<T>>(endpoint, data);
       return response.data;
     } catch (error: any) {
@@ -363,7 +357,6 @@ class ApiService {
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      console.log(`Trying authenticated API for DELETE ${endpoint}`);
       const response = await this.api.delete<ApiResponse<T>>(endpoint);
       return response.data;
     } catch (error: any) {
@@ -438,7 +431,6 @@ class ApiService {
         
         if (isRetryable && attempt < maxRetries) {
           const delay = retryDelay * Math.pow(2, attempt); // Exponential backoff
-          console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms for status ${status}`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -473,7 +465,6 @@ class ApiService {
         }
         
         // For other endpoints, try authenticated API if public fails with 401/403
-        console.log(`Public API failed for POST ${endpoint}, trying authenticated API...`);
         if (publicError.response?.status === 401 || publicError.response?.status === 403) {
           try {
             const response = await this.retryRequest(
@@ -495,8 +486,6 @@ class ApiService {
     } else {
       // Use authenticated API directly
       try {
-        console.log(`Trying authenticated API for POST ${endpoint}`);
-        
         const response = await this.retryRequest(
           () => this.api.post<T>(endpoint, data),
           3, // max 3 retries
@@ -541,19 +530,13 @@ class ApiService {
           // Fallback to localhost
           uploadBaseUrl = 'https://d3v81eez8ecmto.cloudfront.net/api';
         }
-        
-        console.log('Using direct backend URL for upload (CloudFront detected):', uploadBaseUrl);
       } else {
         // Already using direct backend, use as is
-        console.log('Using current API URL for upload:', uploadBaseUrl);
       }
       
       // Construct the full upload URL
       const uploadEndpoint = '/auth/upload-profile-image';
       const fullUploadUrl = uploadBaseUrl.replace(/\/$/, '') + uploadEndpoint;
-      
-      console.log('Upload endpoint:', uploadEndpoint);
-      console.log('Full upload URL:', fullUploadUrl);
       
       // Get file extension from URI
       let fileExtension = 'jpg';
@@ -596,17 +579,10 @@ class ApiService {
         type: mimeType,
       };
       
-      console.log('File data:', {
-        name: fileData.name,
-        type: fileData.type,
-        uri: imageUri.substring(0, 50) + '...', // Log partial URI
-      });
-      
       formData.append('file', fileData as any);
 
       // Get auth token for the request
       const token = await this.getAuthToken();
-      console.log('Auth token present:', !!token);
       
       // Create a separate axios instance for upload with the direct URL
       const uploadApi = axios.create({
@@ -702,7 +678,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log('User does not have permission to access activities');
         throw error;
       }
       throw this.handleError(error);
@@ -719,7 +694,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access activity ${id}`);
         throw error;
       }
       throw this.handleError(error);
@@ -736,7 +710,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access activities for stage ${stageId}`);
         throw error;
       }
       throw this.handleError(error);
@@ -827,7 +800,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log('User does not have permission to access levels');
         throw error;
       }
       throw this.handleError(error);
@@ -844,7 +816,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access level ${id}`);
         throw error;
       }
       throw this.handleError(error);
@@ -915,8 +886,6 @@ class ApiService {
 
   async getStagesByLevelId(levelId: number): Promise<StageDto[]> {
     try {
-      console.log(`Fetching stages for levelId: ${levelId}`);
-      
       // This endpoint requires authentication (Admin or Parent role)
       // Use authenticated API directly, not public API first
       // Try lowercase first (ASP.NET Core routing may be case-sensitive)
@@ -926,7 +895,6 @@ class ApiService {
       } catch (lowercaseError: any) {
         // If lowercase fails with 404, try uppercase
         if (lowercaseError.response?.status === 404) {
-          console.log(`Trying uppercase route: /Stages/level/${levelId}`);
           response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`, false);
         } else {
           throw lowercaseError;
@@ -934,8 +902,6 @@ class ApiService {
       }
       
       const stages = Array.isArray(response) ? response : [];
-      
-      console.log(`✅ Found ${stages.length} stages for level ${levelId}`);
       
       // Sort by ID to maintain order (matching database order)
       const sortedStages = stages.sort((a, b) => a.id - b.id);

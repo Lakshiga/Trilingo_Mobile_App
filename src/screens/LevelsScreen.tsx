@@ -67,8 +67,6 @@ const LevelsScreen: React.FC = () => {
       } catch (error: any) {
         if (error.message?.includes('403') || error.message?.includes('PERMISSION')) {
           setPermissionDenied(true);
-        } else {
-          console.log('Error loading levels');
         }
         setLevels([]);
       } finally {

@@ -10,6 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { useResponsive } from '../utils/responsive';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 // import apiService from '../services/api'; 
 
 // --- TYPES ---
@@ -44,6 +45,7 @@ const HomeScreen: React.FC = () => {
   const { currentUser } = useUser();
   const responsive = useResponsive();
   const isGuest = currentUser?.isGuest || !currentUser;
+  const { resumeBackground, disableBackground } = useBackgroundAudio();
   
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -77,13 +79,23 @@ const HomeScreen: React.FC = () => {
     fetchData();
   }, []);
 
+  // Start music when user is logged in and on Home; pause if logged out
+  useEffect(() => {
+    if (currentUser) {
+      // Resume only if user has music enabled; resumeBackground respects user setting
+      resumeBackground().catch(() => null);
+    } else {
+      disableBackground().catch(() => null);
+    }
+  }, [currentUser, resumeBackground, disableBackground]);
+
   const handleNavigation = (categoryType: string) => {
     if (isGuest && categoryType !== 'learning') {
       Alert.alert('Locked!', 'Ask your parents to log in!');
       return;
     }
     const routeMap: Record<string, string> = {
-      learning: 'Levels',
+      learning: 'Lessons',
       letters: 'LetterSelection',
       songs: 'Songs',
       videos: 'Videos',

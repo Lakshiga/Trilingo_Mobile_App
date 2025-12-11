@@ -5,6 +5,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { useFonts } from 'expo-font';
+import { BackgroundAudioProvider } from './src/context/BackgroundAudioContext';
 
 // Sync User → Theme context
 const UserThemeSync: React.FC = () => {
@@ -45,7 +46,9 @@ export default function App() {
     <ThemeProvider>
       <UserProvider>
         <UserThemeSync />
-        <AppContent />
+        <BackgroundAudioProvider>
+          <AppContent />
+        </BackgroundAudioProvider>
       </UserProvider>
     </ThemeProvider>
   );

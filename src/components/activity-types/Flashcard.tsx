@@ -133,7 +133,6 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
         }
       });
     } catch (error) {
-      console.log("Audio error", error);
       setIsPlaying(false);
     }
   };
@@ -193,8 +192,16 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
         We rely on the Parent Screen to handle scrolling or safe areas.
         This component fills the "Center Content" area.
       */}
+      
+      {/* --- Reference Title (Top - Outside Card) --- */}
+      {refTitle ? (
+        <View style={styles.referenceTitleContainer}>
+          <Text style={styles.referenceTitleText}>{refTitle}</Text>
+        </View>
+      ) : null}
 
       <Animated.View style={[styles.cardContainer, { transform: [{ scale: scaleAnim }] }]}>
+
         {/* --- Image Area --- */}
         <View style={styles.imageWrapper}>
           {imageUrl ? (
@@ -242,9 +249,10 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     padding: 20,
+    paddingTop: 40,
   },
   centerContainer: {
     flex: 1,
@@ -270,6 +278,22 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E1F5FE',
     borderWidth: 1,
     borderColor: '#F0F0F0',
+  },
+
+  // Reference Title (Top - Outside Card)
+  referenceTitleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E1F5FE',
+  },
+  referenceTitleText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: PRIMARY_COLOR,
+    textAlign: 'center',
   },
 
   // Badge

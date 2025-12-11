@@ -11,8 +11,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
+import { Audio } from 'expo-av';
 import { ActivityComponentProps, MultiLingualText } from './types';
 import { useResponsive } from '../../utils/responsive';
 import { getCloudFrontUrl, getImageUrl as getImageUrlHelper } from '../../utils/awsUrlHelper';
@@ -81,6 +81,11 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   const failRef = useRef<LottieView>(null);
   const congratulationsRef = useRef<LottieView>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Sound states
+  const [congratulationSound, setCongratulationSound] = useState<Audio.Sound | null>(null);
+  const [sadSound, setSadSound] = useState<Audio.Sound | null>(null);
+  const [correctSound, setCorrectSound] = useState<Audio.Sound | null>(null);
 
   // Helper: Get text
   const getText = (content: any): string => {
@@ -103,6 +108,63 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         return getCloudFrontUrl(contentStr);
     }
     return null;
+  };
+
+  const playCongratulationSound = async () => {
+    try {
+      if (congratulationSound) {
+        await congratulationSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/congratulation.wav')
+      );
+      setCongratulationSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setCongratulationSound(null);
+        }
+      });
+    } catch (err) {}
+  };
+
+  const playWrongSound = async () => {
+    try {
+      if (sadSound) {
+        await sadSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/wrong.mp3')
+      );
+      setSadSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setSadSound(null);
+        }
+      });
+    } catch (err) {}
+  };
+
+  const playCorrectSound = async () => {
+    try {
+      if (correctSound) {
+        await correctSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/correct.wav')
+      );
+      setCorrectSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setCorrectSound(null);
+        }
+      });
+    } catch (err) {}
   };
 
   // 1. Fetch Data
@@ -176,7 +238,12 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   // Initial Start
   useEffect(() => {
     startGame();
-    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
+    return () => { 
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (congratulationSound) congratulationSound.unloadAsync();
+      if (sadSound) sadSound.unloadAsync();
+      if (correctSound) correctSound.unloadAsync();
+    };
   }, [propExerciseIndex, currentContent]);
 
   // Handle Retry Button Click
@@ -229,6 +296,8 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   };
 
   const handleMatchSuccess = (selection: string[]) => {
+      playCongratulationSound();
+      playCorrectSound();
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2000);
       if (confettiRef.current) confettiRef.current.play();
@@ -244,6 +313,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   };
 
   const handleMatchFailure = (selection: string[]) => {
+      playWrongSound();
       setShowFail(true);
       setTimeout(() => setShowFail(false), 1500);
       if (failRef.current) failRef.current.play();
@@ -262,6 +332,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
           if (visible.length === 0) {
               if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
               setExerciseCompleted(true);
+              playCongratulationSound();
               setShowCongratulations(true);
               if (congratulationsRef.current) congratulationsRef.current.play();
 
@@ -293,24 +364,14 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
   return (
     <View style={styles.container}>
       
-      {/* --- HEADER --- */}
-      <LinearGradient colors={['#4FC3F7', '#039BE5']} style={styles.header}>
-         <View style={styles.statsRow}>
-            <View style={styles.statBadge}>
-                <Text style={styles.statLabel}>⏰ Time</Text>
-                <Text style={[styles.statValue, timeRemaining < 10 && { color: '#FFEB3B' }]}>
-                    {timeRemaining}s
-                </Text>
-            </View>
-            <View style={styles.statBadge}>
-                <Text style={styles.statLabel}>⭐ Score</Text>
-                <Text style={styles.statValue}>{score}</Text>
-            </View>
-         </View>
-         <Text style={styles.instructionText}>
-             {getText(currentContent.instruction) || "Find 3 matching cards!"}
-         </Text>
-      </LinearGradient>
+      {/* --- HEADER (Simple Instruction) --- */}
+      {getText(currentContent.instruction) ? (
+        <View style={styles.header}>
+          <Text style={styles.instructionText}>
+            {getText(currentContent.instruction)}
+          </Text>
+        </View>
+      ) : null}
 
       {/* --- GAME GRID --- */}
       <View style={styles.gridContainer}>
@@ -378,9 +439,9 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
           <View style={styles.overlay} pointerEvents="none">
              <LottieView
                ref={failRef}
-               source={require('../../../assets/animations/Paul R. Bear Fail.json')}
+               source={require('../../../assets/animations/wrong.json')}
                autoPlay loop={false}
-               style={{ width: 200, height: 200 }}
+               style={{ width: 400, height: 400 }}
              />
           </View>
       )}
@@ -430,43 +491,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  // Header
+  // Header (Simple like Flashcard - one line)
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    elevation: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  statBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
+    width: '100%',
     alignItems: 'center',
-  },
-  statLabel: {
-    color: '#E1F5FE',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  statValue: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E1F5FE',
+    paddingTop: 40,
+    paddingHorizontal: 20,
   },
   instructionText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#039BE5',
     textAlign: 'center',
-    marginTop: 5,
   },
   // Grid
   gridContainer: {

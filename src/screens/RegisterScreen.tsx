@@ -21,7 +21,8 @@ import { getTranslation, Language } from '../utils/translations'; // Ensure this
 import { useResponsive } from '../utils/responsive';
 
 // Age options
-const ADULT_AGE_OPTIONS = ['0-1', '2', '3', '4', '5', '6+'];
+const ADULT_AGE_OPTIONS = ['2-5', '6-8', '9-11', '12-14', '15+'];
+const UNLOCKED_AGE_GROUP = '2-5'; // Only this age group is unlocked
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
@@ -435,20 +436,41 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                   <View style={styles.gridContainer}>
                     {(currentQ.isLanguageSelection ? currentQ.options : ADULT_AGE_OPTIONS)?.map((option) => {
                       const isSelected = userData[currentQ.key as keyof UserData] === option;
+                      // Check if age option is locked (only for age selection)
+                      const isLocked = currentQ.isAgeSelection && option !== UNLOCKED_AGE_GROUP;
+                      
                       return (
                         <TouchableOpacity
                           key={option}
-                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                          style={[
+                            styles.optionButton, 
+                            isSelected && styles.optionButtonSelected,
+                            isLocked && styles.optionButtonLocked
+                          ]}
                           onPress={() => {
+                            if (isLocked) {
+                              Alert.alert('Not Implemented', 'This age group is not yet available.');
+                              return;
+                            }
                             setUserData({ ...userData, [currentQ.key]: option });
                             // No animation on selection - only on continue click
                           }}
-                          activeOpacity={0.7}
+                          activeOpacity={isLocked ? 1 : 0.7}
+                          disabled={isLocked}
                         >
-                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                          <Text style={[
+                            styles.optionText, 
+                            isSelected && styles.optionTextSelected,
+                            isLocked && styles.optionTextLocked
+                          ]}>
                             {option}
                           </Text>
-                          {isSelected && <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />}
+                          {isSelected && !isLocked && (
+                            <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />
+                          )}
+                          {isLocked && (
+                            <MaterialCommunityIcons name="lock" size={16} color="#94A3B8" style={styles.lockIcon} />
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -721,9 +743,16 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     shadowRadius: 4,
     elevation: 5,
   },
+  optionButtonLocked: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+    opacity: 0.6,
+  },
   optionText: { fontSize: responsive.wp(4), color: '#64748B', fontWeight: '600' },
   optionTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
+  optionTextLocked: { color: '#94A3B8', fontWeight: '500' },
   checkmark: { marginLeft: 6 },
+  lockIcon: { marginLeft: 6 },
 
   // Errors
   errorContainer: { marginTop: 10, width: '100%' },

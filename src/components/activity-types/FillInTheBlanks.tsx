@@ -13,6 +13,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
+import { Audio } from 'expo-av';
 import { ActivityComponentProps, Language, MultiLingualText } from './types';
 import { useResponsive } from '../../utils/responsive';
 import { useTheme } from '../../theme/ThemeContext';
@@ -64,6 +65,8 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
   const [exerciseResult, setExerciseResult] = useState<'correct' | 'wrong' | null>(null);
   const successAnimationRef = useRef<LottieView>(null);
   const errorAnimationRef = useRef<LottieView>(null);
+  const [congratulationSound, setCongratulationSound] = useState<Audio.Sound | null>(null);
+  const [sadSound, setSadSound] = useState<Audio.Sound | null>(null);
 
   // Get current exercise data
   const fillData = allExercises[currentExerciseIndex] || (content as FillInTheBlanksContent);
@@ -73,6 +76,44 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
     if (!text) return '';
     const result = text[currentLang] || text.en || text.ta || text.si || '';
     return typeof result === 'string' ? result : String(result || '');
+  };
+
+  const playCongratulationSound = async () => {
+    try {
+      if (congratulationSound) {
+        await congratulationSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/congratulation.wav')
+      );
+      setCongratulationSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setCongratulationSound(null);
+        }
+      });
+    } catch (err) {}
+  };
+
+  const playWrongSound = async () => {
+    try {
+      if (sadSound) {
+        await sadSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/wrong.mp3')
+      );
+      setSadSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setSadSound(null);
+        }
+      });
+    } catch (err) {}
   };
 
   // Get image URL from mediaUrl
@@ -234,6 +275,12 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
     };
 
     fetchExercises();
+    
+    // Cleanup sounds
+    return () => {
+      if (congratulationSound) congratulationSound.unloadAsync();
+      if (sadSound) sadSound.unloadAsync();
+    };
   }, [activityId]);
 
   // Initialize activity when exercise changes
@@ -386,6 +433,7 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
 
       if (allCorrect) {
         setExerciseResult('correct');
+        playCongratulationSound();
         setShowSuccessAnimation(true);
         // Auto play animation
         setTimeout(() => {
@@ -403,6 +451,7 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
         }, 2500);
       } else {
         setExerciseResult('wrong');
+        playWrongSound();
         setShowErrorAnimation(true);
         // Auto play animation
         setTimeout(() => {
@@ -507,7 +556,7 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
           <View style={styles.errorPopupContainer}>
             <LottieView
               ref={errorAnimationRef}
-              source={require('../../../assets/animations/Paul R. Bear Fail.json')}
+              source={require('../../../assets/animations/wrong.json')}
               autoPlay={false}
               loop={false}
               style={styles.popupAnimation}
@@ -529,14 +578,14 @@ const FillInTheBlanks: React.FC<ActivityComponentProps> = ({
         </View>
       </Modal>
 
-      {/* Instruction only - no title */}
-      {fillData?.instruction && (
+      {/* Instruction (Simple like Flashcard and TripleBlast) */}
+      {getText(fillData?.instruction) ? (
         <View style={styles.instructionContainer}>
-          <Text style={styles.instruction}>
-            {getText(fillData.instruction) || ''}
+          <Text style={styles.instructionText}>
+            {getText(fillData.instruction)}
           </Text>
         </View>
-      )}
+      ) : null}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Image at the top */}
@@ -634,15 +683,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   instructionContainer: {
-    marginBottom: 24,
-    paddingHorizontal: 10,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E1F5FE',
+    paddingTop: 40,
+    paddingHorizontal: 20,
   },
-  instruction: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2C3E50',
+  instructionText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#039BE5',
     textAlign: 'center',
-    lineHeight: 24,
   },
   scrollView: {
     flex: 1,

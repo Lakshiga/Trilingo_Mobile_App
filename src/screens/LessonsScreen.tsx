@@ -9,6 +9,8 @@ import {
   Modal,
   StatusBar,
   Dimensions,
+  Image,
+  ImageBackground,
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';

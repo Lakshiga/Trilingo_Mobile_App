@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   renderActivityByTypeId,
   isActivityTypeSupported,
 } from '../components/activity-types';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 
 type DynamicActivityRouteParams = {
   activityId?: number;
@@ -35,6 +36,8 @@ const DynamicActivityScreen: React.FC = () => {
   const route = useRoute<RouteProp<{ params: DynamicActivityRouteParams }, 'params'>>();
   const { theme } = useTheme();
   const { currentUser } = useUser();
+  const { requestAudioFocus, resumeBackground } = useBackgroundAudio();
+  const releaseRef = useRef<(() => void) | null>(null);
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const currentLang = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
 
@@ -46,6 +49,15 @@ const DynamicActivityScreen: React.FC = () => {
   const [content, setContent] = useState<any>(storyData ?? conversationData ?? null);
   const [loading, setLoading] = useState<boolean>(!!activityId);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    releaseRef.current = requestAudioFocus();
+    return () => {
+      releaseRef.current?.();
+      releaseRef.current = null;
+      resumeBackground().catch(() => null);
+    };
+  }, [requestAudioFocus, resumeBackground]);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,8 +85,6 @@ const DynamicActivityScreen: React.FC = () => {
           if (fetchedActivity.details_JSON) {
             try {
               const parsed = JSON.parse(fetchedActivity.details_JSON);
-              console.log('DynamicActivityScreen: Parsed JSON content keys:', Object.keys(parsed));
-              console.log('DynamicActivityScreen: Numeric keys count:', Object.keys(parsed).filter(k => /^\d+$/.test(k)).length);
               setContent(parsed);
             } catch (parseError) {
               console.warn('Failed to parse activity JSON', parseError);
@@ -265,11 +275,6 @@ const DynamicActivityScreen: React.FC = () => {
       const activityContent = buildActivityContent(typeId);
       
       // Debug: Log content for Flashcard (ID: 1)
-      if (typeId === 1) {
-        console.log('DynamicActivityScreen: Flashcard content being passed:', JSON.stringify(activityContent, null, 2));
-        console.log('DynamicActivityScreen: Raw content state:', JSON.stringify(content, null, 2));
-      }
-      
       const renderedComponent = renderActivityByTypeId(typeId, {
         content: activityContent,
         currentLang: currentLang as any,
