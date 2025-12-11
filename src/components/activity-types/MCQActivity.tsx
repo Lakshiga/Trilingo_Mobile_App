@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,457 +6,619 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
+  ActivityIndicator,
+  Dimensions,
+  Animated,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityComponentProps, Language, MultiLingualText } from './types';
+import LottieView from 'lottie-react-native';
+import { ActivityComponentProps, MultiLingualText } from './types';
 import { useResponsive } from '../../utils/responsive';
-import { useTheme } from '../../theme/ThemeContext';
+import { getCloudFrontUrl, getImageUrl as getImageUrlHelper } from '../../utils/awsUrlHelper';
+import apiService from '../../services/api';
 
-type ContentType = 'text' | 'image' | 'audio';
+const { width } = Dimensions.get('window');
 
+// --- THEME COLORS ---
+const COLORS = {
+  bg: '#E3F2FD',
+  card: '#FFFFFF',
+  primary: '#1565C0',
+  accent: '#FFCA28',
+  success: '#4CAF50',
+  error: '#F44336',
+  text: '#37474F',
+  optionBorder: '#BBDEFB',
+};
+
+// --- INTERFACES MATCHING YOUR JSON ---
 interface QuestionItem {
-  type: ContentType;
-  content: {
-    ta?: string;
-    en?: string;
-    si?: string;
-    default?: string;
-  };
+  type: 'text' | 'image' | 'audio';
+  content: MultiLingualText;
 }
 
 interface Option {
-  content: {
-    ta?: string;
-    en?: string;
-    si?: string;
-    default?: string;
-  };
+  content: MultiLingualText;
   isCorrect: boolean;
 }
 
-interface Question {
+interface QuestionObj {
   questionId: string;
   question: QuestionItem;
-  answerType: ContentType;
+  answerType: 'text' | 'image' | 'audio';
   options: Option[];
 }
 
-interface MCQContent {
+interface MCQData {
   title: MultiLingualText;
   instruction: MultiLingualText;
-  questions: Question[];
+  questions: QuestionObj[];
 }
 
 const MCQActivity: React.FC<ActivityComponentProps> = ({
-  content,
   currentLang = 'ta',
+  activityId,
   onComplete,
+  currentExerciseIndex = 0,
+  onExerciseComplete,
 }) => {
   const responsive = useResponsive();
-  const { theme } = useTheme();
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [score, setScore] = useState(0);
-  const [userSelection, setUserSelection] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState<'default' | 'correct' | 'incorrect' | 'completed'>('default');
+  
+  const [loading, setLoading] = useState(true);
+  const [questionData, setQuestionData] = useState<QuestionObj | null>(null);
+  const [instruction, setInstruction] = useState<string>('');
+  
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
+  const [status, setStatus] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  
+  // Animation for feedback
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const mcqData = content as MCQContent;
-
-  const getText = (text: MultiLingualText | { [key: string]: string | undefined } | undefined): string => {
-    if (!text) return '';
-    if (typeof text === 'object') {
-      return text[currentLang] || text.en || text.ta || text.si || '';
-    }
-    return '';
-  };
-
-  const currentQuestion = mcqData?.questions?.[currentQuestionIndex];
-
-  const selectOption = (optionIndex: number) => {
-    if (feedback !== 'default') return;
-
-    setUserSelection(optionIndex);
-    const selectedOption = currentQuestion?.options[optionIndex];
-
-    if (selectedOption?.isCorrect) {
-      setScore(score + 1);
-      setFeedback('correct');
-    } else {
-      setFeedback('incorrect');
-    }
-  };
-
-  const goToNextQuestion = () => {
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < (mcqData?.questions?.length || 0)) {
-      setCurrentQuestionIndex(nextIndex);
-      setUserSelection(null);
-      setFeedback('default');
-    } else {
-      setFeedback('completed');
-    }
-  };
-
-  const restartGame = () => {
-    setCurrentQuestionIndex(0);
-    setScore(0);
-    setUserSelection(null);
-    setFeedback('default');
-  };
-
-  const playSound = async (content: { [key: string]: string | undefined }) => {
-    const audioPath = content[currentLang] || content.en || content.ta;
-    if (!audioPath) return;
-
-    try {
-      if (sound) {
-        await sound.unloadAsync();
-      }
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioPath },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
-    } catch (error) {
-      console.error('Error playing audio:', error);
-    }
-  };
-
+  // --- 1. DATA FETCHING ---
   useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync().catch(console.warn);
+    const fetchData = async () => {
+      if (!activityId) return;
+      
+      try {
+        setLoading(true);
+        const exercises = await apiService.getExercisesByActivityId(activityId);
+        
+        if (exercises && exercises.length > 0) {
+          const sorted = exercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+          const currentExercise = sorted[currentExerciseIndex];
+
+          if (currentExercise && currentExercise.jsonData) {
+            const parsed: MCQData = JSON.parse(currentExercise.jsonData);
+            
+            // Set Instruction
+            setInstruction(getText(parsed.instruction));
+
+            // Extract the question (Assuming 1 question per exercise step for simplicity)
+            if (parsed.questions && parsed.questions.length > 0) {
+              setQuestionData(parsed.questions[0]);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("MCQ Load Error", error);
+      } finally {
+        setLoading(false);
       }
     };
-  }, [sound]);
 
-  const renderQuestionContent = (questionItem: QuestionItem) => {
-    const content = getText(questionItem.content);
+    fetchData();
+    
+    // Cleanup Sound
+    return () => {
+      if (sound) sound.unloadAsync();
+    };
+  }, [activityId, currentExerciseIndex]);
 
-    if (questionItem.type === 'text') {
-      return <Text style={styles.questionText}>{content}</Text>;
-    } else if (questionItem.type === 'image') {
-      return (
-        <Image
-          source={{ uri: content }}
-          style={styles.questionImage}
-          resizeMode="contain"
-        />
-      );
-    } else if (questionItem.type === 'audio') {
-      return (
-        <TouchableOpacity
-          style={styles.audioButton}
-          onPress={() => playSound(questionItem.content)}
-        >
-          <MaterialIcons name="volume-up" size={40} color="#FFFFFF" />
-          <Text style={styles.audioLabel}>Play Question</Text>
-        </TouchableOpacity>
-      );
+  // --- 2. HELPER FUNCTIONS ---
+  
+  const getText = (obj: MultiLingualText | undefined): string => {
+    if (!obj) return '';
+    // @ts-ignore
+    return obj[currentLang] || obj.en || obj.ta || '';
+  };
+
+  const getMediaUrl = (obj: MultiLingualText | undefined | { [key: string]: any }): string | null => {
+    if (!obj) return null;
+    
+    // Use the robust getImageUrlHelper function that handles multilingual objects properly
+    try {
+      const url = getImageUrlHelper(obj, currentLang as 'en' | 'ta' | 'si');
+      if (url) {
+        console.log('MCQ Image URL resolved:', url);
+        return url;
+      }
+    } catch (error) {
+      console.error('MCQ Image URL resolution error:', error);
     }
+    
+    // Fallback: try direct text extraction
+    const pathFromText = getText(obj as MultiLingualText | undefined);
+    if (pathFromText && (pathFromText.includes('/') || pathFromText.includes('.'))) {
+      const fallbackUrl = pathFromText.startsWith('http') ? pathFromText : getCloudFrontUrl(pathFromText);
+      console.log('MCQ Image URL fallback:', fallbackUrl);
+      return fallbackUrl;
+    }
+
+    console.warn('MCQ Image URL not found for:', obj);
     return null;
   };
 
-  const renderOption = (option: Option, index: number) => {
-    const content = getText(option.content);
-    const isSelected = userSelection === index;
-    const showFeedback = feedback !== 'default';
-
-    let optionStyle = styles.option;
-    if (isSelected && showFeedback) {
-      optionStyle = option.isCorrect ? styles.optionCorrect : styles.optionIncorrect;
-    } else if (isSelected) {
-      optionStyle = styles.optionSelected;
+  const playSound = async (url: string) => {
+    try {
+      if (sound) await sound.unloadAsync();
+      const { sound: newSound } = await Audio.Sound.createAsync({ uri: url });
+      setSound(newSound);
+      await newSound.playAsync();
+    } catch (err) {
+      console.log("Audio Error", err);
     }
+  };
+
+  // --- 3. HANDLERS ---
+
+  const handleSelect = (index: number) => {
+    if (status === 'correct') return; // Prevent changing if already correct
+    setSelectedOptionIndex(index);
+    setStatus('idle'); // Reset status on new selection
+  };
+
+  const handleCheck = () => {
+    if (selectedOptionIndex === null || !questionData) return;
+
+    const isCorrect = questionData.options[selectedOptionIndex].isCorrect;
+
+    if (isCorrect) {
+      setStatus('correct');
+      // Success Animation
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.1, duration: 100, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true })
+      ]).start();
+
+      // Navigate after delay
+      setTimeout(() => {
+        if (onExerciseComplete) onExerciseComplete();
+        else if (onComplete) onComplete();
+      }, 1500);
+    } else {
+      setStatus('wrong');
+      // Simple shake or vibration could go here
+    }
+  };
+
+  // --- 4. RENDERERS ---
+
+  const renderQuestionContent = () => {
+    if (!questionData) return null;
+    const { type, content } = questionData.question;
+    const mediaUrl = getMediaUrl(content);
+
+    switch (type) {
+      case 'image':
+        return mediaUrl ? (
+          <View style={styles.questionImageContainer}>
+            <Image 
+              source={{ uri: mediaUrl }} 
+              style={styles.questionImage} 
+              resizeMode="contain"
+              onError={(error) => {
+                console.error('MCQ Question Image Error:', error.nativeEvent.error, 'URL:', mediaUrl);
+              }}
+              onLoad={() => {
+                console.log('MCQ Question Image Loaded:', mediaUrl);
+              }}
+            />
+          </View>
+        ) : (
+          <View style={styles.questionImageContainer}>
+            <View style={styles.imagePlaceholder}>
+              <MaterialIcons name="broken-image" size={40} color="#B0BEC5" />
+              <Text style={styles.imageErrorText}>Image not available</Text>
+            </View>
+          </View>
+        );
+      
+      case 'audio':
+        return (
+          <TouchableOpacity 
+            style={styles.bigAudioButton} 
+            onPress={() => mediaUrl && playSound(mediaUrl)}
+          >
+            <MaterialIcons name="volume-up" size={40} color="#FFF" />
+            <Text style={styles.audioText}>Listen to Question</Text>
+          </TouchableOpacity>
+        );
+
+      case 'text':
+      default:
+        return (
+          <Text style={styles.questionText}>
+            {getText(content)}
+          </Text>
+        );
+    }
+  };
+
+  const renderOptionItem = (option: Option, index: number, answerType: string) => {
+    const isSelected = selectedOptionIndex === index;
+    let borderColor = COLORS.optionBorder;
+    let bgColor = COLORS.card;
+    let icon = null;
+
+    if (isSelected) {
+      if (status === 'idle') {
+        borderColor = COLORS.primary;
+        bgColor = '#E3F2FD';
+      } else if (status === 'correct') {
+        borderColor = COLORS.success;
+        bgColor = '#E8F5E9';
+        icon = <MaterialIcons name="check-circle" size={24} color={COLORS.success} />;
+      } else if (status === 'wrong') {
+        borderColor = COLORS.error;
+        bgColor = '#FFEBEE';
+        icon = <MaterialIcons name="cancel" size={24} color={COLORS.error} />;
+      }
+    }
+
+    const mediaUrl = getMediaUrl(option.content);
 
     return (
       <TouchableOpacity
         key={index}
-        style={[optionStyle, currentQuestion?.answerType === 'text' ? styles.optionText : styles.optionMedia]}
-        onPress={() => selectOption(index)}
-        disabled={feedback !== 'default'}
+        activeOpacity={0.8}
+        style={[
+          styles.optionCard, 
+          { borderColor, backgroundColor: bgColor, borderWidth: isSelected ? 3 : 1 }
+        ]}
+        onPress={() => handleSelect(index)}
       >
-        {currentQuestion?.answerType === 'text' && (
-          <Text style={styles.optionTextContent}>{content}</Text>
-        )}
-        {currentQuestion?.answerType === 'image' && (
-          <Image source={{ uri: content }} style={styles.optionImage} resizeMode="cover" />
-        )}
-        {currentQuestion?.answerType === 'audio' && (
-          <TouchableOpacity
-            style={styles.optionAudioButton}
-            onPress={() => playSound(option.content)}
-          >
-            <MaterialIcons name="volume-up" size={30} color="#FFFFFF" />
-            <Text style={styles.optionAudioLabel}>Play</Text>
-          </TouchableOpacity>
-        )}
+        {/* Render Option Content based on Answer Type */}
+        <View style={styles.optionContentWrapper}>
+          {answerType === 'image' && mediaUrl ? (
+            <Image 
+              source={{ uri: mediaUrl }} 
+              style={styles.optionImage} 
+              resizeMode="contain"
+              onError={(error) => {
+                console.error('MCQ Option Image Error:', error.nativeEvent.error, 'URL:', mediaUrl);
+              }}
+              onLoad={() => {
+                console.log('MCQ Option Image Loaded:', mediaUrl);
+              }}
+            />
+          ) : answerType === 'image' && !mediaUrl ? (
+            <View style={styles.optionImagePlaceholder}>
+              <MaterialIcons name="image" size={24} color="#B0BEC5" />
+            </View>
+          ) : answerType === 'audio' ? (
+            <View style={styles.optionAudioRow}>
+               <TouchableOpacity 
+                 style={styles.miniPlayBtn} 
+                 onPress={() => mediaUrl && playSound(mediaUrl)}
+               >
+                 <MaterialIcons name="play-arrow" size={24} color="#FFF" />
+               </TouchableOpacity>
+               <Text style={styles.optionTextLabel}>Option {index + 1}</Text>
+            </View>
+          ) : (
+            <Text style={[styles.optionText, isSelected && { fontWeight: 'bold', color: COLORS.primary }]}>
+              {getText(option.content)}
+            </Text>
+          )}
+        </View>
+
+        {/* Selection/Status Indicator */}
+        {icon || (isSelected && <View style={styles.radioSelected} />) || <View style={styles.radioUnselected} />}
       </TouchableOpacity>
     );
   };
 
-  if (!mcqData || !currentQuestion) {
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>No MCQ content available</Text>
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
 
-  if (feedback === 'completed') {
+  if (!questionData) {
     return (
-      <LinearGradient colors={theme.headerGradient} style={styles.container}>
-        <View style={styles.completedContainer}>
-          <Text style={styles.completedTitle}>Game Completed!</Text>
-          <Text style={styles.completedScore}>
-            Your Score: {score} / {mcqData.questions.length}
-          </Text>
-          <TouchableOpacity style={styles.restartButton} onPress={restartGame}>
-            <MaterialIcons name="refresh" size={24} color="#FFFFFF" />
-            <Text style={styles.restartButtonText}>Play Again</Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>No Question Found</Text>
+      </View>
     );
   }
 
   return (
-    <LinearGradient colors={theme.headerGradient} style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{getText(mcqData.title)}</Text>
-        <Text style={styles.instruction}>{getText(mcqData.instruction)}</Text>
-        <Text style={styles.counter}>
-          Question {currentQuestionIndex + 1} of {mcqData.questions.length} | Score: {score}
-        </Text>
-      </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.questionContainer}>
-          <Text style={styles.questionLabel}>Question:</Text>
-          <View style={styles.questionContent}>
-            {renderQuestionContent(currentQuestion.question)}
+    <View style={styles.container}>
+      {/* Scrollable Content */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        
+        {/* --- INSTRUCTION --- */}
+        {instruction ? (
+          <View style={styles.instructionBadge}>
+            <MaterialIcons name="lightbulb-outline" size={18} color="#F57C00" />
+            <Text style={styles.instructionText}>{instruction}</Text>
           </View>
+        ) : null}
+
+        {/* --- QUESTION AREA --- */}
+        <View style={styles.questionContainer}>
+          {renderQuestionContent()}
         </View>
 
+        {/* --- OPTIONS GRID --- */}
         <View style={styles.optionsContainer}>
-          {currentQuestion.options.map((option, index) => renderOption(option, index))}
+          {questionData.options.map((opt, i) => 
+            renderOptionItem(opt, i, questionData.answerType)
+          )}
         </View>
 
-        {feedback !== 'default' && (
+      </ScrollView>
+
+      {/* --- FOOTER ACTIONS --- */}
+      <View style={styles.footer}>
+        {status === 'wrong' && (
           <View style={styles.feedbackContainer}>
-            <Text
-              style={[
-                styles.feedbackText,
-                feedback === 'correct' ? styles.feedbackCorrect : styles.feedbackIncorrect,
-              ]}
-            >
-              {feedback === 'correct' ? 'Correct Answer! 🎉' : 'Incorrect Answer. Try again.'}
-            </Text>
-            <TouchableOpacity style={styles.nextButton} onPress={goToNextQuestion}>
-              <Text style={styles.nextButtonText}>
-                {currentQuestionIndex + 1 < mcqData.questions.length ? 'Next Question' : 'Finish'}
-              </Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+            <LottieView
+              source={require('../../../assets/animations/Paul R. Bear Fail.json')} // Ensure you have this or remove
+              autoPlay loop={false}
+              style={{ width: 60, height: 60 }}
+            />
+            <Text style={styles.feedbackText}>Oops! Try again.</Text>
           </View>
         )}
-      </ScrollView>
-    </LinearGradient>
+
+        {status === 'correct' && (
+          <View style={styles.feedbackContainer}>
+             <LottieView
+              source={require('../../../assets/animations/Confetti.json')}
+              autoPlay loop={false}
+              style={{ width: 80, height: 80, position: 'absolute', top: -40 }}
+            />
+            <Text style={[styles.feedbackText, { color: COLORS.success }]}>Great Job!</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.checkButton,
+            selectedOptionIndex === null ? styles.checkButtonDisabled : {}
+          ]}
+          onPress={handleCheck}
+          disabled={selectedOptionIndex === null || status === 'correct'}
+        >
+          <Text style={styles.checkButtonText}>
+            {status === 'correct' ? 'Correct!' : status === 'wrong' ? 'Try Again' : 'Check Answer'}
+          </Text>
+          <Feather name="arrow-right" size={24} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: COLORS.bg,
   },
-  header: {
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  instruction: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  counter: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: 'bold',
-  },
-  scrollView: {
+  centerContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
-    paddingBottom: 20,
-  },
-  questionContainer: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 15,
     padding: 20,
-    marginBottom: 20,
+    paddingBottom: 100, // Space for footer
   },
-  questionLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 15,
-  },
-  questionContent: {
-    minHeight: 100,
-    justifyContent: 'center',
+  
+  // Instruction
+  instructionBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    padding: 10,
+    borderRadius: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  instructionText: {
+    marginLeft: 8,
+    color: '#F57C00',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  // Question
+  questionContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
+    // 3D Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 5,
   },
   questionText: {
-    fontSize: 20,
-    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.text,
     textAlign: 'center',
+  },
+  questionImageContainer: {
+    width: '100%',
+    height: 180,
+    borderRadius: 15,
+    overflow: 'hidden',
   },
   questionImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
+    width: '100%',
+    height: '100%',
   },
-  audioButton: {
-    flexDirection: 'row',
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    padding: 15,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 15,
   },
-  audioLabel: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  imageErrorText: {
+    marginTop: 8,
+    color: '#B0BEC5',
+    fontSize: 14,
+  },
+  bigAudioButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 30,
+    alignItems: 'center',
+    elevation: 5,
+  },
+  audioText: {
+    color: '#FFF',
     fontWeight: 'bold',
+    fontSize: 18,
+    marginLeft: 10,
   },
+
+  // Options
   optionsContainer: {
     gap: 15,
-    marginBottom: 20,
   },
-  option: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
+  optionCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 15,
     padding: 15,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  optionSelected: {
-    backgroundColor: 'rgba(63,81,181,0.4)',
-    borderColor: '#3F51B5',
-  },
-  optionCorrect: {
-    backgroundColor: 'rgba(76,175,80,0.4)',
-    borderColor: '#4CAF50',
-  },
-  optionIncorrect: {
-    backgroundColor: 'rgba(244,67,54,0.4)',
-    borderColor: '#F44336',
-  },
-  optionText: {
-    minHeight: 60,
-  },
-  optionMedia: {
-    minHeight: 120,
-  },
-  optionTextContent: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  optionImage: {
-    width: '100%',
-    height: 100,
-    borderRadius: 8,
-  },
-  optionAudioButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 2,
+  },
+  optionContentWrapper: {
+    flex: 1,
+    marginRight: 10,
+  },
+  optionText: {
+    fontSize: 18,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  optionTextLabel: {
+    fontSize: 16,
+    color: COLORS.text,
+    marginLeft: 10,
+  },
+  optionImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F5',
+  },
+  optionImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionAudioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  miniPlayBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Radios
+  radioUnselected: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#CFD8DC',
+  },
+  radioSelected: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 6,
+    borderColor: COLORS.primary,
+  },
+
+  // Footer
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    padding: 20,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  checkButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 15,
+    borderRadius: 30,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 10,
   },
-  optionAudioLabel: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  checkButtonDisabled: {
+    backgroundColor: '#B0BEC5',
+  },
+  checkButtonText: {
+    color: '#FFF',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   feedbackContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   feedbackText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  feedbackCorrect: {
-    color: '#4CAF50',
-  },
-  feedbackIncorrect: {
-    color: '#F44336',
-  },
-  nextButton: {
-    flexDirection: 'row',
-    backgroundColor: '#3F51B5',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-    alignItems: 'center',
-    gap: 8,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  completedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completedTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    marginBottom: 20,
-  },
-  completedScore: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    marginBottom: 30,
-  },
-  restartButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FF9800',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    alignItems: 'center',
-    gap: 10,
-  },
-  restartButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: COLORS.error,
+    marginLeft: 5,
   },
   errorText: {
-    color: '#FFFFFF',
+    color: '#B0BEC5',
     fontSize: 16,
-    textAlign: 'center',
-    padding: 20,
-  },
+  }
 });
 
 export default MCQActivity;
-

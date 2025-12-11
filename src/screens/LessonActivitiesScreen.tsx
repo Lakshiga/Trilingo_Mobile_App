@@ -5,19 +5,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
-  Alert,
   Animated,
+  StatusBar,
+  Dimensions,
+  Alert,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons, MaterialCommunityIcons, Feather, Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
-import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
+import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
+import { useResponsive } from '../utils/responsive';
 
 interface RouteParams {
   lessonId: number;
@@ -33,55 +34,54 @@ interface ActivityWithType {
 const LessonActivitiesScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { theme } = useTheme();
   const { currentUser } = useUser();
+  const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   
   const params = route.params as RouteParams;
   const lessonId = params?.lessonId || 1;
-  const lessonName = params?.lessonName || 'Lesson';
+  const lessonName = params?.lessonName || 'Activities';
 
   const [activities, setActivities] = useState<ActivityWithType[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+
+  // --- KIDS THEME COLORS ---
+  const THEME_COLOR = '#4FACFE'; // Sky Blue
+  const ACCENT_COLOR = '#FFB75E'; // Golden Yellow
+  const TEXT_COLOR = '#2C3E50'; // Dark Blue
+  const BG_COLOR = '#E6F7FF'; // Light Background
 
   useEffect(() => {
     const fetchActivities = async () => {
       try {
         setLoading(true);
         
-        // Fetch activities for this lesson (stage)
         const fetchedActivities = await apiService.getActivitiesByStage(lessonId);
-        
-        // Fetch all activity types to get activity type info for navigation
         const activityTypes = await apiService.getAllActivityTypes();
         
-        // Create activity type map for quick lookup
         const activityTypeMap = new Map<number, ActivityTypeDto>();
         activityTypes.forEach(type => {
           activityTypeMap.set(type.id, type);
         });
         
-        // Combine activities with their activity types
         const activitiesWithTypes: ActivityWithType[] = fetchedActivities
           .map(activity => {
             const activityType = activityTypeMap.get(activity.activityTypeId);
             if (!activityType) return null;
-            return {
-              activity,
-              activityType,
-            };
+            return { activity, activityType };
           })
           .filter((item): item is ActivityWithType => item !== null);
         
-        // Sort all activities by sequenceOrder
         activitiesWithTypes.sort((a, b) => a.activity.sequenceOrder - b.activity.sequenceOrder);
         
         setActivities(activitiesWithTypes);
       } catch (error: any) {
         console.error('Error fetching activities:', error);
-        Alert.alert('Error', 'Failed to load activities. Please try again.');
+        Alert.alert('Oops!', 'Could not load the games.');
       } finally {
         setLoading(false);
       }
@@ -89,23 +89,13 @@ const LessonActivitiesScreen: React.FC = () => {
 
     fetchActivities();
 
-    // Animate header
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
     ]).start();
   }, [lessonId]);
 
   const handleActivityPress = (activity: ActivityDto, activityType: ActivityTypeDto) => {
-    // Navigate to PlayScreen for all activities
     (navigation as any).navigate('PlayScreen', {
       activityId: activity.id,
       activityTypeId: activityType.id,
@@ -118,268 +108,281 @@ const LessonActivitiesScreen: React.FC = () => {
     return getLearningLanguageField(learningLanguage, activity);
   };
 
+  // Helper to get icon based on name/type
+  const getActivityIcon = (name: string): keyof typeof MaterialCommunityIcons.glyphMap => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('puzzle')) return 'puzzle'; // Puzzle piece
+    if (lowerName.includes('quiz')) return 'lightbulb-on';
+    if (lowerName.includes('match')) return 'cards';
+    if (lowerName.includes('video')) return 'youtube-tv';
+    if (lowerName.includes('listen')) return 'headphones';
+    if (lowerName.includes('speak')) return 'microphone';
+    if (lowerName.includes('write') || lowerName.includes('draw')) return 'pencil';
+    return 'gamepad-variant'; // Default
+  };
+
+  const styles = getStyles(responsive, THEME_COLOR, ACCENT_COLOR, TEXT_COLOR, BG_COLOR);
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centerContainer}>
         <LottieView
           source={require('../../assets/animations/Loading animation.json')}
-          autoPlay
-          loop
-          style={styles.loadingAnimation}
+          autoPlay loop style={styles.loadingAnimation}
         />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Loading activities...
-        </Text>
+        <Text style={styles.loadingText}>Loading Activities...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={theme.lessonsBackground || ['#FFF9E6', '#FFE5CC', '#FFD9B3']}
-        style={styles.gradient}
+      <StatusBar barStyle="light-content" backgroundColor={THEME_COLOR} />
+
+      {/* --- CURVED HEADER --- */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={26} color="#FFF" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{lessonName}</Text>
+        </View>
+        <View style={{ width: 45 }} /> 
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Decorative elements */}
-        <View style={[styles.decorativeCircle1, { backgroundColor: theme.decorativeCircle1 || 'rgba(255, 182, 193, 0.3)' }]} />
-        <View style={[styles.decorativeCircle2, { backgroundColor: theme.decorativeCircle2 || 'rgba(173, 216, 230, 0.3)' }]} />
-        <View style={[styles.decorativeCircle3, { backgroundColor: theme.decorativeCircle3 || 'rgba(255, 218, 185, 0.3)' }]} />
+        {/* Helper Text */}
+        <View style={styles.mascotContainer}>
+            <Text style={styles.welcomeText}>
+              Complete all activities to win! 🏆
+            </Text>
+        </View>
 
-        {/* Header */}
-        <LinearGradient colors={theme.headerGradient || ['#FF9A8B', '#FF6B9D', '#FF8C94']} style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <MaterialIcons name="arrow-back" size={28} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerEmoji}>📚</Text>
-              <Text style={styles.headerTitle}>{lessonName}</Text>
-              <Text style={styles.headerEmoji}>🎓</Text>
-            </View>
-            <Text style={styles.headerSubtitle}>Choose an activity to start</Text>
-          </View>
-        </LinearGradient>
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
         >
-          <Animated.View
-            style={[
-              styles.activitiesContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
-            {activities.length > 0 ? (
-              activities.map((item, index) => {
-                const activityName = getActivityName(item.activity);
-                const gradients: readonly [string, string, ...string[]][] = [
-                  ['#FF9A8B', '#FF6B9D'] as const,
-                  ['#43BCCD', '#5DD3A1'] as const,
-                  ['#6A8EFF', '#8A6BFF'] as const,
-                  ['#FFB366', '#FF8C42'] as const,
-                  ['#A77BCA', '#BA91DA'] as const,
-                ];
-                const activityGradient = gradients[index % gradients.length];
-                
-                return (
-                  <TouchableOpacity
-                    key={item.activity.id}
-                    style={styles.activityCard}
-                    onPress={() => handleActivityPress(item.activity, item.activityType)}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={activityGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.activityGradient}
-                    >
-                      <View style={styles.activityContent}>
-                        <View style={styles.activityIconContainer}>
-                          <MaterialIcons name="extension" size={32} color="#fff" />
-                        </View>
-                        <View style={styles.activityTextContainer}>
-                          <Text style={styles.activityTitle} numberOfLines={2}>
-                            {activityName}
-                          </Text>
-                        </View>
-                        <MaterialIcons name="chevron-right" size={28} color="#fff" />
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No activities available for this lesson.</Text>
-              </View>
-            )}
-          </Animated.View>
-        </ScrollView>
-      </LinearGradient>
+          {activities.length > 0 ? (
+            activities.map((item, index) => {
+              const activityName = getActivityName(item.activity);
+              const iconName = getActivityIcon(activityName); // Get dynamic icon
+              
+              // Alternating colors for bubbles
+              const bubbleColors = ['#4FACFE', '#FF9F43', '#FF6B6B', '#1DD1A1', '#5F27CD'];
+              const currentBubbleColor = bubbleColors[index % bubbleColors.length];
+
+              return (
+                <TouchableOpacity
+                  key={item.activity.id}
+                  style={styles.activityCard}
+                  onPress={() => handleActivityPress(item.activity, item.activityType)}
+                  activeOpacity={0.9}
+                >
+                  {/* Left Icon Bubble */}
+                  <View style={[styles.iconBubble, { borderColor: currentBubbleColor }]}>
+                     <View style={[styles.iconInner, { backgroundColor: currentBubbleColor + '20' }]}>
+                        <MaterialCommunityIcons name={iconName} size={24} color={currentBubbleColor} />
+                     </View>
+                  </View>
+
+                  {/* Text Content */}
+                  <View style={styles.textContainer}>
+                    <Text style={styles.activityTitle} numberOfLines={1}>
+                      {activityName}
+                    </Text>
+                    <Text style={styles.activitySubtitle}>
+                      Tap to play
+                    </Text>
+                  </View>
+
+                  {/* Right Play Button */}
+                  <View style={styles.playButton}>
+                     <Ionicons name="play" size={24} color="#FFFFFF" style={{marginLeft: 2}} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="emoticon-sad-outline" size={60} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No games here yet!</Text>
+            </View>
+          )}
+        </Animated.View>
+        
+        <View style={{height: 40}} />
+      </ScrollView>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (
+  responsive: ReturnType<typeof useResponsive>,
+  themeColor: string,
+  accentColor: string,
+  textColor: string,
+  bgColor: string
+) => StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: bgColor,
   },
-  gradient: {
-    flex: 1,
-  },
-  decorativeCircle1: {
-    position: 'absolute',
-    top: -60,
-    right: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-  },
-  decorativeCircle2: {
-    position: 'absolute',
-    top: 150,
-    left: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  decorativeCircle3: {
-    position: 'absolute',
-    bottom: 200,
-    right: -30,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
+  
+  // --- HEADER ---
   header: {
-    paddingTop: 50,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: responsive.wp(5),
+    paddingTop: responsive.hp(6),
+    paddingBottom: responsive.hp(3),
+    backgroundColor: themeColor,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: themeColor,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 10,
   },
   backButton: {
-    position: 'absolute',
-    top: 45,
-    left: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 45,
+    height: 45,
     borderRadius: 25,
-    padding: 12,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  headerContent: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  headerEmoji: {
-    fontSize: 32,
-    marginHorizontal: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    fontSize: responsive.wp(5),
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  scrollView: {
-    flex: 1,
-  },
+
+  // --- CONTENT ---
+  scrollView: { flex: 1 },
   scrollContent: {
-    paddingTop: 15,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: responsive.wp(5),
+    paddingTop: responsive.hp(2),
   },
-  activitiesContainer: {
-    width: '100%',
+  mascotContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.hp(2.5),
+    marginTop: responsive.hp(1),
   },
+  welcomeText: {
+    fontSize: responsive.wp(4),
+    fontWeight: '700',
+    color: '#7F8C8D',
+    textAlign: 'center',
+  },
+
+  // --- ACTIVITY CARD (3D Style) ---
   activityCard: {
-    marginBottom: 12,
-    borderRadius: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    overflow: 'hidden',
-  },
-  activityGradient: {
-    padding: 16,
-  },
-  activityContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    marginBottom: responsive.hp(2),
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    // 3D Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+    borderBottomWidth: 4,
+    borderBottomColor: '#E2E8F0',
   },
-  activityIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  
+  // Icon Bubble
+  iconBubble: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 15,
+    borderWidth: 2,
+    padding: 3, // Gap between border and inner fill
   },
-  activityTextContainer: {
-    flex: 1,
+  iconInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
+  // Text
+  textContainer: { flex: 1 },
   activityTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontSize: responsive.wp(4.5),
+    fontWeight: '800',
+    color: textColor,
+    marginBottom: 2,
   },
-  loadingContainer: {
+  activitySubtitle: {
+    fontSize: responsive.wp(3.2),
+    color: '#95A5A6',
+    fontWeight: '600',
+  },
+
+  // Play Button
+  playButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FF9F43', // Orange
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#FF9F43",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  // --- LOADING / EMPTY ---
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF9E6',
+    backgroundColor: bgColor,
   },
   loadingAnimation: {
     width: 200,
     height: 200,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: 10,
+    color: themeColor,
+    fontWeight: '800',
+    fontSize: 18,
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
+    marginTop: 50,
   },
   emptyText: {
     fontSize: 18,
-    color: '#6B7280',
-    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#95A5A6',
+    marginTop: 10,
   },
 });
 
 export default LessonActivitiesScreen;
-

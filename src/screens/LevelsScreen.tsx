@@ -10,8 +10,9 @@ import {
   Modal,
   StatusBar,
   Dimensions,
+  ImageBackground
 } from 'react-native';
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons, MaterialIcons, Feather } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
@@ -21,11 +22,8 @@ import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
 
-const { width } = Dimensions.get('window');
-
 const LevelsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { theme } = useTheme(); // You can keep this or ignore if fully overriding
   const { currentUser } = useUser();
   const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
@@ -38,8 +36,14 @@ const LevelsScreen: React.FC = () => {
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
   const modalScaleAnim = useRef(new Animated.Value(0)).current;
+
+  // Kids Theme Colors
+  const THEME_COLOR = '#4FACFE'; // Bright Sky Blue
+  const ACCENT_COLOR = '#FFB75E'; // Golden Yellow
+  const TEXT_COLOR = '#2C3E50'; // Soft Dark Blue
+  const BG_COLOR = '#E6F7FF'; // Very light blue bg
 
   useEffect(() => {
     const fetchLevels = async () => {
@@ -50,6 +54,7 @@ const LevelsScreen: React.FC = () => {
         setLevels(sortedLevels);
 
         const lockedSet = new Set<number>();
+        // Logic remains same, but visual representation changes
         for (const level of sortedLevels) {
           try {
             const lessons = await apiService.getStagesByLevelId(level.id);
@@ -63,7 +68,7 @@ const LevelsScreen: React.FC = () => {
         if (error.message?.includes('403') || error.message?.includes('PERMISSION')) {
           setPermissionDenied(true);
         } else {
-          Alert.alert('Error', 'Failed to load levels.');
+          console.log('Error loading levels');
         }
         setLevels([]);
       } finally {
@@ -74,15 +79,15 @@ const LevelsScreen: React.FC = () => {
     fetchLevels();
 
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
     ]).start();
   }, []);
 
   useEffect(() => {
     if (showComingSoonModal) {
       modalScaleAnim.setValue(0);
-      Animated.spring(modalScaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }).start();
+      Animated.spring(modalScaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
     }
   }, [showComingSoonModal]);
 
@@ -97,37 +102,37 @@ const LevelsScreen: React.FC = () => {
     });
   };
 
-  const getLevelName = (level: LevelDto) => getLearningLanguageField(learningLanguage, level);
-
-  const styles = getStyles(responsive);
+  const styles = getStyles(responsive, THEME_COLOR, ACCENT_COLOR, TEXT_COLOR, BG_COLOR);
 
   // --- LOADING STATE ---
   if (loading) {
     return (
       <View style={styles.centerContainer}>
         <LottieView
-          source={require('../../assets/animations/Loading animation.json')}
+          source={require('../../assets/animations/Loading animation.json')} // Ensure this exists or use a fun alternative
           autoPlay loop style={styles.loadingAnimation}
         />
-        <Text style={styles.loadingText}>Loading Path...</Text>
+        <Text style={styles.loadingText}>Getting Ready...</Text>
       </View>
     );
   }
 
-  // --- PERMISSION DENIED ---
+  // --- PERMISSION DENIED (Kid Friendly) ---
   if (permissionDenied) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <MaterialIcons name="arrow-back" size={24} color="#002D62" />
+            <Feather name="arrow-left" size={28} color={TEXT_COLOR} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Access Denied</Text>
         </View>
         <View style={styles.centerContainer}>
-          <MaterialIcons name="lock-outline" size={64} color="#94A3B8" />
-          <Text style={styles.emptyText}>Restricted Area</Text>
-          <Text style={styles.emptySubtext}>You don't have permission to view this content.</Text>
+          <MaterialCommunityIcons name="robot-confused" size={80} color="#FF6B6B" />
+          <Text style={styles.emptyText}>Oops!</Text>
+          <Text style={styles.emptySubtext}>We can't open this right now.</Text>
+          <TouchableOpacity style={styles.modalButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.modalButtonText}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -135,30 +140,34 @@ const LevelsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <StatusBar barStyle="dark-content" backgroundColor={BG_COLOR} />
 
-      {/* --- HEADER --- */}
+      {/* --- FUN HEADER --- */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} color="#002D62" />
+          <Feather name="arrow-left" size={26} color="#FFF" />
         </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>Levels</Text>
-          <Text style={styles.headerSubtitle}>Select a level to continue</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Adventure Map</Text>
         </View>
-        <View style={{ width: 40 }} />{/* Spacer for alignment */}
+        <View style={{ width: 45 }} /> 
       </View>
 
-      {/* --- CONTENT --- */}
+      {/* --- LEVEL CONTENT --- */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.mascotContainer}>
+            <Text style={styles.welcomeText}>
+              Pick a level to start! 🚀
+            </Text>
+        </View>
+
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          
           {levels.map((level, index) => {
-            const levelName = getLevelName(level);
+            const levelName = getLearningLanguageField(learningLanguage, level);
             const isLocked = lockedLevels.has(level.id);
             
             return (
@@ -166,48 +175,42 @@ const LevelsScreen: React.FC = () => {
                 key={level.id}
                 style={[styles.levelCard, isLocked && styles.levelCardLocked]}
                 onPress={() => handleLevelPress(level)}
-                activeOpacity={0.8}
+                activeOpacity={0.9}
               >
-                {/* Left Icon Box */}
-                <View style={[styles.iconBox, isLocked ? styles.iconBoxLocked : styles.iconBoxActive]}>
+                {/* Level Number Bubble */}
+                <View style={[styles.numberBubble, isLocked ? styles.numberBubbleLocked : styles.numberBubbleActive]}>
                   {isLocked ? (
-                    <MaterialIcons name="lock" size={24} color="#94A3B8" />
+                    <Feather name="lock" size={22} color="#A0AEC0" />
                   ) : (
                     <Text style={styles.levelNumber}>{index + 1}</Text>
                   )}
                 </View>
 
-                {/* Middle Text */}
+                {/* Level Info */}
                 <View style={styles.cardTextContainer}>
                   <Text style={[styles.cardTitle, isLocked && styles.cardTitleLocked]}>
                     {levelName}
                   </Text>
                   <Text style={styles.cardSubtitle}>
-                    {isLocked ? 'Locked' : 'Start Learning'}
+                    {isLocked ? 'Unlock me!' : 'Let\'s Play!'}
                   </Text>
                 </View>
 
-                {/* Right Action Icon */}
-                <View style={styles.actionIcon}>
-                   {isLocked ? (
-                     <MaterialIcons name="lock-outline" size={20} color="#CBD5E1" />
-                   ) : (
-                     <View style={styles.playButton}>
-                        <MaterialIcons name="play-arrow" size={20} color="#FFFFFF" />
-                     </View>
-                   )}
-                </View>
-
+                {/* Action Button */}
+                {!isLocked && (
+                    <View style={styles.playButton}>
+                       <MaterialIcons name="play-arrow" size={28} color="#FFFFFF" />
+                    </View>
+                )}
               </TouchableOpacity>
             );
           })}
         </Animated.View>
         
-        {/* Bottom Padding */}
-        <View style={{height: responsive.hp(5)}} />
+        <View style={{height: responsive.hp(10)}} />
       </ScrollView>
 
-      {/* --- MODAL --- */}
+      {/* --- FUN MODAL --- */}
       <Modal
         visible={showComingSoonModal}
         transparent={true}
@@ -216,26 +219,28 @@ const LevelsScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <Animated.View style={[styles.modalCard, { transform: [{ scale: modalScaleAnim }] }]}>
-            <View style={styles.modalIconContainer}>
-               <MaterialCommunityIcons name="timer-sand" size={40} color="#FFFFFF" />
+            <View style={styles.modalStarContainer}>
+               <MaterialCommunityIcons name="star-face" size={50} color="#FFF" />
             </View>
             
             <Text style={styles.modalTitle}>Coming Soon!</Text>
             
             <View style={styles.lottieWrapper}>
                <LottieView
-                  source={require('../../assets/animations/coming soon.json')}
+                  source={require('../../assets/animations/coming soon.json')} // Ensure this path is correct
                   autoPlay loop style={{ width: '100%', height: '100%' }}
                 />
             </View>
             
-            <Text style={styles.modalMessage}>This level is currently under construction.</Text>
+            <Text style={styles.modalMessage}>
+              We are building this level!{"\n"}Check back later, friend!
+            </Text>
 
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => setShowComingSoonModal(false)}
             >
-              <Text style={styles.modalButtonText}>Okay</Text>
+              <Text style={styles.modalButtonText}>Okay!</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -244,10 +249,17 @@ const LevelsScreen: React.FC = () => {
   );
 };
 
-const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
+// --- STYLES FOR KIDS APP ---
+const getStyles = (
+  responsive: ReturnType<typeof useResponsive>,
+  themeColor: string,
+  accentColor: string,
+  textColor: string,
+  bgColor: string
+) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC', // Professional Light Gray
+    backgroundColor: bgColor,
   },
   
   // --- HEADER ---
@@ -256,213 +268,254 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: responsive.wp(5),
-    paddingTop: responsive.hp(6), // Safe area
-    paddingBottom: responsive.hp(2),
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
+    paddingTop: responsive.hp(6),
+    paddingBottom: responsive.hp(3),
+    backgroundColor: themeColor,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: themeColor,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 10,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
   },
   headerTitle: {
     fontSize: responsive.wp(5),
     fontWeight: '800',
-    color: '#002D62', // Brand Blue
-    textAlign: 'center',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-  headerSubtitle: {
-    fontSize: responsive.wp(3.5),
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-
+  
   // --- CONTENT ---
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: responsive.wp(5),
-    paddingTop: responsive.hp(3),
+    paddingTop: responsive.hp(2),
   },
+  mascotContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.hp(3),
+    marginTop: responsive.hp(1),
+  },
+  welcomeText: {
+    fontSize: responsive.wp(4.5),
+    fontWeight: '700',
+    color: '#636e72',
+    textAlign: 'center',
+  },
+
+  // --- LOADING ---
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: bgColor,
+  },
+  loadingAnimation: {
+    width: 200,
+    height: 200,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: themeColor,
+    fontWeight: '800',
+    fontSize: 20,
   },
 
   // --- LEVEL CARDS ---
   levelCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    marginBottom: responsive.hp(2),
+    borderRadius: 24, // Very rounded
+    marginBottom: responsive.hp(2.5),
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    // Soft Shadow
-    shadowColor: "#64748B",
+    padding: 15,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+    borderBottomWidth: 4, // 3D Effect
+    borderBottomColor: '#E2E8F0',
   },
   levelCardLocked: {
-    backgroundColor: '#F8FAFC', // Slightly darker for locked
-    borderColor: '#E2E8F0',
-    elevation: 0,
+    backgroundColor: '#F7FAFC',
+    borderBottomColor: '#EDF2F7',
+    opacity: 0.9,
   },
   
-  // Left Icon Box
-  iconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+  // Number Bubble
+  numberBubble: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  iconBoxActive: {
-    backgroundColor: '#E0F2FE', // Light Blue bg
-    borderWidth: 1,
-    borderColor: '#002D62',
+  numberBubbleActive: {
+    backgroundColor: '#DEF7FF', // Light cyan
+    borderWidth: 2,
+    borderColor: themeColor,
   },
-  iconBoxLocked: {
-    backgroundColor: '#E2E8F0', // Gray bg
+  numberBubbleLocked: {
+    backgroundColor: '#EDF2F7',
+    borderWidth: 2,
+    borderColor: '#CBD5E0',
   },
   levelNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#002D62',
+    fontSize: 24,
+    fontWeight: '900',
+    color: themeColor,
   },
 
-  // Middle Text
+  // Text
   cardTextContainer: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: responsive.wp(4.5),
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 2,
+    fontSize: responsive.wp(4.8),
+    fontWeight: '800',
+    color: textColor,
+    marginBottom: 4,
   },
   cardTitleLocked: {
-    color: '#94A3B8',
+    color: '#A0AEC0',
   },
   cardSubtitle: {
-    fontSize: responsive.wp(3.2),
-    color: '#64748B',
-    fontWeight: '500',
-  },
-
-  // Right Action
-  actionIcon: {
-    marginLeft: 10,
-  },
-  playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#002D62',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: "#002D62",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-
-  // --- LOADING / EMPTY ---
-  loadingAnimation: {
-    width: 150,
-    height: 150,
-  },
-  loadingText: {
-    marginTop: 20,
-    color: '#64748B',
+    fontSize: responsive.wp(3.5),
+    color: '#7F8C8D',
     fontWeight: '600',
   },
+
+  // Play Button
+  playButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FF9F43', // Fun Orange
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#FF9F43",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 6,
+    borderBottomWidth: 3,
+    borderBottomColor: '#E67E22', // Darker orange for 3D
+  },
+
+  // --- EMPTY / ERROR ---
   emptyText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#334155',
+    fontSize: 24,
+    fontWeight: '900',
+    color: themeColor,
     marginTop: 20,
   },
   emptySubtext: {
-    color: '#94A3B8',
-    marginTop: 8,
+    color: '#7F8C8D',
+    marginTop: 10,
+    fontSize: 16,
     textAlign: 'center',
-    paddingHorizontal: 40,
+    marginBottom: 30,
   },
 
   // --- MODAL ---
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)', // Darker overlay
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalCard: {
     width: '85%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 30,
+    borderRadius: 30,
+    padding: 25,
     alignItems: 'center',
-    elevation: 10,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
   },
-  modalIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#FF6B6B', // Red accent for "Stop/Wait"
+  modalStarContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: accentColor,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    marginTop: -50, // Floating effect
-    borderWidth: 4,
+    marginTop: -60,
+    borderWidth: 5,
     borderColor: '#FFFFFF',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1E293B',
+    fontSize: 24,
+    fontWeight: '900',
+    color: textColor,
+    marginTop: 10,
     marginBottom: 10,
   },
   lottieWrapper: {
-    width: 120,
-    height: 120,
-    marginBottom: 15,
+    width: 150,
+    height: 150,
+    marginBottom: 10,
   },
   modalMessage: {
     fontSize: 16,
-    color: '#64748B',
+    color: '#7F8C8D',
     textAlign: 'center',
     marginBottom: 25,
-    lineHeight: 22,
+    fontWeight: '500',
+    lineHeight: 24,
   },
   modalButton: {
-    backgroundColor: '#002D62',
-    paddingVertical: 14,
-    paddingHorizontal: 50,
-    borderRadius: 16,
-    width: '100%',
+    backgroundColor: themeColor,
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 25, // Pill shape
+    width: '80%',
     alignItems: 'center',
+    shadowColor: themeColor,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    borderBottomWidth: 4,
+    borderBottomColor: '#2879C9', // Darker blue for 3D
   },
   modalButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '800',
+    fontSize: 18,
   },
 });
 
