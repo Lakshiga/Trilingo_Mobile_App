@@ -22,6 +22,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
+import { ProgressSummaryDto } from '../services/api';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { getTranslation, Language } from '../utils/translations';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
@@ -76,6 +77,8 @@ export default function ProfileScreen() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState(false);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
   
   // Animation Refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -155,16 +158,43 @@ export default function ProfileScreen() {
       [
         { text: 'Pick Avatar', onPress: () => setAvatarModalVisible(true) },
         { text: 'Take Photo', onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status === 'granted') {
-             const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1,1], quality: 0.8 });
-             if (!result.canceled) { setProfileImage(result.assets[0].uri); uploadProfileImageToServer(result.assets[0].uri); }
-          } else { Alert.alert('Oh no!', 'We need camera permission.'); }
-        }},
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Oh no!', 'We need camera permission.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            });
+            if (!result.canceled) {
+              const uri = result.assets[0].uri;
+              setProfileImage(uri);
+              uploadProfileImageToServer(uri);
+            }
+          } 
+        },
         { text: 'Gallery', onPress: async () => {
-           const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1,1], quality: 0.8 });
-           if (!result.canceled) { setProfileImage(result.assets[0].uri); uploadProfileImageToServer(result.assets[0].uri); }
-        }},
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Oh no!', 'We need gallery permission.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!result.canceled) {
+              const uri = result.assets[0].uri;
+              setProfileImage(uri);
+              uploadProfileImageToServer(uri);
+            }
+          } 
+        },
         { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true }
@@ -178,6 +208,24 @@ export default function ProfileScreen() {
       Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
     initializeProfileImage();
+  }, [currentUser]);
+
+  // Fetch summary for stars/completed
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        const studentId = currentUser?.id; // replace if selected child stored elsewhere
+        if (!studentId) return;
+        const summary: ProgressSummaryDto | null = await apiService.getStudentSummary(studentId);
+        if (summary) {
+          setCompletedCount(summary.totalActivitiesCompleted);
+          setStars(summary.totalActivitiesCompleted * 10);
+        }
+      } catch (e) {
+        // ignore summary errors
+      }
+    };
+    fetchSummary();
   }, [currentUser]);
 
   // --- SETTINGS CONFIG ---
@@ -304,6 +352,18 @@ export default function ProfileScreen() {
             <View style={styles.levelBadge}>
                <Text style={styles.levelText}>⭐ Level 1 Explorer</Text>
             </View>
+            {!currentUser?.isGuest && (
+              <View style={styles.statsRow}>
+                <View style={styles.statPill}>
+                  <MaterialIcons name="star" size={16} color="#FFD700" />
+                  <Text style={styles.statText}>{stars} Stars</Text>
+                </View>
+                <View style={styles.statPill}>
+                  <MaterialIcons name="check-circle" size={16} color="#34D399" />
+                  <Text style={styles.statText}>{completedCount} Completed</Text>
+                </View>
+              </View>
+            )}
           </View>
         </Animated.View>
 
@@ -510,6 +570,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FBC02D',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0F2F1',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statText: {
+    marginLeft: 6,
+    color: '#006064',
+    fontWeight: '600',
+    fontSize: 12,
   },
 
   // SETTINGS

@@ -15,7 +15,7 @@ import LottieView from 'lottie-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
-import apiService, { ActivityDto, ActivityTypeDto } from '../services/api';
+import apiService, { ActivityDto, ActivityTypeDto, ProgressDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
@@ -44,6 +44,7 @@ const LessonActivitiesScreen: React.FC = () => {
 
   const [activities, setActivities] = useState<ActivityWithType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [completedActivities, setCompletedActivities] = useState<Set<number>>(new Set());
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -62,6 +63,16 @@ const LessonActivitiesScreen: React.FC = () => {
         
         const fetchedActivities = await apiService.getActivitiesByStage(lessonId);
         const activityTypes = await apiService.getAllActivityTypes();
+        // Fetch completed progress for this student
+        const studentId = currentUser?.id; // adjust if you store selected student separately
+        let completedSet = new Set<number>();
+        if (studentId) {
+          const progress = await apiService.getStudentProgress(studentId);
+          progress.forEach((p: ProgressDto) => {
+            if (p.activityId) completedSet.add(p.activityId);
+          });
+        }
+        setCompletedActivities(completedSet);
         
         const activityTypeMap = new Map<number, ActivityTypeDto>();
         activityTypes.forEach(type => {
@@ -177,10 +188,14 @@ const LessonActivitiesScreen: React.FC = () => {
               const bubbleColors = ['#4FACFE', '#FF9F43', '#FF6B6B', '#1DD1A1', '#5F27CD'];
               const currentBubbleColor = bubbleColors[index % bubbleColors.length];
 
+              const isCompleted = completedActivities.has(item.activity.id);
               return (
                 <TouchableOpacity
                   key={item.activity.id}
-                  style={styles.activityCard}
+                  style={[
+                    styles.activityCard,
+                    isCompleted && { backgroundColor: '#E8F7FF', borderColor: ACCENT_COLOR, borderWidth: 1 }
+                  ]}
                   onPress={() => handleActivityPress(item.activity, item.activityType)}
                   activeOpacity={0.9}
                 >
@@ -197,12 +212,12 @@ const LessonActivitiesScreen: React.FC = () => {
                       {activityName}
                     </Text>
                     <Text style={styles.activitySubtitle}>
-                      Tap to play
+                      {isCompleted ? 'Completed - 10★' : 'Tap to play'}
                     </Text>
                   </View>
 
                   {/* Right Play Button */}
-                  <View style={styles.playButton}>
+                  <View style={[styles.playButton, isCompleted && { backgroundColor: '#34D399' }]}>
                      <Ionicons name="play" size={24} color="#FFFFFF" style={{marginLeft: 2}} />
                   </View>
                 </TouchableOpacity>

@@ -93,7 +93,7 @@ const WelcomeScreen: React.FC = () => {
         <View style={styles.imageContainer}>
           <LottieView
             ref={familyLottieRef}
-            source={require('../../assets/animations/family.json')}
+            source={require('../../assets/animations/Loader cat.json')}
             style={styles.character}
             autoPlay={true}
             loop={true}
@@ -188,7 +188,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       marginBottom: responsive.hp(0.5),
     },
     brandColor: {
-      color: '#002D62', // Matches Splash Screen Blue
+      color: '#2D4F9C',
     },
     description: {
       fontSize: responsive.wp(4),
@@ -203,8 +203,8 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       alignItems: 'center',
     },
     character: {
-      width: '100%',
-      height: '100%',
+      width: '120%',
+      height: '120%',
     },
 
     // --- BOTTOM SECTION STYLES ---
@@ -217,13 +217,12 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
     // The Curve Shape
     blueCurveBackground: {
       position: 'absolute',
-      backgroundColor: '#002D62', // Professional Deep Royal Blue
-      width: width * 1.5, // Wider than screen to create gentle curve
+      backgroundColor: '#2D4F9C',
+      width: width * 1.5,
       height: width * 1.5,
-      borderRadius: width * 0.75, // Perfect circle
-      top: 0, // Starts at the beginning of this section container
+      borderRadius: width * 0.75,
+      top: 0,
       alignSelf: 'center',
-      // Shadow for depth
       shadowColor: '#000',
       shadowOffset: { width: 0, height: -5 },
       shadowOpacity: 0.2,
@@ -254,7 +253,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       elevation: 5,
     },
     primaryButtonText: {
-      color: '#002D62', // Blue text
+      color: '#0D5B81',
       fontWeight: '800',
       fontSize: responsive.wp(4.5),
       textTransform: 'uppercase',
@@ -271,7 +270,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       fontWeight: '500',
     },
     registerHighlight: {
-      color: '#43BCCD', // Cyan/Teal for "Log in" pop
+      color: '#59A4C6',
       fontWeight: 'bold',
       textDecorationLine: 'underline',
     },

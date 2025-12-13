@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Dimensions, StatusBar, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, StatusBar, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
@@ -87,13 +87,38 @@ const PlayScreen: React.FC = () => {
     if (currentExerciseIndex < exerciseCount - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
     } else {
-      navigation.goBack(); // Finish
+      // Finish: submit progress (10 stars) then exit
+      submitProgress().finally(() => navigation.goBack());
     }
   };
 
   const handlePrevExercise = () => {
     if (currentExerciseIndex > 0) {
       setCurrentExerciseIndex(prev => prev - 1);
+    }
+  };
+
+  // --- Progress submit logic ---
+  const submitProgress = async () => {
+    try {
+      if (!activityId || !currentUser?.id) return;
+      // NOTE: replace with selected student id if you store it elsewhere
+      const studentId = currentUser.id;
+      await apiService.postStudentProgress({
+        studentId,
+        activityId,
+        score: 10, // 10 stars
+        maxScore: 10,
+        timeSpentSeconds: 0,
+        attemptNumber: 1,
+        isCompleted: true,
+      });
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || `${error}`;
+      if (typeof msg === 'string' && msg.toLowerCase().includes('already recorded')) {
+        return; // first attempt only enforced by backend; ignore duplicate
+      }
+      Alert.alert('Saved with a hiccup', 'First attempt already locked or network issue.');
     }
   };
 

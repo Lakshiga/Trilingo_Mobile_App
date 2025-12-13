@@ -93,6 +93,54 @@ export interface ExerciseDto {
   updatedAt: string;
 }
 
+// Progress DTOs (backend ProgressDto)
+export interface ProgressDto {
+  id: number;
+  studentId?: string;
+  activityId: number;
+  activityName?: string;
+  score: number;
+  maxScore: number;
+  percentageScore: number;
+  completedAt: string;
+  timeSpentSeconds: number;
+  timeSpentFormatted: string;
+  attemptNumber: number;
+  isCompleted: boolean;
+  notes?: string;
+}
+
+export interface ProgressSummaryDto {
+  studentId: string;
+  studentNickname: string;
+  studentAvatar: string;
+  totalActivitiesCompleted: number;
+  totalActivitiesAttempted: number;
+  averageScore: number;
+  totalXpPoints: number;
+  totalTimeSpentSeconds: number;
+  totalTimeSpentFormatted: string;
+  lastActivityDate?: string;
+  recentActivities: Array<{
+    activityId: number;
+    activityName: string;
+    score: number;
+    maxScore: number;
+    completedAt: string;
+  }>;
+}
+
+export interface CreateProgressRequest {
+  studentId: string;
+  activityId: number;
+  score: number;
+  maxScore: number;
+  timeSpentSeconds: number;
+  attemptNumber: number;
+  isCompleted: boolean;
+  notes?: string;
+}
+
 // MainActivity DTO from backend (for Songs/Videos)
 export interface MainActivityDto {
   id: number;
@@ -516,22 +564,30 @@ class ApiService {
       const currentBaseUrl = this.api.defaults.baseURL || '';
       let uploadBaseUrl = currentBaseUrl;
       
-      // If using CloudFront, switch to direct backend URL
+      // If using CloudFront, switch to direct backend URL (uploads are blocked on CF)
       if (currentBaseUrl.includes('cloudfront.net')) {
-        // Try to get the direct backend URL from config
-        // Priority: PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > localhost
-        if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
+        const directOverride = (process.env as any).EXPO_PUBLIC_API_DIRECT || (process.env as any).API_DIRECT;
+        // Priority: env override > PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > PRODUCTION > localhost
+        if (directOverride && !directOverride.includes('cloudfront')) {
+          uploadBaseUrl = directOverride;
+        } else if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
           uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
         } else if (API_CONFIG.ANDROID_EMULATOR) {
           uploadBaseUrl = API_CONFIG.ANDROID_EMULATOR;
         } else if (API_CONFIG.IOS_SIMULATOR) {
           uploadBaseUrl = API_CONFIG.IOS_SIMULATOR;
+        } else if (API_CONFIG.PRODUCTION && !API_CONFIG.PRODUCTION.includes('cloudfront')) {
+          uploadBaseUrl = API_CONFIG.PRODUCTION;
         } else {
-          // Fallback to localhost
-          uploadBaseUrl = 'https://d3v81eez8ecmto.cloudfront.net/api';
+          // Fallbacks by platform
+          const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+          uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
         }
-      } else {
-        // Already using direct backend, use as is
+      }
+      // Final safety: if still cloudfront, hard fallback to localhost
+      if (uploadBaseUrl.includes('cloudfront.net')) {
+        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+        uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
       }
       
       // Construct the full upload URL
@@ -785,6 +841,46 @@ class ApiService {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error: any) {
       console.error(`Failed to fetch exercises for activity ${activityId}:`, error);
+      throw this.handleError(error);
+    }
+  }
+
+  // Progress Methods
+  async postStudentProgress(payload: CreateProgressRequest): Promise<ApiResponse<ProgressDto>> {
+    try {
+      const response = await this.api.post<ApiResponse<ProgressDto>>('/StudentProgress', payload);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentProgress(studentId: string): Promise<ProgressDto[]> {
+    try {
+      const response = await this.api.get<ProgressDto[]>(`/StudentProgress/${studentId}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentProgressByActivity(studentId: string, activityId: number): Promise<ProgressDto[]> {
+    try {
+      const response = await this.api.get<ProgressDto[]>(
+        `/StudentProgress`,
+        { params: { studentId, activityId, isCompleted: true } }
+      );
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentSummary(studentId: string): Promise<ProgressSummaryDto | null> {
+    try {
+      const response = await this.api.get<ProgressSummaryDto>(`/StudentProgress/${studentId}/summary`);
+      return response.data || null;
+    } catch (error: any) {
       throw this.handleError(error);
     }
   }
