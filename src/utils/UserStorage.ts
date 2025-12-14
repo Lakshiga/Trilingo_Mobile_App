@@ -3,6 +3,7 @@ import apiService, { User, LoginRequest, RegisterRequest, UserProfileData } from
 import { NetworkDiagnostics } from './networkDiagnostics';
 
 interface UserData {
+  id?: string;  // Add optional id property
   username: string;
   name: string;
   age: string;
@@ -97,6 +98,7 @@ export class UserStorage {
         const savedPreferences = await this.getUserLanguagePreferences('Admin');
         
         const adminUser: UserData = {
+          id: 'admin', // Add ID for admin user
           username: 'Admin',
           name: 'Administrator',
           age: '',
@@ -147,7 +149,17 @@ export class UserStorage {
           }
         }
         
+        // Get user ID from backend
+        let userId: string | undefined;
+        try {
+          const currentUser = await apiService.getCurrentUser();
+          userId = currentUser?.id;
+        } catch (error) {
+          console.warn('Could not fetch user ID:', error);
+        }
+        
         const userData: UserData = {
+          id: userId, // Add ID to user data
           username: username,
           name: response.username || identifier, // Use username as name
           age: '',
@@ -209,7 +221,17 @@ export class UserStorage {
           learningLanguage,
         });
         
+        // Get user ID from backend
+        let userId: string | undefined;
+        try {
+          const currentUser = await apiService.getCurrentUser();
+          userId = currentUser?.id;
+        } catch (error) {
+          console.warn('Could not fetch user ID:', error);
+        }
+        
         const newUserData: UserData = {
+          id: userId, // Add ID to user data
           username: username,
           name: userData.name || response.username || userData.username,
           age: userData.age || '',
@@ -243,7 +265,17 @@ export class UserStorage {
           learningLanguage,
         });
         
+        // Get user ID from backend
+        let userId: string | undefined;
+        try {
+          const currentUser = await apiService.getCurrentUser();
+          userId = currentUser?.id;
+        } catch (error) {
+          console.warn('Could not fetch user ID:', error);
+        }
+        
         const newUserData: UserData = {
+          id: userId, // Add ID to user data
           username: username,
           name: userData.name || userData.username,
           age: userData.age || '',

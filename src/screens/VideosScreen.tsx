@@ -1,494 +1,391 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import LottieView from 'lottie-react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useTheme } from '../theme/ThemeContext';
-import { useUser } from '../context/UserContext';
-import apiService, { ActivityDto } from '../services/api';
-import { CLOUDFRONT_URL } from '../config/apiConfig';
-import { getTranslation, Language } from '../utils/translations';
-import { getLearningLanguageField, getLanguageKey } from '../utils/languageUtils';
-import { Dimensions } from 'react-native';
 import {
-  findActivityTypeIds,
-  findMainActivityIds,
-  VIDEO_MAIN_ACTIVITY_NAMES,
-  VIDEO_PLAYER_ACTIVITY_TYPE_NAMES,
-} from '../utils/activityMappings';
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+  Modal,
+  StatusBar,
+  Dimensions
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { useUser } from '../context/UserContext';
+import apiService from '../services/api';
+import { CLOUDFRONT_URL } from '../config/apiConfig';
+import { getLanguageKey } from '../utils/languageUtils';
+import { Language } from '../utils/translations';
+import VideoPlayer from '../components/activity-types/VideoPlayer';
 
 const { width, height } = Dimensions.get('window');
 
-type Video = {
+// --- Helper to extract YouTube ID from ID or URL ---
+const extractYoutubeId = (input: string): string | null => {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (/^[\w-]{11}$/.test(trimmed)) return trimmed; // already an ID
+  const patterns = [
+    /youtu\.be\/([^?&/]+)/i,
+    /youtube\.com\/watch\?v=([^?&/]+)/i,
+    /youtube\.com\/embed\/([^?&/]+)/i,
+    /youtube\.com\/shorts\/([^?&/]+)/i,
+    /youtube\.com\/live\/([^?&/]+)/i,
+    /(v=)([\w-]{11})/i,
+  ];
+  for (const p of patterns) {
+    const m = trimmed.match(p);
+    if (m?.[1] || m?.[2]) return m[1] || m[2];
+  }
+  return null;
+};
+
+// Multi-lang helper
+const getLocalized = (value: any, langKey: string): string => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return value[langKey] || value.en || value.ta || value.si || '';
+};
+
+const normalizeUrl = (raw?: string | null): string | null => {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `${CLOUDFRONT_URL}${raw.startsWith('/') ? '' : '/'}${raw}`;
+};
+
+type VideoItem = {
   id: string;
   title: string;
   description: string;
-  duration: string;
-  videoUrl?: string;
-  emoji: string;
-  gradient: readonly [string, string];
-  category: string;
+  youtubeId?: string;
+  fallbackUrl?: string; // AWS/CloudFront or direct MP4
+  rawJson: any; // Store raw for player
 };
 
 const VideosScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { theme } = useTheme();
   const { currentUser } = useUser();
-  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
-  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
-  
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
+  // @ts-ignore
+  const learningLanguage: Language = currentUser?.learningLanguage || 'Tamil';
+  const langKey = getLanguageKey(learningLanguage);
 
-  // Fetch videos from backend (Activities with Video main activity or YouTube links)
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+
   useEffect(() => {
     const fetchVideos = async () => {
       try {
         setLoading(true);
-        
-        // Fetch all activities, activity types, and main activities
-        const [allActivities, activityTypes, mainActivities] = await Promise.all([
-          apiService.getAllActivities(),
-          apiService.getAllActivityTypes(),
-          apiService.getAllMainActivities(),
-        ]);
-        
-        const videoMainActivityIds = findMainActivityIds(
-          mainActivities,
-          VIDEO_MAIN_ACTIVITY_NAMES
-        );
-        const videoPlayerActivityTypeIds = findActivityTypeIds(
-          activityTypes,
-          VIDEO_PLAYER_ACTIVITY_TYPE_NAMES
-        );
+        const allActivities = await apiService.getAllActivities();
 
-        let videoActivities = allActivities.filter(
-          (activity) =>
-            (videoMainActivityIds.size === 0 ||
-              videoMainActivityIds.has(activity.mainActivityId)) &&
-            (videoPlayerActivityTypeIds.size === 0 ||
-              videoPlayerActivityTypeIds.has(activity.activityTypeId))
-        );
+        const videoList: VideoItem[] = [];
 
-        if (videoActivities.length === 0) {
-          console.warn(
-            'Video Player mapping not found. Falling back to YouTube detection.'
-          );
-          videoActivities = allActivities.filter((activity) => {
-            if (
-              videoMainActivityIds.size > 0 &&
-              videoMainActivityIds.has(activity.mainActivityId)
-            ) {
-              return true;
+        allActivities.forEach((activity) => {
+          if (!activity.details_JSON) return;
+          try {
+            let parsed: any = activity.details_JSON;
+            // Handle double-encoded JSON
+            if (typeof parsed === 'string') {
+              try {
+                parsed = JSON.parse(parsed);
+              } catch (_e) {}
+            }
+            if (typeof parsed === 'string') {
+              try {
+                parsed = JSON.parse(parsed);
+              } catch (_e) {}
+            }
+            if (!parsed || typeof parsed !== 'object') {
+              return;
             }
 
-            if (activity.details_JSON) {
-              try {
-                const parsed = JSON.parse(activity.details_JSON);
-                const videoUrl =
-                  parsed.videoUrl || parsed.mediaUrl || parsed.youtubeUrl;
-                if (
-                  videoUrl &&
-                  (videoUrl.includes('youtube.com') ||
-                    videoUrl.includes('youtu.be'))
-                ) {
-                  return true;
+            // Normalise: some activities send an array of items, each with mediaUrl/videoUrl, etc.
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+
+            let youtubeId: string | null = null;
+            let fallbackUrl: string | null = null;
+            let title = '';
+            let description = '';
+
+            for (const item of items) {
+              const vd = item.videoData || {};
+              const candidates = [
+                vd.videoId,
+                vd.youtubeUrl,
+                vd.videoUrl,
+                vd.mediaUrl,
+                item.videoUrl,
+                item.youtubeUrl,
+                item.mediaUrl,
+                vd.mediaUrl,
+                item.videoUrl,
+                item.youtubeUrl,
+                item.mediaUrl,
+              ];
+
+              for (const c of candidates) {
+                const raw = getLocalized(c, langKey);
+                const yt = extractYoutubeId(raw);
+                if (yt) {
+                  youtubeId = yt;
+                  break;
                 }
-              } catch (e) {
-                return false;
+                if (!fallbackUrl && raw && typeof raw === 'string') {
+                  // treat as AWS/direct url if not youtube
+                  if (!raw.includes('youtube.com') && !raw.includes('youtu.be')) {
+                    fallbackUrl = normalizeUrl(raw) || raw;
+                  }
+                }
+              }
+              if (youtubeId || fallbackUrl) {
+                title =
+                  getLocalized(item.title, langKey) ||
+                  getLocalized(parsed.title, langKey) ||
+                  activity.name_en ||
+                  activity.name_ta ||
+                  activity.name_si ||
+                  'Video';
+                description =
+                  getLocalized(item.description, langKey) ||
+                  getLocalized(parsed.description, langKey) ||
+                  '';
+                break;
               }
             }
-            return false;
-          });
-        }
-        
-        // Map activities to videos
-        const mappedVideos: Video[] = videoActivities.map((activity, index) => {
-          let videoData: any = {};
-          
-          // Parse Details_JSON to get video data
-          if (activity.details_JSON) {
-            try {
-              const parsed = JSON.parse(activity.details_JSON);
-              videoData = parsed;
-            } catch (e) {
-              console.error('Error parsing video JSON:', e);
+
+            if (!youtubeId && !fallbackUrl) {
+              return;
             }
-          }
 
-          // Get video URL (YouTube or CloudFront)
-          let videoUrl = '';
-          const urlSource = videoData.videoUrl || videoData.mediaUrl || videoData.youtubeUrl;
-          if (urlSource) {
-            videoUrl = urlSource;
-            // If it's not a YouTube URL and doesn't start with http, prepend CloudFront URL
-            if (!videoUrl.includes('youtube.com') && !videoUrl.includes('youtu.be') && !videoUrl.startsWith('http')) {
-              videoUrl = videoUrl.startsWith('/')
-                ? `${CLOUDFRONT_URL}${videoUrl}`
-                : `${CLOUDFRONT_URL}/${videoUrl}`;
+            if (!title) {
+              title =
+                activity.name_en ||
+                activity.name_ta ||
+                activity.name_si ||
+                'Video';
             }
+
+            videoList.push({
+              id: activity.id.toString(),
+              title,
+              description,
+              youtubeId: youtubeId || undefined,
+              fallbackUrl: fallbackUrl || undefined,
+              rawJson: parsed,
+            });
+          } catch (e) {
           }
-
-          // Get title in learning language
-          const title = videoData.title 
-            ? (typeof videoData.title === 'object' 
-                ? (videoData.title[getLanguageKey(learningLanguage)] || 
-                   videoData.title.en || 
-                   getLearningLanguageField(learningLanguage, activity))
-                : videoData.title)
-            : getLearningLanguageField(learningLanguage, activity) || 'Video';
-
-          // Get description in learning language
-          const description = videoData.instruction || videoData.description
-            ? (typeof (videoData.instruction || videoData.description) === 'object'
-                ? ((videoData.instruction || videoData.description)[getLanguageKey(learningLanguage)] || 
-                   (videoData.instruction || videoData.description).en || 
-                   getTranslation(learningLanguage, 'educationalVideo'))
-                : (videoData.instruction || videoData.description))
-            : getTranslation(learningLanguage, 'educationalVideo');
-
-          // Gradients for videos
-          const gradients: readonly [string, string][] = [
-            ['#667EEA', '#764BA2'] as const,
-            ['#F093FB', '#F5576C'] as const,
-            ['#4FACFE', '#00F2FE'] as const,
-            ['#43E97B', '#38F9D7'] as const,
-            ['#FA709A', '#FEE140'] as const,
-            ['#30CFD0', '#330867'] as const,
-          ];
-
-          return {
-            id: activity.id.toString(),
-            title: title,
-            description: description,
-            duration: '0:00', // Duration can be calculated from video if needed
-            videoUrl: videoUrl,
-            emoji: '📹',
-            gradient: gradients[index % gradients.length],
-            category: 'Education',
-          };
         });
 
-        setVideos(mappedVideos);
-      } catch (error: any) {
+        setVideos(videoList);
+      } catch (error) {
         console.error('Error fetching videos:', error);
-        Alert.alert(
-          'Error',
-          'Could not load videos. Please try again.',
-          [{ text: 'OK' }]
-        );
-        // Use empty array on error
-        setVideos([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchVideos();
-  }, [learningLanguage]);
+  }, [langKey]);
 
   return (
-    <LinearGradient colors={theme.videosBackground} style={styles.container}>
-      {/* Decorative circles */}
-      <View style={[styles.decorativeCircle1, { backgroundColor: theme.decorativeCircle1 }]} />
-      <View style={[styles.decorativeCircle2, { backgroundColor: theme.decorativeCircle2 }]} />
-      <View style={[styles.decorativeCircle3, { backgroundColor: theme.decorativeCircle3 }]} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Header with back button */}
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={28} color="#fff" />
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={24} color="#1E293B" />
         </TouchableOpacity>
-        
-        <View style={styles.headerContent}>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerEmoji}>📹</Text>
-            <Text style={styles.headerTitle}>{getTranslation(nativeLanguage, 'educationalVideos')}</Text>
-            <Text style={styles.headerEmoji}>🎬</Text>
-          </View>
-          <Text style={styles.headerSubtitle}>{getTranslation(nativeLanguage, 'learnThroughEngagingContent')}</Text>
-        </View>
+        <Text style={styles.headerTitle}>Video Library</Text>
       </View>
 
-      {/* Loading Indicator */}
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <LottieView
-            source={require('../../assets/animations/Loading animation.json')}
-            autoPlay
-            loop
-            style={styles.loadingAnimation}
-          />
-          <Text style={styles.loadingText}>{getTranslation(nativeLanguage, 'loadingVideos')}</Text>
+      {/* Loading */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#002D62" />
         </View>
-      )}
-
-      {/* Videos List */}
-      {!loading && (
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+      ) : (
+        <ScrollView contentContainerStyle={styles.listContent}>
           {videos.length > 0 ? (
-            videos.map((video, index) => (
-              <TouchableOpacity key={video.id} activeOpacity={0.8} style={styles.videoCard}>
-            <LinearGradient
-              colors={video.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.videoGradient}
-            >
-              {/* Thumbnail with play button */}
-              <View style={styles.thumbnail}>
-                <Text style={styles.thumbnailEmoji}>{video.emoji}</Text>
-                <View style={styles.playButtonOverlay}>
-                  <View style={styles.playButton}>
-                    <MaterialIcons name="play-arrow" size={40} color="#fff" />
+            videos.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.card}
+                activeOpacity={0.9}
+                onPress={() => setSelectedVideo(item)}
+              >
+                {/* Thumbnail Image */}
+                <View style={styles.thumbnailWrapper}>
+                  {item.youtubeId ? (
+                    <Image
+                      source={{ uri: `https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg` }}
+                      style={styles.thumbnail}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={[styles.thumbnail, { backgroundColor: '#E2E8F0' }]}>
+                      <MaterialIcons name="videocam" size={48} color="#64748B" />
+                    </View>
+                  )}
+                  {/* Play Overlay */}
+                  <View style={styles.playOverlay}>
+                    <View style={styles.playBtn}>
+                      <MaterialIcons name="play-arrow" size={32} color="#FFF" />
+                    </View>
                   </View>
                 </View>
-                
-                {/* Duration badge */}
-                <View style={styles.durationBadge}>
-                  <MaterialIcons name="access-time" size={14} color="#fff" />
-                  <Text style={styles.durationText}>{video.duration}</Text>
-                </View>
 
-                {/* Category badge */}
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{video.category}</Text>
+                {/* Text Content */}
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
                 </View>
-              </View>
-
-              {/* Video Info */}
-              <View style={styles.videoInfo}>
-                <Text style={styles.videoTitle} numberOfLines={1}>
-                  {video.title}
-                </Text>
-                <Text style={styles.videoDescription} numberOfLines={2}>
-                  {video.description}
-                </Text>
-              </View>
-              </LinearGradient>
-            </TouchableOpacity>
+              </TouchableOpacity>
             ))
           ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{getTranslation(nativeLanguage, 'noVideosAvailable')}</Text>
-              <Text style={styles.emptySubtext}>{getTranslation(nativeLanguage, 'checkBackLater')}</Text>
+            <View style={styles.center}>
+              <Text style={{color: '#999'}}>No videos found.</Text>
             </View>
           )}
-          
-          <View style={styles.bottomSpacing} />
         </ScrollView>
       )}
-    </LinearGradient>
+
+      {/* Full Screen Player Modal */}
+      <Modal visible={!!selectedVideo} animationType="slide" onRequestClose={() => setSelectedVideo(null)}>
+        <View style={{flex: 1, backgroundColor: '#000'}}>
+          {selectedVideo && (
+            <>
+              <TouchableOpacity 
+                style={styles.closeBtn} 
+                onPress={() => setSelectedVideo(null)}
+              >
+                <MaterialIcons name="close" size={30} color="#FFF" />
+              </TouchableOpacity>
+              
+              <VideoPlayer
+                content={{
+                  ...selectedVideo.rawJson,
+                  videoData: {
+                    ...(selectedVideo.rawJson?.videoData || {}),
+                    videoId: selectedVideo.youtubeId,
+                    videoUrl: selectedVideo.fallbackUrl,
+                    mediaUrl: selectedVideo.fallbackUrl,
+                  },
+                }}
+                // @ts-ignore
+                currentLang={langKey}
+                onComplete={() => {}}
+              />
+            </>
+          )}
+        </View>
+      </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F1F5F9', // Light Gray-Blue background
   },
-  decorativeCircle1: {
-    position: 'absolute',
-    top: -50,
-    left: -50,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  decorativeCircle2: {
-    position: 'absolute',
-    top: 100,
-    right: -40,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  decorativeCircle3: {
-    position: 'absolute',
-    bottom: 150,
-    left: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  header: {
-    paddingTop: Math.max(45, height * 0.06),
-    paddingBottom: Math.max(20, height * 0.025),
-    paddingHorizontal: Math.max(16, width * 0.04),
-    backgroundColor: 'transparent',
-  },
-  backButton: {
-    position: 'absolute',
-    top: Math.max(40, height * 0.05),
-    left: Math.max(16, width * 0.04),
-    zIndex: 10,
-    backgroundColor: 'rgba(67, 188, 205, 0.9)',
-    borderRadius: 25,
-    padding: Math.max(10, width * 0.03),
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  headerContent: {
+  center: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitleContainer: {
+  // Header
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
   },
-  headerEmoji: {
-    fontSize: 32,
-    marginHorizontal: 8,
+  backBtn: {
+    padding: 5,
+    marginRight: 15,
   },
   headerTitle: {
-    fontSize: Math.max(22, width * 0.07),
-    fontWeight: 'bold',
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#002D62',
   },
-  headerSubtitle: {
-    fontSize: Math.max(14, width * 0.04),
-    color: '#fff',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+  // List
+  listContent: {
+    padding: 20,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: Math.max(16, width * 0.04),
-  },
-  scrollContent: {
-    paddingTop: 10,
-  },
-  videoCard: {
-    marginBottom: Math.max(16, height * 0.02),
-  },
-  videoGradient: {
-    borderRadius: 20,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
+    // Soft Shadow
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  thumbnail: {
-    height: Math.max(160, height * 0.22),
-    justifyContent: 'center',
-    alignItems: 'center',
+  thumbnailWrapper: {
+    height: 180,
+    width: '100%',
     position: 'relative',
   },
-  thumbnailEmoji: {
-    fontSize: 60,
-    marginBottom: 10,
+  thumbnail: {
+    width: '100%',
+    height: '100%',
   },
-  playButtonOverlay: {
-    position: 'absolute',
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  playBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0, 45, 98, 0.8)', // Brand Blue, semi-transparent
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#FFF',
   },
-  durationBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  durationText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  categoryBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  categoryText: {
-    color: '#333',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  videoInfo: {
+  cardContent: {
     padding: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
   },
-  videoTitle: {
-    fontSize: Math.max(18, width * 0.05),
+  cardTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#2C3E50',
+    color: '#1E293B',
     marginBottom: 6,
   },
-  videoDescription: {
-    fontSize: Math.max(13, width * 0.035),
-    color: '#7F8C8D',
-    lineHeight: Math.max(18, width * 0.05),
-  },
-  bottomSpacing: {
-    height: 20,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  loadingAnimation: {
-    width: 200,
-    height: 200,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#fff',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptySubtext: {
+  cardDesc: {
     fontSize: 14,
-    color: '#fff',
-    textAlign: 'center',
-    opacity: 0.8,
+    color: '#64748B',
+    lineHeight: 20,
   },
+  // Modal Close
+  closeBtn: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+  }
 });
 
 export default VideosScreen;

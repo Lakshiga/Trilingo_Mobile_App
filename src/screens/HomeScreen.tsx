@@ -1,699 +1,654 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, 
+  StatusBar, ActivityIndicator, Alert, Animated, Easing, Dimensions 
+} from 'react-native';
+import { MaterialCommunityIcons, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
-import { getTranslation, Language } from '../utils/translations';
 import { useResponsive } from '../utils/responsive';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
+import apiService, { ProgressSummaryDto, ActivityDto, ActivityTypeDto } from '../services/api';
+import LottieView from 'lottie-react-native';
+
+const { width } = Dimensions.get('window');
+
+// --- 1. BOUNCY BUTTON COMPONENT (Animation) ---
+// குழந்தைகள் பட்டனை தொடும்போது அது "Spring" போல இயங்கும்
+const BouncyButton = ({ onPress, children, style, scaleTo = 0.95 }: any) => {
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scaleValue, {
+      toValue: scaleTo,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      onPress={onPress}
+      style={{ width: '100%' }} // Ensure it fills container
+    >
+      <Animated.View style={[style, { transform: [{ scale: scaleValue }] }]}>
+        {children}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+// --- 2. BACKGROUND DOODLES (To fill white space) ---
+const BackgroundDoodles = () => {
+  // Random icons scattered in the background with low opacity
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <MaterialCommunityIcons name="star" size={40} color="#59A4C6" style={{ position: 'absolute', top: 50, left: 20, opacity: 0.1 }} />
+      <MaterialCommunityIcons name="shape-circle-plus" size={50} color="#4289BA" style={{ position: 'absolute', top: 150, right: -10, opacity: 0.05 }} />
+      <MaterialCommunityIcons name="balloon" size={60} color="#2D4F9C" style={{ position: 'absolute', top: 300, left: -20, opacity: 0.05 }} />
+      <MaterialCommunityIcons name="music-note" size={40} color="#0D5B81" style={{ position: 'absolute', bottom: 100, right: 30, opacity: 0.1 }} />
+      <MaterialCommunityIcons name="pencil" size={50} color="#59A4C6" style={{ position: 'absolute', bottom: 250, left: 50, opacity: 0.05 }} />
+      <MaterialCommunityIcons name="alphabetical" size={80} color="#2D4F9C" style={{ position: 'absolute', top: '50%', right: '40%', opacity: 0.03 }} />
+    </View>
+  );
+};
+
+// --- CONFIGURATION ---
+interface CategoryItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  type: string;
+  icon: any;
+  colors: readonly [string, string];
+}
+
+// Progress data interface
+interface ProgressData {
+  totalActivitiesCompleted: number;
+  totalActivitiesAttempted: number;
+  averageScore: number;
+  totalXpPoints: number;
+  totalTimeSpentSeconds: number;
+  level: number;
+  nextLevelXp: number;
+}
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { isDarkMode } = useTheme();
   const { currentUser } = useUser();
   const responsive = useResponsive();
-  const isGuest = currentUser?.isGuest || !currentUser;
-  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const { resumeBackground, disableBackground } = useBackgroundAudio();
   
-  // Button data with vibrant, child-friendly colors and images - now with emojis and fun descriptions
-  const buttons = [
-    { 
-      id: 'learning', 
-      title: 'Learning', 
-      emoji: '📖',
-      description: 'Play & Practice',
-      image: require('../../assets/Gemini_Generated_Learning.png'),
-      color: ['#43BCCD', '#5DD3A1', '#E0F7F4'] 
-    },
-    { 
-      id: 'letters', 
-      title: 'Letters', 
-      emoji: '🔤',
-      description: 'Trace & Learn',
-      image: require('../../assets/Gemini_Generated_Learning.png'),
-      color: ['#FFD93D', '#F9A826', '#FFF4E6'] 
-    },
-    { 
-      id: 'songs', 
-      title: 'Songs', 
-      emoji: '🎵',
-      description: 'Sing & Learn',
-      image: require('../../assets/Listening.png'),
-      color: ['#FF9A8B', '#FF6B9D', '#FFE5E1'] 
-    },
-    
-    { 
-      id: 'videos', 
-      title: 'Videos', 
-      emoji: '📺',
-      description: 'Watch & Learn',
-      image: require('../../assets/Gemini_Generated_Image_4g1pdr4g1pdr4g1p.png'),
-      color: ['#6A8EFF', '#8A6BFF', '#E8E5FF'] 
-    },
-    { 
-      id: 'stories', 
-      title: 'Stories', 
-      emoji: '📖',
-      description: 'Magic Tales',
-      image: require('../../assets/Gemini_Generated_Image_46vxlk46vxlk46vx.png'),
-      color: ['#FFB366', '#FF8C42', '#FFF4E6'] 
-    },
-    { 
-      id: 'conversation', 
-      title: 'Conversation', 
-      emoji: '💬',
-      description: 'Chat & Speak',
-      image: require('../../assets/Conversation.png'),
-      color: ['#AEE6FF' , '#6EC9FF', '#E6F7FF'] 
-    },
+  const [loading, setLoading] = useState(true);
+  const [progressData, setProgressData] = useState<ProgressData | null>({
+    totalActivitiesCompleted: 0,
+    totalActivitiesAttempted: 0,
+    averageScore: 0,
+    totalXpPoints: 0,
+    totalTimeSpentSeconds: 0,
+    level: 1,
+    nextLevelXp: 300,
+  });
+  const [summary, setSummary] = useState<ProgressSummaryDto | null>(null);
+  const [continueTarget, setContinueTarget] = useState<{
+    activityId: number;
+    activityTypeId: number;
+    title: string;
+  } | null>(null);
+  const [profileImageError, setProfileImageError] = useState(false);
+
+  // DATA definition inside component to control order
+  const categories: CategoryItem[] = [
+    { id: 'letters', title: 'ABC & 123', subtitle: 'Basics', type: 'letters', icon: 'alphabetical-variant', colors: ['#59A4C6', '#4289BA'] },
+    { id: 'stories', title: 'Story Time', subtitle: 'Read', type: 'stories', icon: 'book-open-page-variant', colors: ['#749FCD', '#2D4F9C'] },
+    { id: 'videos', title: 'Cartoons', subtitle: 'Watch', type: 'videos', icon: 'youtube-tv', colors: ['#4289BA', '#0D5B81'] },
+    { id: 'songs', title: 'Music', subtitle: 'Dance', type: 'songs', icon: 'music-circle', colors: ['#59A4C6', '#2D4F9C'] },
+    { id: 'conversation', title: 'Speak Up', subtitle: 'Talk', type: 'conversation', icon: 'microphone', colors: ['#59A4C6', '#0D5B81'] }
   ];
 
-  type StatCard = {
-    id: string;
-    label: string;
-    value: string;
-    colors: [string, string];
-    icon: string;
-  };
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        if (currentUser?.id) {
+          try {
+            const s = await apiService.getStudentSummary(currentUser.id);
+            setSummary(s || null);
 
-  const statsCards: StatCard[] = React.useMemo(() => [
-    {
-      id: 'lessons',
-      label: getTranslation(nativeLanguage, 'lessons'),
-      value: '24',
-      colors: ['#FF6B9D', '#FF8FAB'],
-      icon: '📚',
-    },
-    {
-      id: 'points',
-      label: getTranslation(nativeLanguage, 'points'),
-      value: '156',
-      colors: ['#FFD700', '#FFA500'],
-      icon: '🏆',
-    },
-    {
-      id: 'days',
-      label: getTranslation(nativeLanguage, 'days'),
-      value: '12',
-      colors: ['#667EEA', '#7A8EFC'],
-      icon: '🔥',
-    },
-  ], [nativeLanguage]);
+            if (s) {
+              setProgressData({
+                totalActivitiesCompleted: s.totalActivitiesCompleted,
+                totalActivitiesAttempted: s.totalActivitiesAttempted,
+                averageScore: s.averageScore,
+                totalXpPoints: s.totalXpPoints,
+                totalTimeSpentSeconds: s.totalTimeSpentSeconds,
+                level: Math.floor(s.totalXpPoints / 300) + 1,
+                nextLevelXp: ((Math.floor(s.totalXpPoints / 300) + 1) * 300)
+              });
+            }
 
-  const handleSongsPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
+            // Determine continue target from most recent completed activity -> move to the next one if available
+            const recent = s?.recentActivities?.[0];
+            if (recent?.activityId) {
+              try {
+                // Try to derive next activity: current activity + 1 (sequence-based)
+                const currentActivity = await apiService.getActivityById(recent.activityId);
+                if (currentActivity) {
+                  // heuristic: fetch the list for the same stage and pick the next by sequenceOrder
+                  const siblings = await apiService.getActivitiesByStage(currentActivity.stageId);
+                  const sorted = siblings.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+                  const idx = sorted.findIndex(a => a.id === currentActivity.id);
+                  const next = idx >= 0 && idx + 1 < sorted.length ? sorted[idx + 1] : currentActivity;
+                  const activityType: ActivityTypeDto | null = await apiService.getActivityTypeById(next.activityTypeId);
+                  if (activityType) {
+                    setContinueTarget({
+                      activityId: next.id,
+                      activityTypeId: activityType.id,
+                      title: next.name_en || next.name_ta || next.name_si || 'Activity',
+                    });
+                  } else {
+                    setContinueTarget(null);
+                  }
+                }
+              } catch {
+                setContinueTarget(null);
+              }
+            } else {
+              setContinueTarget(null);
+            }
+          } catch (error) {
+            console.warn('Failed to fetch progress data:', error);
+            setProgressData(prev => prev || {
+              totalActivitiesCompleted: 0,
+              totalActivitiesAttempted: 0,
+              averageScore: 0,
+              totalXpPoints: 0,
+              totalTimeSpentSeconds: 0,
+              level: 1,
+              nextLevelXp: 300
+            });
+            setSummary(null);
+            setContinueTarget(null);
+          }
+        } else {
+          setSummary(null);
+          setContinueTarget(null);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (currentUser) {
+      resumeBackground().catch(() => null);
+    } else {
+      disableBackground().catch(() => null);
     }
-    // Navigate directly to Songs screen instead of SongsStories screen
-    navigation.navigate('Songs' as never);
+    setProfileImageError(false);
+  }, [currentUser]);
+
+  const handleNavigation = (categoryType: string) => {
+    // Mapping Logic...
+    const routeMap: Record<string, string> = {
+      learning: 'Lessons',
+      letters: 'LetterSelection',
+      songs: 'Songs',
+      videos: 'Videos',
+      stories: 'Stories',
+      conversation: 'Conversation',
+    };
+    navigation.navigate(routeMap[categoryType] as never);
   };
 
-  const handleLearningPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
+  const renderProfileImage = () => {
+    if (!currentUser) {
+      return <View style={{ width: 72, height: 72 }} />;
     }
-    // Navigate to Levels screen (Learning flow)
-    navigation.navigate('Levels' as never);
-  };
-
-  const handleVideosPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
+    
+    const raw = currentUser.profileImageUrl;
+    if (raw && isEmojiLike(raw)) {
+      return (
+        <View style={[styles.profileImage, styles.emojiContainer]}>
+          <Text style={{ fontSize: 20 }}>{raw}</Text>
+        </View>
+      );
     }
-    // Navigate to the Videos screen
-    navigation.navigate('Videos' as never);
-  };
 
-  const handleStoriesPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
+    const imageUri = resolveImageUri(raw);
+    if (imageUri && !profileImageError) {
+      return (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.profileImage}
+          onError={() => setProfileImageError(true)}
+        />
+      );
     }
-    // Navigate directly to Stories screen instead of SongsStories screen
-    navigation.navigate('Stories' as never);
+
+    return null;
   };
 
-  const handleConversationPress = () => {
-    if (isGuest) {
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
+  const calculateProgress = () => {
+    if (!progressData) return 0;
+    const currentLevelXp = (progressData.level - 1) * 300;
+    const xpInCurrentLevel = progressData.totalXpPoints - currentLevelXp;
+    const xpNeededForNextLevel = progressData.nextLevelXp - currentLevelXp;
+    return Math.min(Math.max((xpInCurrentLevel / xpNeededForNextLevel) * 100, 0), 100);
+  };
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
+
+  const handleContinue = () => {
+    if (continueTarget) {
+      (navigation as any).navigate('PlayScreen', {
+        activityId: continueTarget.activityId,
+        activityTypeId: continueTarget.activityTypeId,
+        activityTitle: continueTarget.title,
+      });
+    } else {
+      (navigation as any).navigate('Lessons');
     }
-    navigation.navigate('Conversation' as never);
-  };
-
-  const handleLettersPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
-    }
-    // Navigate to Letter Selection screen (Letter Tracking flow)
-    navigation.navigate('LetterSelection' as never);
-  };
-
-  const handleStartLearningPress = () => {
-    if (isGuest) {
-      // Show guest limitation message
-      alert('Guest users can access limited content. Please login or register to unlock all features!');
-    }
-    // Navigate to the Activities screen (which shows Learning activities)
-    navigation.navigate('Activities' as never);
-  };
-
-  const buttonHandlers: Record<string, () => void> = {
-    learning: handleLearningPress,
-    letters: handleLettersPress,
-    songs: handleSongsPress,
-    videos: handleVideosPress,
-    stories: handleStoriesPress,
-    conversation: handleConversationPress,
   };
 
   const styles = getStyles(responsive);
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContainer]}>
+        <ActivityIndicator size="large" color="#924DBF" />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDarkMode ? '#1F2937' : '#FF8FAB' }]}>
-      {/* Top Bar with Icons */}
-      <View style={[styles.topBar, { backgroundColor: isDarkMode ? '#374151' : '#AEE6FF' }]}>
-        <View style={styles.leftIcon}>
-          <Image 
-            source={require('../../assets/LOGO.png')} 
-            style={{ 
-              width: responsive.wp(20), 
-              height: responsive.hp(8.5),
-            }} 
-          />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0D3846" />
+      
+      {/* Background Pattern */}
+      <BackgroundDoodles />
+
+      {/* --- HEADER --- */}
+      <View style={styles.header}>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.greetingText}>Hello,</Text>
+          <Text style={styles.appName}>
+            {currentUser?.name || 'Hello!'}
+          </Text>
         </View>
-        <View style={styles.centerAnimation}>
-          {/* This is where you can add your animation component */}
-          {/* <Text style={[styles.animationPlaceholder, { color: isDarkMode ? '#F9FAFB' : '#FF6B9D' }]}>✨Q-Bit✨ </Text> */}
-          {/* Removed the image from here */}
-        </View>
-        {!isGuest ? (
-          <TouchableOpacity 
-            style={styles.rightIconContainer}
-            onPress={() => navigation.navigate('Profile' as never)}
-          >
-            <View style={styles.profileSection}>
-              {currentUser?.profileImageUrl ? (
-                (() => {
-                  const imageUri = resolveImageUri(currentUser.profileImageUrl);
-                  const emojiValue = isEmojiLike(currentUser.profileImageUrl)
-                    ? currentUser.profileImageUrl
-                    : null;
-
-                  if (imageUri) {
-                    return (
-                      <Image 
-                        source={{ uri: imageUri }} 
-                        style={styles.profileImage}
-                        resizeMode="cover"
-                      />
-                    );
-                  }
-
-                  if (emojiValue) {
-                    return (
-                      <View style={styles.profileImage}>
-                        <Text style={styles.emojiAvatar}>{emojiValue}</Text>
-                      </View>
-                    );
-                  }
-
-                  return (
-                    <MaterialIcons name="account-circle" size={responsive.wp(11.5)} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
-                  );
-                })()
-              ) : (
-                <MaterialIcons name="account-circle" size={responsive.wp(11.5)} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
-              )}
-              <Text style={[styles.profileName, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>
-                {currentUser?.name || currentUser?.username}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={styles.loginTopButton}
-            onPress={() => navigation.navigate('Login' as never)}
-          >
-            <MaterialIcons name="login" size={responsive.wp(6.5)} color={isDarkMode ? '#60D4CD' : "#4ECDC4"} />
-            <Text style={[styles.loginTopButtonText, { color: isDarkMode ? '#60D4CD' : "#4ECDC4" }]}>Login</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          onPress={() => (navigation as any).navigate('Profile')}
+          style={styles.profileButton}
+        >
+          {renderProfileImage()}
+        </TouchableOpacity>
       </View>
 
-      {/* Main Content with Gradient Background */}
-      <LinearGradient
-        colors={isDarkMode ? ['#0F766E', '#7C3AED', '#EA580C'] : ['#43BCCD', '#FF6B9D', '#FFB366', '#FFD93D']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradientBackground}
-      >
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.content}>
-            {/* Welcome Header */}
-            <View style={styles.headerText}>
-              <View style={styles.welcomeContainer}>
-                <Text style={styles.welcomeText}>
-                  {currentUser && !currentUser.isGuest 
-                    ? `👋 ${getTranslation(nativeLanguage, 'welcomeTo')} ${currentUser.name || currentUser.username}!` 
-                    : `👋 ${getTranslation(nativeLanguage, 'welcome')}`}
-                </Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* --- JOY IN EDUCATION ANIMATION --- */}
+        <View style={styles.heroCard}>
+          <LottieView
+            source={require('../../assets/animations/Joy in Education.json')}
+            autoPlay
+            loop
+            style={styles.heroAnimation}
+          />
+        </View>
+        
+        {/* --- PROGRESS SUMMARY --- */}
+        {progressData && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressTitle}>Your Progress</Text>
+              <Text style={styles.levelText}>Level {progressData.level}</Text>
+            </View>
+            
+            <View style={styles.xpContainer}>
+              <Text style={styles.xpText}>{progressData.totalXpPoints} XP</Text>
+              <Text style={styles.nextLevelText}>Next level: {progressData.nextLevelXp} XP</Text>
+            </View>
+            
+            <View style={styles.progressBarBackground}>
+              <Animated.View 
+                style={[
+                  styles.progressBarFill, 
+                  { 
+                    width: `${calculateProgress()}%`,
+                    backgroundColor: calculateProgress() === 100 ? '#4CAF50' : '#59A4C6'
+                  }
+                ]} 
+              />
+            </View>
+            
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <MaterialCommunityIcons name="star" size={24} color="#FFD700" />
+                <Text style={styles.statValue}>{progressData.totalActivitiesCompleted}</Text>
+                <Text style={styles.statLabel}>Stars</Text>
+              </View>
+              
+              <View style={styles.statBox}>
+                <MaterialCommunityIcons name="trophy" size={24} color="#9E72C3" />
+                <Text style={styles.statValue}>{progressData.level}</Text>
+                <Text style={styles.statLabel}>Level</Text>
+              </View>
+              
+              <View style={styles.statBox}>
+                <MaterialCommunityIcons name="chart-line" size={24} color="#4CAF50" />
+                <Text style={styles.statValue}>{Math.round(progressData.averageScore)}%</Text>
+                <Text style={styles.statLabel}>Accuracy</Text>
+              </View>
+              
+              <View style={styles.statBox}>
+                <MaterialCommunityIcons name="clock-outline" size={24} color="#2196F3" />
+                <Text style={styles.statValue}>{formatTime(progressData.totalTimeSpentSeconds)}</Text>
+                <Text style={styles.statLabel}>Time</Text>
               </View>
             </View>
 
-            {/* Stats Cards - Horizontal Row */}
-            <View style={styles.statsContainer}>
-              {statsCards.map((card, index) => (
-                <TouchableOpacity 
-                  key={card.id} 
-                  style={styles.statCardHorizontal}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={card.colors}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.statGradientHorizontal}
-                  >
-                    <Text style={styles.statIconHorizontal}>{card.icon}</Text>
-                    <Text style={styles.statValueHorizontal}>{card.value}</Text>
-                    <View style={styles.statLabelContainer}>
-                      <Text style={styles.statLabelHorizontal}>{card.label}</Text>
-                      <MaterialIcons name="info-outline" size={14} color="rgba(255,255,255,0.8)" />
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
-            {/* Activity Cards - All Vertical */}
-            <View style={styles.activitiesContainer}>
-              {buttons.map((button) => (
-                <TouchableOpacity 
-                  key={button.id}
-                  style={styles.activityCard}
-                  onPress={() => buttonHandlers[button.id]?.()}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={button.color as [string, string, ...string[]]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.activityCardGradient}
-                  >
-                    <View style={styles.activityCardContent}>
-                      <View style={styles.activityCardLeft}>
-                        <Text style={styles.activityEmoji}>{button.emoji}</Text>
-                        <Text style={styles.activityTitle}>{button.title}</Text>
-                        <Text style={styles.activityDescription}>{button.description}</Text>
-                        <View style={styles.tapIndicator}>
-                          <MaterialIcons name="touch-app" size={16} color="rgba(255,255,255,0.9)" />
-                          <Text style={styles.tapText}>Tap to explore</Text>
-                        </View>
-                      </View>
-                      <View style={styles.activityCardRight}>
-                        <Image 
-                          source={button.image} 
-                          style={styles.activityCardImage} 
-                          resizeMode="contain"
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.activityCardArrow}>
-                      <MaterialIcons name="arrow-forward" size={28} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.clickableIndicator}>
-                      <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.8)" />
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </View>
-            
-            {/* Start Learning Button */}
-            <TouchableOpacity 
-              style={styles.bottomSection}
-              onPress={handleStartLearningPress}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={['#47C268', '#2ECC71', '#27AE60']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.bottomGradient}
-              >
-                <Text style={styles.bottomText}>
-                {getTranslation(nativeLanguage, 'startLearningAdventure')}
-                </Text>
-                <MaterialIcons name="rocket-launch" size={28} color="#FFFFFF" style={styles.rocketIcon} />
-              </LinearGradient>
-            </TouchableOpacity>
+            {continueTarget && (
+              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                <Text style={styles.continueButtonText}>Continue</Text>
+                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
+            {!continueTarget && (
+              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                <Text style={styles.continueButtonText}>Start</Text>
+                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
-        </ScrollView>
-      </LinearGradient>
-    </SafeAreaView>
+        )}
+
+        {/* --- QUICK ACTIONS --- */}
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        
+        <View style={styles.quickActionsContainer}>
+          <BouncyButton onPress={() => handleNavigation('learning')}>
+            <LinearGradient 
+              colors={['#59A4C6', '#2D4F9C']} 
+              style={styles.actionCard}
+            >
+              <MaterialCommunityIcons name="map-marker-path" size={32} color="#FFF" />
+              <Text style={styles.actionTitle}>Adventure Map</Text>
+              <Text style={styles.actionSubtitle}>Continue your journey</Text>
+            </LinearGradient>
+          </BouncyButton>
+        </View>
+
+        {/* --- ACTIVITY CATEGORIES --- */}
+        <Text style={styles.sectionTitle}>Learning Categories</Text>
+        
+        <View style={styles.gridContainer}>
+          {categories.map((item) => (
+            <View key={item.id} style={styles.gridItemWrapper}>
+              <BouncyButton onPress={() => handleNavigation(item.type)}>
+                <LinearGradient colors={item.colors} style={styles.gridItem}>
+                  <View style={styles.gridIconContainer}>
+                    <MaterialCommunityIcons name={item.icon} size={32} color="#FFF" />
+                  </View>
+                  <Text style={styles.gridTitle}>{item.title}</Text>
+                  <Text style={styles.gridSubtitle}>{item.subtitle}</Text>
+                </LinearGradient>
+              </BouncyButton>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 };
 
+// --- STYLES ---
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-    paddingBottom: responsive.hp(-2),
-  },
-  topBar: {
+  // Light background
+  container: { flex: 1, backgroundColor: '#E6F7FF' }, 
+  centerContainer: { justifyContent: 'center', alignItems: 'center' },
+  
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: responsive.wp(4),
-    paddingVertical: responsive.hp(1.8),
-    backgroundColor: 'white',
-    borderBottomWidth: responsive.hp(0.25),
-    borderBottomColor: '#EDEDED',
+    paddingHorizontal: 25,
+    paddingTop: responsive.hp(6),
+    marginBottom: 20,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  greetingText: { fontSize: 16, color: '#2D4F9C', fontWeight: '600' },
+  appName: { fontSize: 26, fontWeight: '900', color: '#0D3846', marginTop: 5 },
+  profileButton: {
+    width: 72,
+    height: 72,
+  },
+  profileImage: { width: 72, height: 72, borderRadius: 0, resizeMode: 'cover' },
+  profilePlaceholder: { 
+    width: 72, 
+    height: 72, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
+  emojiContainer: { justifyContent: 'center', alignItems: 'center' },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
+
+  // Hero animation card
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(0.25) },
-    shadowOpacity: 0.1,
-    shadowRadius: responsive.wp(1),
-    zIndex: 1,
-    minHeight: responsive.hp(7),
   },
-  leftIcon: {
-    flex: 1,
-  },
-  centerAnimation: {
-    flex: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: responsive.hp(1.2),
-  },
-  animationPlaceholder: {
-    fontSize: responsive.wp(6.5),
-    fontWeight: 'bold',
-    color: '#FF6B6B',
-    textAlign: 'center',
-  },
-  rightIcon: {
-    flex: 1,
-    alignItems: 'flex-end',
-    marginTop: responsive.hp(1.2),
-  },
-  rightIconContainer: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  profileSection: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: responsive.hp(0.5),
-  },
-  profileImage: {
-    width: responsive.wp(11),
-    height: responsive.wp(11),
-    borderRadius: responsive.wp(5.5),
-    borderWidth: responsive.hp(0.25),
-    borderColor: '#4ECDC4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFD700',
-  },
-  emojiAvatar: {
-    fontSize: responsive.wp(6.5),
-    textAlign: 'center',
-  },
-  profileName: {
-    fontSize: responsive.wp(3),
-    fontWeight: '600',
-    maxWidth: responsive.wp(20),
-    textAlign: 'center',
-    marginTop: responsive.hp(0.25),
-  },
-  loginTopButton: {
-    flex: 1,
-    alignItems: 'center',
-    marginTop: responsive.hp(1.2),
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  loginTopButtonText: {
-    fontSize: responsive.wp(3.8),
-    fontWeight: '600',
-    marginLeft: responsive.wp(1),
-  },
-  gradientBackground: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: responsive.hp(3),
-  },
-  content: {
-    paddingHorizontal: responsive.wp(4),
-    paddingTop: responsive.hp(2),
-    paddingBottom: responsive.hp(1),
-  },
-  headerText: {
-    marginBottom: responsive.hp(3),
+  heroAnimation: {
     width: '100%',
+    height: 200,
   },
-  welcomeContainer: {
-    alignItems: 'center',
-  },
-  welcomeText: {
-    fontSize: responsive.wp(7.5),
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: responsive.hp(0.8),
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: responsive.wp(0.5), height: responsive.hp(0.2) },
-    textShadowRadius: responsive.wp(1),
-    paddingHorizontal: responsive.wp(2),
-  },
-  subtitleText: {
-    fontSize: responsive.wp(5),
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: responsive.wp(0.3), height: responsive.hp(0.15) },
-    textShadowRadius: responsive.wp(0.8),
-    paddingHorizontal: responsive.wp(2),
-  },
-  // Stats - Horizontal Row Layout (Small Cards)
-  statsContainer: {
-    flexDirection: 'row',
-    width: '100%',
-    marginBottom: responsive.hp(3),
-    gap: responsive.wp(2.5),
-    justifyContent: 'space-between',
-  },
-  statCardHorizontal: {
-    flex: 1,
-    minWidth: 0,
-  },
-  statGradientHorizontal: {
-    borderRadius: responsive.wp(5),
-    paddingVertical: responsive.hp(1.5),
-    paddingHorizontal: responsive.wp(2.5),
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(0.5) },
-    shadowOpacity: 0.25,
-    shadowRadius: responsive.wp(2),
-    elevation: 6,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    minHeight: responsive.hp(10),
-  },
-  statIconHorizontal: {
-    fontSize: responsive.wp(6),
-    marginBottom: responsive.hp(0.5),
-  },
-  statValueHorizontal: {
-    fontSize: responsive.wp(6),
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: responsive.hp(0.3),
-    textAlign: 'center',
-  },
-  statLabelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: responsive.wp(1),
-  },
-  statLabelHorizontal: {
-    fontSize: responsive.wp(3.2),
-    color: 'rgba(255,255,255,0.95)',
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  // Activities - Vertical Layout
-  activitiesContainer: {
-    width: '100%',
-    marginBottom: responsive.hp(2),
-  },
-  sectionTitle: {
-    fontSize: responsive.wp(6.5),
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: responsive.hp(2.5),
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: responsive.wp(0.3), height: responsive.hp(0.2) },
-    textShadowRadius: responsive.wp(1),
-  },
-  activityCard: {
-    width: '100%',
-    marginBottom: responsive.hp(2),
-    borderRadius: responsive.wp(8),
-    overflow: 'hidden',
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(1) },
-    shadowOpacity: 0.4,
-    shadowRadius: responsive.wp(3),
-    borderWidth: 4,
-    borderColor: 'rgba(255,255,255,0.6)',
-    // Add a subtle glow effect to suggest interactivity
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  activityCardGradient: {
-    padding: responsive.wp(5),
-    minHeight: responsive.hp(18),
-    justifyContent: 'center',
-  },
-  activityCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  activityCardLeft: {
-    flex: 1,
-    paddingRight: responsive.wp(3),
-  },
-  activityCardRight: {
-    width: responsive.wp(25),
-    height: responsive.wp(25),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activityEmoji: {
-    fontSize: responsive.wp(12),
-    marginBottom: responsive.hp(1),
-  },
-  activityTitle: {
-    fontSize: responsive.wp(7),
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: responsive.hp(0.5),
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: responsive.wp(0.2), height: responsive.hp(0.15) },
-    textShadowRadius: responsive.wp(0.8),
-  },
-  activityDescription: {
-    fontSize: responsive.wp(4.5),
-    color: 'rgba(255,255,255,0.9)',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: responsive.wp(0.15), height: responsive.hp(0.1) },
-    textShadowRadius: responsive.wp(0.5),
-  },
-  activityCardImage: {
-    width: '100%',
-    height: '100%',
-  },
-  activityCardArrow: {
-    position: 'absolute',
-    right: responsive.wp(4),
-    top: '50%',
-    marginTop: responsive.hp(-1.5),
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: responsive.wp(5),
-    padding: responsive.wp(2.5),
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(0.3) },
-    shadowOpacity: 0.3,
-    shadowRadius: responsive.wp(1.5),
-  },
-  clickableIndicator: {
-    position: 'absolute',
-    right: responsive.wp(1),
-    top: responsive.hp(1),
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: responsive.wp(3),
-    padding: responsive.wp(1.5),
-  },
-  tapIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: responsive.hp(1),
-    gap: responsive.wp(1.5),
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: responsive.hp(0.5),
-    paddingHorizontal: responsive.wp(3),
-    borderRadius: responsive.wp(4),
-    alignSelf: 'flex-start',
+
+  // Progress Section
+  progressContainer: {
+    backgroundColor: 'rgba(66, 137, 186, 0.12)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 25,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(89, 164, 198, 0.3)',
   },
-  tapText: {
-    fontSize: responsive.wp(3.5),
-    color: 'rgba(255,255,255,0.95)',
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  levelText: {
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: responsive.wp(0.1),
+    color: '#59A4C6',
+    backgroundColor: 'rgba(89, 164, 198, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
   },
-  bottomSection: {
-    marginTop: responsive.hp(2),
-    marginBottom: responsive.hp(2),
-    borderRadius: responsive.wp(8),
+  xpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  xpText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#59A4C6',
+  },
+  nextLevelText: {
+    fontSize: 14,
+    color: '#A3C4DD',
+  },
+  progressBarBackground: {
+    height: 12,
+    backgroundColor: 'rgba(66, 137, 186, 0.3)',
+    borderRadius: 6,
+    marginBottom: 20,
     overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    width: '100%',
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: responsive.hp(1) },
-    shadowOpacity: 0.4,
-    shadowRadius: responsive.wp(3),
   },
-  bottomGradient: {
-    paddingVertical: responsive.hp(2),
-    paddingHorizontal: responsive.wp(4),
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#59A4C6',
+    borderRadius: 6,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 5,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#A3C4DD',
+    marginTop: 3,
+  },
+  continueButton: {
+    marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: responsive.wp(2),
+    backgroundColor: '#59A4C6',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
   },
-  bottomText: {
-    fontSize: responsive.wp(6),
-    fontWeight: '900',
+  continueButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  sectionTitle: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: '#FFFFFF', 
+    marginBottom: 15, 
+    marginLeft: 5,
+    marginTop: 10,
+  },
+
+  // Quick Actions
+  quickActionsContainer: {
+    marginBottom: 25,
+  },
+  actionCard: {
+    borderRadius: 20,
+    padding: 20,
+    minHeight: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  actionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
     color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: responsive.wp(0.2),
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: responsive.wp(0.2), height: responsive.hp(0.15) },
-    textShadowRadius: responsive.wp(0.8),
+    marginTop: 10,
   },
-  rocketIcon: {
-    marginLeft: responsive.wp(1),
+  actionSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 5,
+  },
+
+  // GRID STYLES
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  gridItemWrapper: {
+    width: '48%', // 2 columns
+    marginBottom: 15,
+  },
+  gridItem: {
+    borderRadius: 20,
+    padding: 15,
+    minHeight: 130,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.1,
+  },
+  gridIconContainer: {
+    width: 50, 
+    height: 50, 
+    borderRadius: 25,
+    backgroundColor: 'rgba(89,164,198,0.25)',
+    justifyContent: 'center', 
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  gridTitle: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#FFF', 
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  gridSubtitle: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: 'rgba(255,255,255,0.8)', 
+    marginTop: 2,
+    textAlign: 'center',
   },
 });
 

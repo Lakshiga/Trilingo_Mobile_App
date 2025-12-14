@@ -16,8 +16,10 @@ import {
   Keyboard,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import { useResponsive } from '../utils/responsive';
 
 const { width, height } = Dimensions.get('window');
@@ -37,8 +39,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [showErrorPopup, setShowErrorPopup] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
+  const errorAnimationRef = useRef<LottieView>(null);
   
   // Animation values
   const curveTranslateY = useRef(new Animated.Value(-width * 2.5)).current;
@@ -174,7 +178,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
       setIsLoading(false);
     } catch (error) {
       setIsLoading(false);
-      Alert.alert('Error', 'Invalid credentials');
+      // Show error popup when credentials are wrong
+      setShowErrorPopup(true);
     }
   };
 
@@ -182,7 +187,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#002D62" />
+      <StatusBar barStyle="light-content" backgroundColor="#0D5B81" />
       
       {/* Half Circle - Slides down from top */}
       <Animated.View 
@@ -259,7 +264,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Username or Email</Text>
               <View style={styles.inputWrapper}>
-                <MaterialCommunityIcons name="account" size={24} color="#002D62" style={styles.inputIcon} />
+                <MaterialCommunityIcons name="account" size={24} color="#2D4F9C" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={username}
@@ -276,7 +281,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <MaterialCommunityIcons name="lock" size={24} color="#002D62" style={styles.inputIcon} />
+                <MaterialCommunityIcons name="lock" size={24} color="#2D4F9C" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={password}
@@ -290,7 +295,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
                 >
-                  <MaterialCommunityIcons name={showPassword ? 'eye-off' : 'eye'} size={24} color="#002D62" />
+                  <MaterialCommunityIcons name={showPassword ? 'eye-off' : 'eye'} size={24} color="#2D4F9C" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -312,6 +317,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegister, onGuest 
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* Error Popup Modal */}
+      <Modal
+        visible={showErrorPopup}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowErrorPopup(false)}
+      >
+        <View style={styles.popupOverlay}>
+          <View style={styles.popupContainer}>
+            {/* Animation */}
+            <View style={styles.animationContainer}>
+              <LottieView
+                ref={errorAnimationRef}
+                source={require('../../assets/animations/Login.json')}
+                style={styles.lottieAnimation}
+                autoPlay={true}
+                loop={false}
+              />
+            </View>
+            
+            <View style={styles.popupHeader}>
+              <MaterialCommunityIcons name="alert-circle" size={30} color="#EF4444" />
+              <Text style={styles.popupTitle}>Login Error</Text>
+            </View>
+            <Text style={styles.popupMessage}>Enter the correct Username and password</Text>
+            <TouchableOpacity
+              style={styles.popupButton}
+              onPress={() => setShowErrorPopup(false)}
+            >
+              <Text style={styles.popupButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -334,7 +374,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>, isKeyboardVisib
     },
     blueCurveBackground: {
       position: 'absolute',
-      backgroundColor: '#002D62',
+      backgroundColor: '#2D4F9C',
       width: width * 1.5,
       height: width * 1.7,
       borderRadius: width * 0.75,
@@ -424,10 +464,10 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>, isKeyboardVisib
     topLogoText: {
       fontSize: responsive.wp(5),
       fontWeight: '800',
-      color: '#002D62',
+      color: '#4289BA',
       marginBottom: responsive.hp(0.2),
     },
-    topBrandColor: { color: '#002D62' },
+    topBrandColor: { color: '#4289BA' },
     topLogoSubtext: {
       fontSize: responsive.wp(3),
       color: '#64748B',
@@ -490,7 +530,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>, isKeyboardVisib
       alignItems: 'center',
     },
     loginButton: {
-      backgroundColor: '#002D62',
+      backgroundColor: '#4289BA',
       borderRadius: 16,
       padding: responsive.wp(5),
       alignItems: 'center',
@@ -510,7 +550,67 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>, isKeyboardVisib
     disabledButton: { backgroundColor: '#94A3B8', opacity: 0.7 },
     registerLink: { alignItems: 'center', paddingVertical: responsive.hp(1) },
     registerText: { fontSize: responsive.wp(4), color: '#64748B' },
-    registerHighlight: { color: '#002D62', fontWeight: 'bold', textDecorationLine: 'underline' },
+    registerHighlight: { color: '#59A4C6', fontWeight: 'bold', textDecorationLine: 'underline' },
+    
+    // Popup styles
+    popupOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: responsive.wp(4),
+    },
+    popupContainer: {
+      backgroundColor: 'white',
+      borderRadius: 16,
+      padding: responsive.wp(6),
+      width: '90%',
+      maxWidth: 400,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      elevation: 10,
+    },
+    animationContainer: {
+      width: responsive.wp(40),
+      height: responsive.wp(40),
+      marginBottom: responsive.hp(2),
+    },
+    lottieAnimation: {
+      width: '100%',
+      height: '100%',
+    },
+    popupHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: responsive.hp(2),
+    },
+    popupTitle: {
+      fontSize: responsive.wp(5),
+      fontWeight: 'bold',
+      color: '#334155',
+      marginLeft: responsive.wp(2),
+    },
+    popupMessage: {
+      fontSize: responsive.wp(4),
+      color: '#64748B',
+      textAlign: 'center',
+      marginBottom: responsive.hp(3),
+      lineHeight: responsive.hp(3),
+    },
+    popupButton: {
+      backgroundColor: '#4289BA',
+      borderRadius: 12,
+      paddingVertical: responsive.hp(1.5),
+      paddingHorizontal: responsive.wp(8),
+    },
+    popupButtonText: {
+      color: 'white',
+      fontSize: responsive.wp(4),
+      fontWeight: 'bold',
+    },
   });
 
 export default LoginScreen;

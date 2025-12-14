@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState, useEffect, Fragment, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, StatusBar, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { Language } from '../utils/translations';
 import { renderActivityByTypeId, isActivityTypeSupported } from '../components/activity-types';
 import apiService from '../services/api';
+import { useBackgroundAudio } from '../context/BackgroundAudioContext';
+
+const { width } = Dimensions.get('window');
 
 type PlayScreenRouteParams = {
   activityId: number;
@@ -14,10 +17,22 @@ type PlayScreenRouteParams = {
   jsonMethod?: string;
 };
 
+// --- THEME COLORS ---
+const THEME = {
+  bg: '#F0F8FF',        // Very light Alice Blue
+  primary: '#4FACFE',   // Sky Blue (Header)
+  bottomBar: '#FFFFFF', // White Bottom Bar
+  accent: '#FFB75E',    // Orange
+  text: '#2C3E50',      // Dark Blue Text
+  disabled: '#E0E0E0',  // Gray
+};
+
 const PlayScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: PlayScreenRouteParams }, 'params'>>();
   const { currentUser } = useUser();
+  const { requestAudioFocus, resumeBackground } = useBackgroundAudio();
+  const releaseRef = useRef<(() => void) | null>(null);
   
   const params = route.params || {};
   const activityId = params.activityId;
@@ -27,40 +42,39 @@ const PlayScreen: React.FC = () => {
   const [exerciseCount, setExerciseCount] = useState(0);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [loadingExercises, setLoadingExercises] = useState(true);
-  const [exerciseCompleted, setExerciseCompleted] = useState(false);
   
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const currentLang: string = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
 
-  // Safe title handling - ensure it's always a string
   const displayTitle: string = (activityTitle && typeof activityTitle === 'string' && activityTitle.trim()) 
     ? activityTitle.trim() 
     : 'Activity';
 
-  // Fetch exercise count
+  useEffect(() => {
+    releaseRef.current = requestAudioFocus();
+    return () => {
+      releaseRef.current?.();
+      releaseRef.current = null;
+      resumeBackground().catch(() => null);
+    };
+  }, [requestAudioFocus, resumeBackground]);
+
   useEffect(() => {
     const fetchExerciseCount = async () => {
       if (!activityId) {
         setLoadingExercises(false);
         return;
       }
-
       try {
         setLoadingExercises(true);
         const exercises = await apiService.getExercisesByActivityId(activityId);
-        if (exercises && exercises.length > 0) {
-          setExerciseCount(exercises.length);
-        } else {
-          setExerciseCount(0);
-        }
+        setExerciseCount(exercises?.length || 0);
       } catch (error) {
-        console.error('Error fetching exercises:', error);
         setExerciseCount(0);
       } finally {
         setLoadingExercises(false);
       }
     };
-
     fetchExerciseCount();
   }, [activityId]);
 
@@ -72,39 +86,53 @@ const PlayScreen: React.FC = () => {
   const handleNextExercise = () => {
     if (currentExerciseIndex < exerciseCount - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
-      setExerciseCompleted(false);
+    } else {
+      // Finish: submit progress (10 stars) then exit
+      submitProgress().finally(() => navigation.goBack());
     }
   };
 
   const handlePrevExercise = () => {
     if (currentExerciseIndex > 0) {
       setCurrentExerciseIndex(prev => prev - 1);
-      setExerciseCompleted(false);
     }
   };
 
-  const handleExerciseComplete = () => {
-    setExerciseCompleted(true);
+  // --- Progress submit logic ---
+  const submitProgress = async () => {
+    try {
+      if (!activityId || !currentUser?.id) return;
+      // NOTE: replace with selected student id if you store it elsewhere
+      const studentId = currentUser.id;
+      await apiService.postStudentProgress({
+        studentId,
+        activityId,
+        score: 10, // 10 stars
+        maxScore: 10,
+        timeSpentSeconds: 0,
+        attemptNumber: 1,
+        isCompleted: true,
+      });
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || `${error}`;
+      if (typeof msg === 'string' && msg.toLowerCase().includes('already recorded')) {
+        return; // first attempt only enforced by backend; ignore duplicate
+      }
+      Alert.alert('Saved with a hiccup', 'First attempt already locked or network issue.');
+    }
   };
 
-  // Check if activity type is supported
   if (!isActivityTypeSupported(activityTypeId)) {
     return (
       <View style={styles.container}>
+        <SafeAreaView />
         <View style={styles.headerBar}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => navigation.goBack()}
-          >
-            <MaterialIcons name="arrow-back" size={24} color="#1976D2" />
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={24} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {displayTitle || 'Activity'}
-          </Text>
-          <View style={{ width: 40 }} />
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>This activity type is not supported</Text>
+        <View style={styles.centerContent}>
+          <Text style={{color: '#999'}}>Activity not supported</Text>
         </View>
       </View>
     );
@@ -112,138 +140,103 @@ const PlayScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top Bar with Activity Name */}
+      <StatusBar barStyle="light-content" backgroundColor={THEME.primary} />
+      
+      {/* --- TOP BAR (Title & Back) --- */}
       <View style={styles.headerBar}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={26} color="#FFF" />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {displayTitle || 'Activity'}
+        
+        <View style={styles.titleContainer}>
+          <Text 
+            style={styles.headerTitle} 
+            numberOfLines={1} 
+            adjustsFontSizeToFit={true}
+            minimumFontScale={0.8}
+          >
+            {displayTitle}
           </Text>
-          {exerciseCount > 1 && (
-            <Text style={styles.exerciseCounter}>
-              {currentExerciseIndex + 1} / {exerciseCount}
-            </Text>
-          )}
         </View>
-        <View style={{ width: 40 }} /> {/* Spacer for balance */}
+
+        {/* Dummy View for center alignment balance */}
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Activity Component */}
-      <View style={styles.contentContainer}>
+      {/* --- CENTER CONTENT (Maximized) --- */}
+      <View style={styles.centerContent}>
         {(() => {
           try {
-            if (!activityTypeId || !activityId) {
-              return (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>Missing required parameters</Text>
-                </View>
-              );
-            }
-
             const activityComponent = renderActivityByTypeId(activityTypeId, {
-              content: null, // Components will fetch their own data using activityId
+              content: null,
               currentLang: currentLang as any,
-              onComplete: () => {
-                // When all exercises are done, go back
-                if (currentExerciseIndex === exerciseCount - 1) {
-                  navigation.goBack();
-                } else {
-                  handleExerciseComplete();
-                }
-              },
+              onComplete: handleNextExercise,
               activityId: activityId,
               currentExerciseIndex: currentExerciseIndex,
-              onExerciseComplete: () => {
-                // Move to next exercise automatically
-                if (currentExerciseIndex < exerciseCount - 1) {
-                  setCurrentExerciseIndex(prev => prev + 1);
-                  setExerciseCompleted(false);
-                } else {
-                  // Last exercise, go back
-                  navigation.goBack();
-                }
-              },
-              onExit: () => {
-                // Always exit/go back when Exit button is clicked
-                navigation.goBack();
-              },
+              onExerciseComplete: handleNextExercise,
+              onExit: () => navigation.goBack(),
             });
 
-            if (!activityComponent) {
-              return (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>Unable to load activity component</Text>
-                </View>
-              );
+            // Safety Checks
+            if (activityComponent == null) return <ActivityIndicator size="large" color={THEME.primary} />;
+            if (typeof activityComponent === 'string' || typeof activityComponent === 'number') {
+              return <Text style={{fontSize: 20}}>{String(activityComponent)}</Text>;
             }
-
-            return activityComponent;
+            if (Array.isArray(activityComponent)) {
+              return <Fragment>{activityComponent}</Fragment>;
+            }
+            if (React.isValidElement(activityComponent)) {
+              return activityComponent;
+            }
+            return <View />;
           } catch (error) {
-            return (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>Error loading activity</Text>
-              </View>
-            );
+            return <Text>Error loading activity</Text>;
           }
         })()}
       </View>
 
-      {/* Bottom Navigation Bar */}
-      {exerciseCount > 1 && (
-        <View style={styles.bottomNavBar}>
+      {/* --- BOTTOM BAR (Nav & Progress) --- */}
+      {exerciseCount > 0 && (
+        <View style={styles.bottomBar}>
+          
+          {/* Back Button */}
           <TouchableOpacity
-            style={[
-              styles.bottomNavButton,
-              currentExerciseIndex === 0 && styles.bottomNavButtonDisabled
-            ]}
+            style={[styles.navButton]}
             onPress={handlePrevExercise}
             disabled={currentExerciseIndex === 0 || loadingExercises}
           >
-            <MaterialIcons 
-              name="arrow-back" 
-              size={24} 
-              color={currentExerciseIndex === 0 ? '#999' : '#000000'} 
-            />
-            <Text style={[
-              styles.bottomNavButtonText,
-              currentExerciseIndex === 0 && styles.bottomNavButtonTextDisabled
-            ]}>
-              Previous
-            </Text>
+            <Feather name="arrow-left" size={28} color={currentExerciseIndex === 0 ? '#BDC3C7' : '#555'} />
           </TouchableOpacity>
 
-          <View style={styles.bottomNavCenter}>
-            <Text style={styles.bottomNavCounter}>
+          {/* Progress Indicator (Center) */}
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>
               {currentExerciseIndex + 1} / {exerciseCount}
             </Text>
+            {/* Tiny visual bar below text */}
+            <View style={styles.miniProgressBar}>
+              <View 
+                style={[
+                  styles.miniProgressFill, 
+                  { width: `${((currentExerciseIndex + 1) / exerciseCount) * 100}%` }
+                ]} 
+              />
+            </View>
           </View>
 
+          {/* Next/Finish Button */}
           <TouchableOpacity
-            style={[
-              styles.bottomNavButton,
-              styles.bottomNavButtonNext,
-              (currentExerciseIndex >= exerciseCount - 1) && styles.bottomNavButtonDisabled
-            ]}
+            style={[styles.navButton]}
             onPress={handleNextExercise}
-            disabled={currentExerciseIndex >= exerciseCount - 1 || loadingExercises}
+            disabled={loadingExercises}
           >
-            <Text style={[
-              styles.bottomNavButtonText,
-              (currentExerciseIndex >= exerciseCount - 1) && styles.bottomNavButtonTextDisabled
-            ]}>
-              Next
-            </Text>
-            <MaterialIcons 
-              name="arrow-forward" 
-              size={24} 
-              color={(currentExerciseIndex >= exerciseCount - 1) ? '#999' : '#000000'} 
+            <Feather 
+              name={currentExerciseIndex >= exerciseCount - 1 ? "check" : "arrow-right"} 
+              size={28} 
+              color="#FFF" 
             />
           </TouchableOpacity>
+
         </View>
       )}
     </View>
@@ -253,121 +246,105 @@ const PlayScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: THEME.bg,
   },
+
+  // --- TOP BAR ---
   headerBar: {
+    paddingTop: 45, // StatusBar space
+    paddingBottom: 15,
+    paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1976D2',
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
+    backgroundColor: THEME.primary,
+    elevation: 4,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    zIndex: 100,
   },
   backButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
   },
-  headerCenter: {
+  titleContainer: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 10,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18, // Adjusted font size as requested
     fontWeight: 'bold',
     color: '#FFFFFF',
+    letterSpacing: 0.5,
     textAlign: 'center',
   },
-  exerciseCounter: {
-    fontSize: 14,
-    color: '#FFD700',
-    marginTop: 2,
-    fontWeight: '600',
+
+  // --- CENTER CONTENT ---
+  centerContent: {
+    flex: 1, // Maximizes space
+    width: '100%',
+    backgroundColor: '#FFFFFF', // Keep background clean
+    // Removed margins/padding to maximize area as requested
+    position: 'relative', 
   },
-  contentContainer: {
-    flex: 1,
-    paddingBottom: 90, // Add padding to prevent content from being hidden behind buttons
-  },
-  bottomNavBar: {
-    position: 'absolute',
-    bottom: 20, // Position higher from bottom
-    left: 0,
-    right: 0,
+
+  // --- BOTTOM BAR ---
+  bottomBar: {
+    height: 100,
+    backgroundColor: THEME.bottomBar,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1976D2',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    marginHorizontal: 10, // Add margin on sides
-    borderRadius: 15, // Rounded corners
+    paddingHorizontal: 25,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    borderTopColor: '#F0F0F0',
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
+    shadowRadius: 5,
   },
-  bottomNavButton: {
-    flexDirection: 'row',
+  navButton: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: THEME.accent, // Light gray for back
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2
+  },
+  
+  // Progress in Bottom Bar
+  progressContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    gap: 8,
-    minWidth: 120,
-  },
-  bottomNavButtonNext: {
-    backgroundColor: '#FFFFFF',
-  },
-  bottomNavButtonDisabled: {
-    opacity: 0.4,
-    backgroundColor: '#FFFFFF',
-  },
-  bottomNavButtonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  bottomNavButtonTextDisabled: {
-    color: '#999',
-  },
-  bottomNavCenter: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  bottomNavCounter: {
-    fontSize: 16,
+  progressText: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFD700',
+    color: THEME.primary,
+    marginBottom: 4,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  miniProgressBar: {
+    width: 60,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    overflow: 'hidden',
   },
-  errorText: {
-    fontSize: 16,
-    color: '#1F2937',
-    textAlign: 'center',
+  miniProgressFill: {
+    height: '100%',
+    backgroundColor: THEME.primary,
+    borderRadius: 2,
   },
 });
 
 export default PlayScreen;
-

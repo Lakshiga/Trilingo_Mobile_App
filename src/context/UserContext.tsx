@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { UserStorage } from '../utils/UserStorage';
 
 interface UserData {
+  id?: string;
   username: string;
   name: string;
   age: string;
@@ -52,6 +53,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     try {
       if (userData.isGuest) {
         const guestUser: UserData = {
+          id: 'guest', // Add ID for guest user
           username: 'Guest',
           name: 'Guest User',
           age: '',
@@ -67,6 +69,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       } else if (userData.isAdmin) {
         // Admin login - create admin user directly
         const adminUser: UserData = {
+          id: 'admin', // Add ID for admin user
           username: 'Admin',
           name: 'Administrator',
           age: '',

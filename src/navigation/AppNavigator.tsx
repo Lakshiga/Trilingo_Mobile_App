@@ -30,8 +30,6 @@ import SongsScreen from '../screens/SongsScreen';
 
 import StoriesScreen from '../screens/StoriesScreen';
 
-import ActivitiesScreen from '../screens/ActivitiesScreen';
-
 import DynamicActivityScreen from '../screens/DynamicActivityScreen';
 
 import PlayScreen from '../screens/PlayScreen';
@@ -126,7 +124,6 @@ export default function AppNavigator() {
       <Stack.Screen name="Videos" component={VideosScreen} />
       <Stack.Screen name="Songs" component={SongsScreen} />
       <Stack.Screen name="Stories" component={StoriesScreen} />
-      <Stack.Screen name="Activities" component={ActivitiesScreen} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
       <Stack.Screen name="DynamicActivity" component={DynamicActivityScreen} />
       <Stack.Screen name="PlayScreen" component={PlayScreen} />
