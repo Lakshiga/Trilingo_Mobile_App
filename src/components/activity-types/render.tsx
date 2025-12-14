@@ -15,6 +15,7 @@ import {
   GroupSorter,
   SongPlayer,
   VideoPlayer,
+  LetterTracking,
 } from './index';
 import { ActivityComponentProps } from './types';
 
@@ -36,11 +37,12 @@ export const ACTIVITY_TYPE_MAP: Record<number, React.FC<ActivityComponentProps>>
   13: GroupSorter,
   14: ConversationPlayer,
   15: VideoPlayer,
+  16: LetterTracking,
 };
 
 /**
  * Renders the appropriate activity component based on activity type ID
- * @param activityTypeId - The activity type ID (1-15)
+ * @param activityTypeId - The activity type ID (1-16)
  * @param props - Props to pass to the activity component
  * @returns The rendered activity component or null if ID is not found
  */
@@ -71,7 +73,7 @@ export const renderActivityByTypeId = (
  * @returns true if the ID is supported (1-15), false otherwise
  */
 export const isActivityTypeSupported = (activityTypeId: number): boolean => {
-  return activityTypeId >= 1 && activityTypeId <= 15 && ACTIVITY_TYPE_MAP[activityTypeId] !== undefined;
+  return activityTypeId >= 1 && activityTypeId <= 16 && ACTIVITY_TYPE_MAP[activityTypeId] !== undefined;
 };
 
 /**
@@ -96,6 +98,7 @@ export const getActivityComponentName = (activityTypeId: number): string => {
     13: 'GroupSorter',
     14: 'ConversationPlayer',
     15: 'VideoPlayer',
+    16: 'LetterTracking',
   };
   
   return componentNames[activityTypeId] || 'Unknown';

@@ -14,6 +14,7 @@ export { default as PronunciationActivity } from './PronunciationActivity';
 export { default as TripleBlast } from './TripleBlast';
 export { default as BubbleBlast } from './BubbleBlast';
 export { default as GroupSorter } from './GroupSorter';
+export { default as LetterTracking } from './LetterTracking';
 
 // Export types
 export * from './types';

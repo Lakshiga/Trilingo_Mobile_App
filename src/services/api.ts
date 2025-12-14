@@ -560,39 +560,11 @@ class ApiService {
   // Upload profile image
   async uploadProfileImage(imageUri: string): Promise<AuthResponse> {
     try {
-      // For file uploads, ALWAYS use direct backend URL (CloudFront doesn't support uploads)
-      const currentBaseUrl = this.api.defaults.baseURL || '';
-      let uploadBaseUrl = currentBaseUrl;
-      
-      // If using CloudFront, switch to direct backend URL (uploads are blocked on CF)
-      if (currentBaseUrl.includes('cloudfront.net')) {
-        const directOverride = (process.env as any).EXPO_PUBLIC_API_DIRECT || (process.env as any).API_DIRECT;
-        // Priority: env override > PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > PRODUCTION > localhost
-        if (directOverride && !directOverride.includes('cloudfront')) {
-          uploadBaseUrl = directOverride;
-        } else if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
-          uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
-        } else if (API_CONFIG.ANDROID_EMULATOR) {
-          uploadBaseUrl = API_CONFIG.ANDROID_EMULATOR;
-        } else if (API_CONFIG.IOS_SIMULATOR) {
-          uploadBaseUrl = API_CONFIG.IOS_SIMULATOR;
-        } else if (API_CONFIG.PRODUCTION && !API_CONFIG.PRODUCTION.includes('cloudfront')) {
-          uploadBaseUrl = API_CONFIG.PRODUCTION;
-        } else {
-          // Fallbacks by platform
-          const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-          uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
-        }
-      }
-      // Final safety: if still cloudfront, hard fallback to localhost
-      if (uploadBaseUrl.includes('cloudfront.net')) {
-        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-        uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
-      }
-      
-      // Construct the full upload URL
+      // Use the same base URL as API (prefer production/CF) without falling back to localhost
+      const uploadBaseUrl =
+        (this.api.defaults.baseURL || API_CONFIG.PRODUCTION || API_CONFIG.CLOUDFRONT || '').replace(/\/$/, '');
       const uploadEndpoint = '/auth/upload-profile-image';
-      const fullUploadUrl = uploadBaseUrl.replace(/\/$/, '') + uploadEndpoint;
+      const fullUploadUrl = `${uploadBaseUrl}${uploadEndpoint}`;
       
       // Get file extension from URI
       let fileExtension = 'jpg';
@@ -641,24 +613,15 @@ class ApiService {
       const token = await this.getAuthToken();
       
       // Create a separate axios instance for upload with the direct URL
-      const uploadApi = axios.create({
-        baseURL: uploadBaseUrl,
-        timeout: 30000, // Longer timeout for uploads
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      // Add auth token to upload instance
+      // Make the request using full URL (avoid localhost rewrites)
+      const headers: any = { 'Content-Type': 'multipart/form-data' };
       if (token) {
-        uploadApi.defaults.headers.Authorization = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`;
       }
-      
-      // Make the request
-      const response = await uploadApi.post<AuthResponse>(
-        uploadEndpoint,
-        formData
-      );
+      const response = await axios.post<AuthResponse>(fullUploadUrl, formData, {
+        timeout: 30000,
+        headers,
+      });
       
       return response.data;
     } catch (error: any) {
@@ -675,27 +638,9 @@ class ApiService {
       
       // Provide more specific error message
       if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
-        // Recalculate uploadBaseUrl for error message
-        const currentBaseUrl = this.api.defaults.baseURL || '';
-        let uploadBaseUrl = currentBaseUrl;
-        
-        if (currentBaseUrl.includes('cloudfront.net')) {
-          const directBackendUrl = process.env.EXPO_PUBLIC_API_DIRECT || 
-                                  (process.env as any).API_DIRECT ||
-                                  'https://d3v81eez8ecmto.cloudfront.net/api';
-          
-          if (API_CONFIG.PHYSICAL_DEVICE) {
-            uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
-          } else {
-            uploadBaseUrl = directBackendUrl;
-          }
-        }
-        
         throw new Error(
-          `Network error: Cannot connect to upload service. ` +
-          `Please check your internet connection and ensure the backend server is running.\n\n` +
-          `Current API URL: ${this.api.defaults.baseURL}\n` +
-          `Upload URL: ${uploadBaseUrl}`
+          `Network error: Cannot connect to upload service.\n` +
+          `Upload URL: ${error.config ? `${error.config.baseURL || ''}${error.config.url || ''}` : fullUploadUrl}`
         );
       }
       

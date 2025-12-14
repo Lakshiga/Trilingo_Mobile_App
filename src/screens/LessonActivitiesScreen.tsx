@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons, Feather, Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto, ActivityTypeDto, ProgressDto } from '../services/api';
@@ -45,6 +45,8 @@ const LessonActivitiesScreen: React.FC = () => {
   const [activities, setActivities] = useState<ActivityWithType[]>([]);
   const [loading, setLoading] = useState(true);
   const [completedActivities, setCompletedActivities] = useState<Set<number>>(new Set());
+  const [exerciseCountMap, setExerciseCountMap] = useState<Map<number, number>>(new Map());
+  const [completedCountMap, setCompletedCountMap] = useState<Map<number, number>>(new Map());
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -56,55 +58,76 @@ const LessonActivitiesScreen: React.FC = () => {
   const TEXT_COLOR = '#2C3E50'; // Dark Blue
   const BG_COLOR = '#E6F7FF'; // Light Background
 
-  useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        setLoading(true);
-        
-        const fetchedActivities = await apiService.getActivitiesByStage(lessonId);
-        const activityTypes = await apiService.getAllActivityTypes();
-        // Fetch completed progress for this student
-        const studentId = currentUser?.id; // adjust if you store selected student separately
-        let completedSet = new Set<number>();
-        if (studentId) {
-          const progress = await apiService.getStudentProgress(studentId);
-          progress.forEach((p: ProgressDto) => {
-            if (p.activityId) completedSet.add(p.activityId);
-          });
-        }
-        setCompletedActivities(completedSet);
-        
-        const activityTypeMap = new Map<number, ActivityTypeDto>();
-        activityTypes.forEach(type => {
-          activityTypeMap.set(type.id, type);
+  const fetchActivities = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const fetchedActivities = await apiService.getActivitiesByStage(lessonId);
+      const activityTypes = await apiService.getAllActivityTypes();
+      // Fetch completed progress for this student
+      const studentId = currentUser?.id; // adjust if you store selected student separately
+      let completedSet = new Set<number>();
+      const completedMap = new Map<number, number>();
+      if (studentId) {
+        const progress = await apiService.getStudentProgress(studentId);
+        progress.forEach((p: ProgressDto) => {
+          if (p.activityId) {
+            completedSet.add(p.activityId);
+            const prev = completedMap.get(p.activityId) || 0;
+            completedMap.set(p.activityId, prev + 1);
+          }
         });
-        
-        const activitiesWithTypes: ActivityWithType[] = fetchedActivities
-          .map(activity => {
-            const activityType = activityTypeMap.get(activity.activityTypeId);
-            if (!activityType) return null;
-            return { activity, activityType };
-          })
-          .filter((item): item is ActivityWithType => item !== null);
-        
-        activitiesWithTypes.sort((a, b) => a.activity.sequenceOrder - b.activity.sequenceOrder);
-        
-        setActivities(activitiesWithTypes);
-      } catch (error: any) {
-        console.error('Error fetching activities:', error);
-        Alert.alert('Oops!', 'Could not load the games.');
-      } finally {
-        setLoading(false);
       }
-    };
+      setCompletedActivities(completedSet);
+      setCompletedCountMap(completedMap);
+      
+      const activityTypeMap = new Map<number, ActivityTypeDto>();
+      activityTypes.forEach(type => {
+        activityTypeMap.set(type.id, type);
+      });
+      
+      const activitiesWithTypes: ActivityWithType[] = fetchedActivities
+        .map(activity => {
+          const activityType = activityTypeMap.get(activity.activityTypeId);
+          if (!activityType) return null;
+          return { activity, activityType };
+        })
+        .filter((item): item is ActivityWithType => item !== null);
+      
+      activitiesWithTypes.sort((a, b) => a.activity.sequenceOrder - b.activity.sequenceOrder);
 
-    fetchActivities();
+      // Fetch exercise counts per activity for percentage display
+      const countEntries = await Promise.all(
+        activitiesWithTypes.map(async ({ activity }) => {
+          try {
+            const exercises = await apiService.getExercisesByActivityId(activity.id);
+            return [activity.id, exercises.length] as [number, number];
+          } catch {
+            return [activity.id, 0] as [number, number];
+          }
+        })
+      );
+      setExerciseCountMap(new Map(countEntries));
 
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
-    ]).start();
-  }, [lessonId]);
+      setActivities(activitiesWithTypes);
+    } catch (error: any) {
+      console.error('Error fetching activities:', error);
+      Alert.alert('Oops!', 'Could not load the games.');
+    } finally {
+      setLoading(false);
+    }
+  }, [lessonId, currentUser?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchActivities();
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
+      ]).start();
+      return () => {};
+    }, [fetchActivities])
+  );
 
   const handleActivityPress = (activity: ActivityDto, activityType: ActivityTypeDto) => {
     (navigation as any).navigate('PlayScreen', {
@@ -189,6 +212,9 @@ const LessonActivitiesScreen: React.FC = () => {
               const currentBubbleColor = bubbleColors[index % bubbleColors.length];
 
               const isCompleted = completedActivities.has(item.activity.id);
+              const totalExercises = exerciseCountMap.get(item.activity.id) || 0;
+              const completedExercises = isCompleted ? totalExercises : (completedCountMap.get(item.activity.id) || 0);
+              const completionPercent = totalExercises > 0 ? Math.min(100, Math.round((completedExercises / totalExercises) * 100)) : (isCompleted ? 100 : 0);
               return (
                 <TouchableOpacity
                   key={item.activity.id}
@@ -199,6 +225,13 @@ const LessonActivitiesScreen: React.FC = () => {
                   onPress={() => handleActivityPress(item.activity, item.activityType)}
                   activeOpacity={0.9}
                 >
+                  {/* Progress fill overlay */}
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${completionPercent}%`, opacity: completionPercent === 0 ? 0 : 0.25 },
+                    ]}
+                  />
                   {/* Left Icon Bubble */}
                   <View style={[styles.iconBubble, { borderColor: currentBubbleColor }]}>
                      <View style={[styles.iconInner, { backgroundColor: currentBubbleColor + '20' }]}>
@@ -212,7 +245,7 @@ const LessonActivitiesScreen: React.FC = () => {
                       {activityName}
                     </Text>
                     <Text style={styles.activitySubtitle}>
-                      {isCompleted ? 'Completed - 10★' : 'Tap to play'}
+                      {isCompleted ? 'Completed' : completionPercent > 0 ? 'In progress' : 'Tap to play'}
                     </Text>
                   </View>
 
@@ -313,6 +346,7 @@ const getStyles = (
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
+    overflow: 'hidden',
     // 3D Shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -354,6 +388,13 @@ const getStyles = (
     fontSize: responsive.wp(3.2),
     color: '#95A5A6',
     fontWeight: '600',
+  },
+  progressFill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: '#4FACFE',
   },
 
   // Play Button

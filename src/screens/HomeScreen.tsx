@@ -11,7 +11,8 @@ import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { useResponsive } from '../utils/responsive';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
-import apiService from '../services/api'; 
+import apiService, { ProgressSummaryDto, ActivityDto, ActivityTypeDto } from '../services/api';
+import LottieView from 'lottie-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -93,11 +94,25 @@ const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
   const { currentUser } = useUser();
   const responsive = useResponsive();
-  const isGuest = currentUser?.isGuest || !currentUser;
   const { resumeBackground, disableBackground } = useBackgroundAudio();
   
   const [loading, setLoading] = useState(true);
-  const [progressData, setProgressData] = useState<ProgressData | null>(null);
+  const [progressData, setProgressData] = useState<ProgressData | null>({
+    totalActivitiesCompleted: 0,
+    totalActivitiesAttempted: 0,
+    averageScore: 0,
+    totalXpPoints: 0,
+    totalTimeSpentSeconds: 0,
+    level: 1,
+    nextLevelXp: 300,
+  });
+  const [summary, setSummary] = useState<ProgressSummaryDto | null>(null);
+  const [continueTarget, setContinueTarget] = useState<{
+    activityId: number;
+    activityTypeId: number;
+    title: string;
+  } | null>(null);
+  const [profileImageError, setProfileImageError] = useState(false);
 
   // DATA definition inside component to control order
   const categories: CategoryItem[] = [
@@ -113,24 +128,54 @@ const HomeScreen: React.FC = () => {
       try {
         setLoading(true);
         if (currentUser?.id) {
-          // Fetch progress data from backend
           try {
-            const summary = await apiService.getStudentSummary(currentUser.id);
-            if (summary) {
+            const s = await apiService.getStudentSummary(currentUser.id);
+            setSummary(s || null);
+
+            if (s) {
               setProgressData({
-                totalActivitiesCompleted: summary.totalActivitiesCompleted,
-                totalActivitiesAttempted: summary.totalActivitiesAttempted,
-                averageScore: summary.averageScore,
-                totalXpPoints: summary.totalXpPoints,
-                totalTimeSpentSeconds: summary.totalTimeSpentSeconds,
-                level: Math.floor(summary.totalXpPoints / 300) + 1, // Simple level calculation
-                nextLevelXp: ((Math.floor(summary.totalXpPoints / 300) + 1) * 300) // Next level requirement
+                totalActivitiesCompleted: s.totalActivitiesCompleted,
+                totalActivitiesAttempted: s.totalActivitiesAttempted,
+                averageScore: s.averageScore,
+                totalXpPoints: s.totalXpPoints,
+                totalTimeSpentSeconds: s.totalTimeSpentSeconds,
+                level: Math.floor(s.totalXpPoints / 300) + 1,
+                nextLevelXp: ((Math.floor(s.totalXpPoints / 300) + 1) * 300)
               });
+            }
+
+            // Determine continue target from most recent completed activity -> move to the next one if available
+            const recent = s?.recentActivities?.[0];
+            if (recent?.activityId) {
+              try {
+                // Try to derive next activity: current activity + 1 (sequence-based)
+                const currentActivity = await apiService.getActivityById(recent.activityId);
+                if (currentActivity) {
+                  // heuristic: fetch the list for the same stage and pick the next by sequenceOrder
+                  const siblings = await apiService.getActivitiesByStage(currentActivity.stageId);
+                  const sorted = siblings.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+                  const idx = sorted.findIndex(a => a.id === currentActivity.id);
+                  const next = idx >= 0 && idx + 1 < sorted.length ? sorted[idx + 1] : currentActivity;
+                  const activityType: ActivityTypeDto | null = await apiService.getActivityTypeById(next.activityTypeId);
+                  if (activityType) {
+                    setContinueTarget({
+                      activityId: next.id,
+                      activityTypeId: activityType.id,
+                      title: next.name_en || next.name_ta || next.name_si || 'Activity',
+                    });
+                  } else {
+                    setContinueTarget(null);
+                  }
+                }
+              } catch {
+                setContinueTarget(null);
+              }
+            } else {
+              setContinueTarget(null);
             }
           } catch (error) {
             console.warn('Failed to fetch progress data:', error);
-            // Set default values if fetch fails
-            setProgressData({
+            setProgressData(prev => prev || {
               totalActivitiesCompleted: 0,
               totalActivitiesAttempted: 0,
               averageScore: 0,
@@ -139,7 +184,12 @@ const HomeScreen: React.FC = () => {
               level: 1,
               nextLevelXp: 300
             });
+            setSummary(null);
+            setContinueTarget(null);
           }
+        } else {
+          setSummary(null);
+          setContinueTarget(null);
         }
         setLoading(false);
       } catch (error) {
@@ -156,13 +206,10 @@ const HomeScreen: React.FC = () => {
     } else {
       disableBackground().catch(() => null);
     }
+    setProfileImageError(false);
   }, [currentUser]);
 
   const handleNavigation = (categoryType: string) => {
-    if (isGuest && categoryType !== 'learning') {
-      Alert.alert('Locked!', 'Ask your parents to log in!');
-      return;
-    }
     // Mapping Logic...
     const routeMap: Record<string, string> = {
       learning: 'Lessons',
@@ -176,24 +223,31 @@ const HomeScreen: React.FC = () => {
   };
 
   const renderProfileImage = () => {
-    if (!currentUser || currentUser.isGuest) {
+    if (!currentUser) {
+      return <View style={{ width: 72, height: 72 }} />;
+    }
+    
+    const raw = currentUser.profileImageUrl;
+    if (raw && isEmojiLike(raw)) {
       return (
-        <View style={styles.profilePlaceholder}>
-          <MaterialIcons name="person" size={24} color="#FFF" />
+        <View style={[styles.profileImage, styles.emojiContainer]}>
+          <Text style={{ fontSize: 20 }}>{raw}</Text>
         </View>
       );
     }
-    
-    const imageUri = resolveImageUri(currentUser.profileImageUrl);
-    if (imageUri) {
-      return <Image source={{ uri: imageUri }} style={styles.profileImage} />;
+
+    const imageUri = resolveImageUri(raw);
+    if (imageUri && !profileImageError) {
+      return (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.profileImage}
+          onError={() => setProfileImageError(true)}
+        />
+      );
     }
-    
-    return (
-      <View style={[styles.profileImage, styles.emojiContainer]}>
-        <Text style={{fontSize: 20}}>😊</Text>
-      </View>
-    );
+
+    return null;
   };
 
   const calculateProgress = () => {
@@ -208,6 +262,18 @@ const HomeScreen: React.FC = () => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
+  };
+
+  const handleContinue = () => {
+    if (continueTarget) {
+      (navigation as any).navigate('PlayScreen', {
+        activityId: continueTarget.activityId,
+        activityTypeId: continueTarget.activityTypeId,
+        activityTitle: continueTarget.title,
+      });
+    } else {
+      (navigation as any).navigate('Lessons');
+    }
   };
 
   const styles = getStyles(responsive);
@@ -232,7 +298,7 @@ const HomeScreen: React.FC = () => {
         <View style={styles.headerTextContainer}>
           <Text style={styles.greetingText}>Hello,</Text>
           <Text style={styles.appName}>
-            {isGuest ? 'Little Star!' : (currentUser?.name || 'Dilu')}
+            {currentUser?.name || 'Hello!'}
           </Text>
         </View>
         <TouchableOpacity 
@@ -244,9 +310,19 @@ const HomeScreen: React.FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* --- JOY IN EDUCATION ANIMATION --- */}
+        <View style={styles.heroCard}>
+          <LottieView
+            source={require('../../assets/animations/Joy in Education.json')}
+            autoPlay
+            loop
+            style={styles.heroAnimation}
+          />
+        </View>
         
         {/* --- PROGRESS SUMMARY --- */}
-        {!isGuest && progressData && (
+        {progressData && (
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressTitle}>Your Progress</Text>
@@ -295,6 +371,19 @@ const HomeScreen: React.FC = () => {
                 <Text style={styles.statLabel}>Time</Text>
               </View>
             </View>
+
+            {continueTarget && (
+              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                <Text style={styles.continueButtonText}>Continue</Text>
+                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
+            {!continueTarget && (
+              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                <Text style={styles.continueButtonText}>Start</Text>
+                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -341,8 +430,8 @@ const HomeScreen: React.FC = () => {
 
 // --- STYLES ---
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
-  // Dark blue background
-  container: { flex: 1, backgroundColor: '#0D3846' }, 
+  // Light background
+  container: { flex: 1, backgroundColor: '#E6F7FF' }, 
   centerContainer: { justifyContent: 'center', alignItems: 'center' },
   
   header: {
@@ -356,31 +445,43 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   headerTextContainer: {
     flex: 1,
   },
-  greetingText: { fontSize: 16, color: '#59A4C6', fontWeight: '600' },
-  appName: { fontSize: 26, fontWeight: '900', color: '#FFFFFF', marginTop: 5 },
+  greetingText: { fontSize: 16, color: '#2D4F9C', fontWeight: '600' },
+  appName: { fontSize: 26, fontWeight: '900', color: '#0D3846', marginTop: 5 },
   profileButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 72,
+    height: 72,
   },
-  profileImage: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#59A4C6' },
+  profileImage: { width: 72, height: 72, borderRadius: 0, resizeMode: 'cover' },
   profilePlaceholder: { 
-    width: 50, 
-    height: 50, 
-    borderRadius: 25, 
-    backgroundColor: '#2D4F9C', 
+    width: 72, 
+    height: 72, 
     justifyContent: 'center', 
     alignItems: 'center',
-    borderWidth: 3, 
-    borderColor: '#59A4C6'
   },
-  emojiContainer: { backgroundColor: '#59A4C6', justifyContent: 'center', alignItems: 'center' },
+  emojiContainer: { justifyContent: 'center', alignItems: 'center' },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
 
+  // Hero animation card
+  heroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  heroAnimation: {
+    width: '100%',
+    height: 200,
+  },
+
   // Progress Section
   progressContainer: {
-    backgroundColor: 'rgba(66, 137, 186, 0.15)',
+    backgroundColor: 'rgba(66, 137, 186, 0.12)',
     borderRadius: 20,
     padding: 20,
     marginBottom: 25,
@@ -436,6 +537,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 10,
   },
   statBox: {
     alignItems: 'center',
@@ -451,6 +553,21 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontSize: 12,
     color: '#A3C4DD',
     marginTop: 3,
+  },
+  continueButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#59A4C6',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  continueButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
 
   sectionTitle: { 
