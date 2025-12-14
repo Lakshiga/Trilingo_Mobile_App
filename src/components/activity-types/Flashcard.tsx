@@ -7,533 +7,241 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityComponentProps, Language, MultiLingualText, ImageUrl } from './types';
+import { ActivityComponentProps, Language, MultiLingualText } from './types'; // Ensure types exist
 import { useResponsive } from '../../utils/responsive';
 import { useTheme } from '../../theme/ThemeContext';
 import { getCloudFrontUrl } from '../../utils/awsUrlHelper';
 import apiService from '../../services/api';
 
+const { width } = Dimensions.get('window');
+
+// --- KID FRIENDLY THEME CONSTANTS ---
+const CARD_BG = '#FFFFFF';
+const BORDER_COLOR = '#E0F7FA';
+const PRIMARY_COLOR = '#4FACFE'; // Sky Blue
+const ACCENT_COLOR = '#FFB75E'; // Golden Yellow
+const TEXT_COLOR = '#2C3E50';
+
 interface FlashcardWord {
   id: string;
   label?: MultiLingualText | null;
   referenceTitle?: MultiLingualText | null;
-  imageUrl?: ImageUrl | null;
+  imageUrl?: any | null; // Typed loosely to handle various backend responses
   word: MultiLingualText;
   audioUrl: MultiLingualText;
 }
 
-interface FlashcardContent {
-  title: MultiLingualText;
-  instruction: MultiLingualText;
-  words: FlashcardWord[];
-}
-
 const Flashcard: React.FC<ActivityComponentProps> = ({ 
-  content: initialContent, 
   currentLang = 'ta',
-  onComplete,
   activityId,
-  currentExerciseIndex: propExerciseIndex = 0,
+  currentExerciseIndex = 0,
 }) => {
   const responsive = useResponsive();
-  const { theme } = useTheme();
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [content, setContent] = useState<any>(initialContent);
-  const [loading, setLoading] = useState<boolean>(!!activityId); // Always fetch if activityId exists
+  const [currentData, setCurrentData] = useState<FlashcardWord | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  
+  // Animation ref for the card pop effect
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
-  // Fetch exercises data if activityId is provided
-  // Priority: Always fetch from exercises if activityId exists (exercises have full data)
+  // 1. Fetch Data specific to the Current Exercise Index
   useEffect(() => {
-    const fetchFlashcardData = async () => {
-      if (!activityId) return; // Skip if no activityId
-      
-      // If we have activityId, always fetch exercises (they contain all 28 items)
-      // Don't rely on initialContent from activity.details_JSON (which only has 2 sample items)
+    const fetchExerciseData = async () => {
+      if (!activityId) return;
       
       try {
         setLoading(true);
-        
-        // Fetch all exercises for this activity
+        // Reset animation
+        scaleAnim.setValue(0.9);
+
         const exercises = await apiService.getExercisesByActivityId(activityId);
         
         if (exercises && exercises.length > 0) {
-          // Sort by sequenceOrder
           const sortedExercises = exercises.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-          
-          // Parse each exercise's jsonData and combine into words array
-          const wordsArray: FlashcardWord[] = [];
-          let title = { ta: '', en: '', si: '' };
-          let instruction = { ta: '', en: '', si: '' };
-          
-          // Get the current exercise based on propExerciseIndex
-          const currentExercise = sortedExercises[propExerciseIndex];
-          if (currentExercise && currentExercise.jsonData) {
-            try {
-              const parsedData = JSON.parse(currentExercise.jsonData);
-              
-              if (parsedData.title) title = parsedData.title;
-              if (parsedData.instruction) instruction = parsedData.instruction;
-              
-              // Extract word data from current exercise
-              if (parsedData.word) {
-                wordsArray.push(parsedData as FlashcardWord);
-              } else if (parsedData.words && Array.isArray(parsedData.words)) {
-                wordsArray.push(...parsedData.words);
-              } else if (parsedData.id || parsedData.word) {
-                wordsArray.push(parsedData as FlashcardWord);
-              }
-            } catch (parseError) {
-              // Silently skip invalid exercise data
+          // Get the specific exercise based on the Parent's progress index
+          const targetExercise = sortedExercises[currentExerciseIndex];
+
+          if (targetExercise && targetExercise.jsonData) {
+            const parsed = JSON.parse(targetExercise.jsonData);
+            
+            // Normalize data: Handle various JSON structures from backend
+            let wordData: FlashcardWord | null = null;
+
+            if (parsed.word && (parsed.word.en || parsed.word.ta)) {
+               wordData = parsed;
+            } else if (parsed.words && Array.isArray(parsed.words) && parsed.words.length > 0) {
+               wordData = parsed.words[0]; // Take first word if array
+            } else if (parsed.id || parsed.word) {
+               wordData = parsed;
             }
+
+            setCurrentData(wordData);
           }
-          
-          // Create content structure with words from current exercise
-          const combinedContent = {
-            title: title,
-            instruction: instruction,
-            words: wordsArray,
-            ...Object.fromEntries(
-              wordsArray.map((word, idx) => [idx.toString(), word])
-            )
-          };
-          
-          setContent(combinedContent);
         }
       } catch (error) {
-        // Error handled silently, loading state will be set to false
+        console.error("Error fetching flashcard:", error);
       } finally {
         setLoading(false);
+        // Play pop animation when loaded
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 5,
+          tension: 40,
+          useNativeDriver: true,
+        }).start();
       }
     };
 
-    fetchFlashcardData();
-  }, [activityId, propExerciseIndex]);
+    fetchExerciseData();
+  }, [activityId, currentExerciseIndex]);
 
-  // Parse content - handle multiple content structures
-  const getContent = (): FlashcardContent | null => {
-    if (!content) {
-      return null;
-    }
-    
-    // Case 1: Content has words array directly (most common)
-    if (content.words && Array.isArray(content.words) && content.words.length > 0) {
-      return {
-        title: content.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || { ta: '', en: '', si: '' },
-        words: content.words,
-      } as FlashcardContent;
-    }
-    
-    // Case 2: Content has numeric keys (e.g., "0", "1", "2") - convert to array
-    // This happens when JSON objects with numeric keys are parsed
-    const keys = Object.keys(content);
-    const numericKeys = keys.filter(key => /^\d+$/.test(key));
-    
-    if (numericKeys.length > 0) {
-      const wordsArray: FlashcardWord[] = [];
-      
-      // Sort numeric keys numerically (0, 1, 2, ... 27, 28)
-      numericKeys
-        .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
-        .forEach(key => {
-          const wordObj = content[key];
-          // Check if it's a valid word object
-          if (wordObj && typeof wordObj === 'object') {
-            // More lenient validation - if it's an object, include it
-            // (word property might be nested or have different structure)
-            wordsArray.push(wordObj as FlashcardWord);
-          }
-        });
-      
-      if (wordsArray.length > 0) {
-        return {
-          title: content.title || { ta: '', en: '', si: '' },
-          instruction: content.instruction || { ta: '', en: '', si: '' },
-          words: wordsArray,
-        } as FlashcardContent;
-      }
-    }
-    
-    // Case 3: Content is nested under flashcardData
-    if (content.flashcardData && content.flashcardData.words && Array.isArray(content.flashcardData.words)) {
-      return {
-        title: content.title || content.flashcardData.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || content.flashcardData.instruction || { ta: '', en: '', si: '' },
-        words: content.flashcardData.words,
-      } as FlashcardContent;
-    }
-    
-    // Case 4: Content is nested under data
-    if (content.data && content.data.words && Array.isArray(content.data.words)) {
-      return {
-        title: content.title || content.data.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || content.data.instruction || { ta: '', en: '', si: '' },
-        words: content.data.words,
-      } as FlashcardContent;
-    }
-    
-    // Case 5: Check for other possible nested keys
-    const possibleKeys = ['flashcards', 'items', 'cards', 'flashcardWords', 'wordsList'];
-    for (const key of possibleKeys) {
-      if (content[key] && Array.isArray(content[key]) && content[key].length > 0) {
-        return {
-          title: content.title || { ta: '', en: '', si: '' },
-          instruction: content.instruction || { ta: '', en: '', si: '' },
-          words: content[key],
-        } as FlashcardContent;
-      }
-    }
-    
-    // Case 6: Content itself is an array (treat as words array)
-    if (Array.isArray(content) && content.length > 0) {
-      return {
-        title: { ta: '', en: '', si: '' },
-        instruction: { ta: '', en: '', si: '' },
-        words: content as FlashcardWord[],
-      };
-    }
-    
-    // Case 7: Single word object (has word property)
-    if (content.word && typeof content.word === 'object') {
-      return {
-        title: content.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || { ta: '', en: '', si: '' },
-        words: [content as FlashcardWord],
-      };
-    }
-    
-    // Case 8: Check if content has properties that suggest it's a word object
-    // (has word property with multilingual text structure)
-    if (content.word && (
-      content.word.en || content.word.ta || content.word.si ||
-      (typeof content.word === 'object' && Object.keys(content.word).length > 0)
-    )) {
-      return {
-        title: content.title || { ta: '', en: '', si: '' },
-        instruction: content.instruction || { ta: '', en: '', si: '' },
-        words: [content as FlashcardWord],
-      };
-    }
-    
-    return null;
-  };
-
-  const flashcardData = getContent();
-  
-  // Ensure currentIndex is within bounds
-  useEffect(() => {
-    if (flashcardData && flashcardData.words && flashcardData.words.length > 0) {
-      if (currentIndex >= flashcardData.words.length) {
-        setCurrentIndex(0);
-      }
-    }
-  }, [flashcardData, currentIndex]);
-
-  const currentWord = flashcardData?.words[currentIndex];
-
-  // Check if detailed design (has label)
-  const isDetailedDesign = currentWord?.label && 
-    currentWord.label[currentLang] &&
-    currentWord.label[currentLang].trim().length > 0;
-
-  // Get text helper
-  const getText = (text: MultiLingualText | undefined | null): string => {
-    if (!text) return '';
-    return text[currentLang] || text.en || text.ta || text.si || '';
-  };
-
-  // Get image URL with CloudFront base URL
-  const getImageUrl = (): string | null => {
-    if (!currentWord?.imageUrl) return null;
-    const imageUrl = currentWord.imageUrl;
-    const relativePath = imageUrl[currentLang] || imageUrl.default || imageUrl.en || imageUrl.ta || null;
-    if (!relativePath) return null;
-    
-    // Convert relative path to full CloudFront URL
-    return getCloudFrontUrl(relativePath);
-  };
-
-  // Get audio URL with CloudFront base URL
+  // 2. Audio Handling
   const getAudioUrl = (): string | null => {
-    if (!currentWord?.audioUrl) return null;
-    const relativePath = currentWord.audioUrl[currentLang] || currentWord.audioUrl.en || currentWord.audioUrl.ta || null;
-    if (!relativePath) return null;
-    
-    // Convert relative path to full CloudFront URL
-    return getCloudFrontUrl(relativePath);
+    if (!currentData?.audioUrl) return null;
+    // @ts-ignore
+    const path = currentData.audioUrl[currentLang] || currentData.audioUrl.en || currentData.audioUrl.ta;
+    return path ? getCloudFrontUrl(path) : null;
   };
 
-  // Play audio
   const playAudio = async () => {
-    const audioUrl = getAudioUrl();
-    if (!audioUrl) {
-      return;
-    }
+    const uri = getAudioUrl();
+    if (!uri) return;
 
     try {
-      // Always unload previous sound before loading new one (ensures fresh audio for each word)
       if (sound) {
-        try {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        } catch (e) {
-          // Ignore errors when unloading
-        }
-        setSound(null);
-        setIsPlaying(false);
+        await sound.unloadAsync();
       }
 
-      // Create and play new sound
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
+        { uri },
         { shouldPlay: true }
       );
+      
       setSound(newSound);
       setIsPlaying(true);
 
       newSound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.isLoaded && status.didJustFinish) {
+        if (status.didJustFinish) {
           setIsPlaying(false);
         }
       });
     } catch (error) {
       setIsPlaying(false);
-      setSound(null);
     }
   };
 
-  // Reset sound when word changes (so new audio can play)
+  // Auto-play audio when data loads (optional, nice for kids)
   useEffect(() => {
-    // Stop and unload previous sound when word changes
-    if (sound) {
-      sound.stopAsync().catch(() => {});
-      sound.unloadAsync().catch(() => {});
-      setSound(null);
-      setIsPlaying(false);
+    if (currentData && !loading) {
+      setTimeout(() => playAudio(), 400);
     }
-  }, [currentIndex]); // Reset when index changes
-
-  // Auto-play audio whenever word changes (next/back click or initial load)
-  useEffect(() => {
-    if (currentWord && getAudioUrl()) {
-      // Auto-play after a short delay when word changes
-      const timer = setTimeout(() => {
-        playAudio();
-      }, 300);
-      
-      return () => clearTimeout(timer); // Cleanup timer if component unmounts or word changes quickly
-    }
-  }, [currentIndex, currentWord]); // Auto-play when index or word changes
-
-  // Cleanup audio
-  useEffect(() => {
     return () => {
-      if (sound) {
-        sound.unloadAsync().catch(() => {});
-      }
+      if (sound) sound.unloadAsync();
     };
-  }, [sound]);
+  }, [currentData, loading]);
 
-  // Reset word index when exercise changes
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [propExerciseIndex]);
 
-  // Responsive styles for loading and error states
-  const responsiveErrorStyles = {
-    errorText: {
-      ...styles.errorText,
-      fontSize: responsive.moderateScale(16),
-      padding: responsive.wp(5),
-    },
-    errorSubtext: {
-      ...styles.errorSubtext,
-      fontSize: responsive.moderateScale(14),
-      paddingTop: responsive.hp(1.2),
-    },
-    loadingText: {
-      ...styles.loadingText,
-      fontSize: responsive.moderateScale(16),
-      marginTop: responsive.hp(2),
-    },
+  // 3. Render Helpers
+  const getImageUrl = (): string | null => {
+    if (!currentData?.imageUrl) return null;
+    // @ts-ignore
+    const path = currentData.imageUrl[currentLang] || currentData.imageUrl.default || currentData.imageUrl.en;
+    return path ? getCloudFrontUrl(path) : null;
   };
 
-  // Show loading state
+  const getText = (obj: MultiLingualText | undefined | null): string => {
+    if (!obj) return '';
+    // @ts-ignore
+    return obj[currentLang] || obj.en || obj.ta || '';
+  };
+
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={responsiveErrorStyles.loadingText}>Loading flashcards...</Text>
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
-  if (!flashcardData || !currentWord) {
+  if (!currentData) {
     return (
-      <View style={styles.container}>
-        <Text style={responsiveErrorStyles.errorText}>No flashcard content available</Text>
-        {activityId && (
-          <Text style={responsiveErrorStyles.errorSubtext}>
-            Activity ID: {activityId}
-          </Text>
-        )}
+      <View style={styles.centerContainer}>
+        <MaterialIcons name="broken-image" size={50} color="#BDC3C7" />
+        <Text style={styles.errorText}>No card found!</Text>
       </View>
     );
   }
 
   const imageUrl = getImageUrl();
-  const mainWord = getText(currentWord.word) || '';
-  const label = getText(currentWord.label) || '';
-  const referenceTitle = getText(currentWord.referenceTitle) || '';
-
-  // Create responsive styles dynamically
-  const responsiveStyles = {
-    gradient: {
-      ...styles.gradient,
-      padding: responsive.wp(5),
-      paddingBottom: responsive.hp(12),
-    },
-    flashcardCard: {
-      ...styles.flashcardCard,
-      borderRadius: responsive.moderateScale(24),
-      padding: responsive.wp(6),
-      maxWidth: responsive.wp(90),
-      marginBottom: responsive.hp(2.5),
-      shadowRadius: responsive.moderateScale(8),
-      elevation: 5,
-    },
-    cardHeading: {
-      ...styles.cardHeading,
-      fontSize: responsive.moderateScale(18),
-      marginBottom: responsive.hp(2.5),
-    },
-    imageContainer: {
-      ...styles.imageContainer,
-      width: responsive.wp(55),
-      height: responsive.wp(55),
-      borderRadius: responsive.wp(27.5),
-      marginBottom: responsive.hp(2.5),
-      borderWidth: responsive.moderateScale(3),
-    },
-    imagePlaceholder: {
-      ...styles.imagePlaceholder,
-      width: responsive.wp(55),
-      height: responsive.wp(55),
-      borderRadius: responsive.wp(27.5),
-      marginBottom: responsive.hp(2.5),
-      borderWidth: responsive.moderateScale(3),
-    },
-    cardImage: styles.cardImage,
-    cardWord: {
-      ...styles.cardWord,
-      fontSize: responsive.moderateScale(28),
-      marginBottom: responsive.hp(1),
-    },
-    cardLabel: {
-      ...styles.cardLabel,
-      fontSize: responsive.moderateScale(16),
-      marginBottom: responsive.hp(2.5),
-    },
-    listenButton: {
-      ...styles.listenButton,
-      paddingHorizontal: responsive.wp(5),
-      paddingVertical: responsive.hp(1.5),
-      borderRadius: responsive.moderateScale(20),
-    },
-    listenButtonText: {
-      ...styles.listenButtonText,
-      fontSize: responsive.moderateScale(16),
-    },
-    navigationFooter: {
-      ...styles.navigationFooter,
-      paddingHorizontal: responsive.wp(5),
-      paddingVertical: responsive.hp(2),
-      paddingBottom: Math.max(responsive.hp(2.5), responsive.hp(3.5)),
-    },
-    footerButton: {
-      ...styles.footerButton,
-      paddingHorizontal: responsive.wp(5),
-      paddingVertical: responsive.hp(1.5),
-      borderRadius: responsive.moderateScale(20),
-    },
-    footerButtonText: {
-      ...styles.footerButtonText,
-      fontSize: responsive.moderateScale(16),
-    },
-    footerCounter: {
-      ...styles.footerCounter,
-      fontSize: responsive.moderateScale(18),
-      paddingHorizontal: responsive.wp(4),
-      paddingVertical: responsive.hp(1),
-      borderRadius: responsive.moderateScale(20),
-    },
-  };
-
-  const iconSize = responsive.moderateScale(24);
-  const placeholderIconSize = responsive.moderateScale(60);
+  const mainWord = getText(currentData.word);
+  const secondaryLabel = getText(currentData.label);
+  const refTitle = getText(currentData.referenceTitle);
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#E3F2FD', '#BBDEFB', '#90CAF9']}
-        style={responsiveStyles.gradient}
-      >
-        {/* Flashcard Card Design */}
-        <View style={responsiveStyles.flashcardCard}>
-          {/* Reference Title as Heading (Center) */}
-          {referenceTitle && referenceTitle.trim() ? (
-            <Text style={responsiveStyles.cardHeading}>{referenceTitle}</Text>
-          ) : null}
-          
-          {/* Image in Center (Circular) */}
+      {/* 
+        Note: No ScrollView here. 
+        We rely on the Parent Screen to handle scrolling or safe areas.
+        This component fills the "Center Content" area.
+      */}
+      
+      {/* --- Reference Title (Top - Outside Card) --- */}
+      {refTitle ? (
+        <View style={styles.referenceTitleContainer}>
+          <Text style={styles.referenceTitleText}>{refTitle}</Text>
+        </View>
+      ) : null}
+
+      <Animated.View style={[styles.cardContainer, { transform: [{ scale: scaleAnim }] }]}>
+
+        {/* --- Image Area --- */}
+        <View style={styles.imageWrapper}>
           {imageUrl ? (
-            <View style={responsiveStyles.imageContainer}>
-              <Image
-                source={{ uri: imageUrl }}
-                style={responsiveStyles.cardImage}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.mainImage}
+              resizeMode="contain"
+            />
           ) : (
-            <View style={responsiveStyles.imagePlaceholder}>
-              <MaterialIcons name="image" size={placeholderIconSize} color="#BBDEFB" />
+            <View style={styles.placeholderImage}>
+              <MaterialCommunityIcons name="image-outline" size={60} color="#E0F7FA" />
             </View>
-          )}
-
-          {/* Word Text */}
-          {mainWord && mainWord.trim() ? (
-            <Text style={responsiveStyles.cardWord}>{mainWord}</Text>
-          ) : null}
-
-          {/* Label (if exists) */}
-          {label && label.trim() ? (
-            <Text style={responsiveStyles.cardLabel}>{label}</Text>
-          ) : null}
-
-          {/* Listen Button */}
-          {getAudioUrl() && (
-            <TouchableOpacity
-              style={responsiveStyles.listenButton}
-              onPress={playAudio}
-            >
-              <MaterialIcons
-                name={isPlaying ? "pause-circle-filled" : "volume-up"}
-                size={iconSize}
-                color="#1976D2"
-              />
-              <View style={{ width: responsive.wp(2) }} />
-              <Text style={responsiveStyles.listenButtonText}>Listen</Text>
-            </TouchableOpacity>
           )}
         </View>
-      </LinearGradient>
 
+        {/* --- Word Area --- */}
+        <View style={styles.textWrapper}>
+          <Text style={styles.mainWord}>{mainWord}</Text>
+          {secondaryLabel ? (
+            <Text style={styles.subWord}>{secondaryLabel}</Text>
+          ) : null}
+        </View>
+
+        {/* --- Audio Interaction --- */}
+        <TouchableOpacity 
+          style={[styles.audioButton, isPlaying && styles.audioButtonPlaying]} 
+          onPress={playAudio}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons 
+            name={isPlaying ? "volume-up" : "volume-up"} 
+            size={32} 
+            color="#FFF" 
+          />
+          <Text style={styles.audioText}>
+            {isPlaying ? "Playing..." : "Listen"}
+          </Text>
+        </TouchableOpacity>
+
+      </Animated.View>
     </View>
   );
 };
@@ -541,122 +249,152 @@ const Flashcard: React.FC<ActivityComponentProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 40,
   },
-  gradient: {
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Flashcard Card Styles - Base styles (responsive values applied in component)
-  flashcardCard: {
-    backgroundColor: '#FFFFFF',
+  
+  // --- CARD DESIGN ---
+  cardContainer: {
+    backgroundColor: CARD_BG,
+    width: '100%',
+    maxWidth: 350,
+    borderRadius: 30,
+    padding: 20,
+    alignItems: 'center',
+    // 3D Shadow Effect
+    shadowColor: "#4FACFE",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderBottomWidth: 6,
+    borderBottomColor: '#E1F5FE',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+
+  // Reference Title (Top - Outside Card)
+  referenceTitleContainer: {
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#000',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E1F5FE',
+  },
+  referenceTitleText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: PRIMARY_COLOR,
+    textAlign: 'center',
+  },
+
+  // Badge
+  badgeContainer: {
+    backgroundColor: '#E0F7FA',
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginBottom: 20,
+  },
+  badgeText: {
+    color: '#0288D1',
+    fontWeight: 'bold',
+    fontSize: 14,
+    textTransform: 'uppercase',
+  },
+
+  // Image
+  imageWrapper: {
+    width: 220,               // கொஞ்சம் பெரிதாக்கியுள்ளேன்
+    height: 220,
+    borderRadius: 110,        // width-ல் பாதி (Perfect Circle)
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 25,
+    borderWidth: 5,
+    borderColor: '#E1F5FE',
+    overflow: 'hidden',       
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 5,
   },
-  cardHeading: {
-    fontWeight: '600',
-    color: '#1F2937',
-    textAlign: 'center',
-    fontFamily: 'System',
-  },
-  imageContainer: {
-    overflow: 'hidden',
-    borderColor: '#E3F2FD',
-    backgroundColor: '#F9FAFB',
-  },
-  cardImage: {
+  mainImage: {
     width: '100%',
     height: '100%',
   },
-  imagePlaceholder: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardWord: {
-    fontWeight: 'bold',
-    color: '#1F2937',
-    textAlign: 'center',
-    fontFamily: 'System',
-  },
-  cardLabel: {
-    fontWeight: '500',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  listenButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E3F2FD',
-  },
-  listenButtonText: {
-    color: '#1976D2',
-    fontWeight: '600',
-  },
-  // Navigation Footer Styles - Fixed at Bottom
-  navigationFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  placeholderImage: {
     width: '100%',
-    backgroundColor: 'transparent',
-  },
-  footerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    elevation: 3,
-  },
-  footerButtonDisabled: {
-    opacity: 0.5,
-    backgroundColor: '#F3F4F6',
-  },
-  footerButtonText: {
-    color: '#1976D2',
-    fontWeight: '600',
-  },
-  footerButtonTextDisabled: {
-    color: '#9CA3AF',
-  },
-  footerCounter: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  // Error & Loading Styles
-  errorText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    textAlign: 'center',
-    padding: 20,
-  },
-  errorSubtext: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-    textAlign: 'center',
-    paddingTop: 10,
-  },
-  loadingContainer: {
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Text
+  textWrapper: {
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  mainWord: {
+    fontSize: 32,
+    fontWeight: '900', // Heavy font for kids
+    color: TEXT_COLOR,
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  subWord: {
+    fontSize: 18,
+    color: '#95A5A6',
+    fontWeight: '500',
+  },
+
+  // Audio Button
+  audioButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: PRIMARY_COLOR,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 50,
+    gap: 10,
+    // Button Shadow
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  audioButtonPlaying: {
+    backgroundColor: ACCENT_COLOR, // Changes color when playing
+    transform: [{ scale: 1.05 }],
+  },
+  audioText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  // Loading/Error
   loadingText: {
-    color: '#FFFFFF',
+    marginTop: 10,
+    color: PRIMARY_COLOR,
+    fontWeight: '600',
+  },
+  errorText: {
+    marginTop: 10,
+    color: '#95A5A6',
     fontSize: 16,
-    marginTop: 16,
   },
 });
 
 export default Flashcard;
-

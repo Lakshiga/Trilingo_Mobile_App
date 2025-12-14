@@ -21,7 +21,8 @@ import { getTranslation, Language } from '../utils/translations'; // Ensure this
 import { useResponsive } from '../utils/responsive';
 
 // Age options
-const ADULT_AGE_OPTIONS = ['0-1', '2', '3', '4', '5', '6+'];
+const ADULT_AGE_OPTIONS = ['2-5', '6-8', '9-11', '12-14', '15+'];
+const UNLOCKED_AGE_GROUP = '2-5'; // Only this age group is unlocked
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
@@ -337,7 +338,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <ImageBackground
-        source={require('../../assets/registerimage.png')}
+        source={require('../../assets/register.png')}
         style={styles.backgroundImage}
         resizeMode="cover"
       >
@@ -357,7 +358,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           {/* TOP BAR */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <MaterialCommunityIcons name="arrow-left" size={28} color="#002D62" />
+              <MaterialCommunityIcons name="arrow-left" size={28} color="#0D5B81" />
             </TouchableOpacity>
             <View style={styles.progressBarContainer}>
               <View style={styles.progressBarBg}>
@@ -414,7 +415,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                     width: '100%',
                     height: '100%',
                   }}>
-                    <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#002D62" style={{ opacity: 0.15 }} />
+                    <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#2D4F9C" style={{ opacity: 0.15 }} />
                   </Animated.View>
               </View>
             )}
@@ -435,20 +436,41 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                   <View style={styles.gridContainer}>
                     {(currentQ.isLanguageSelection ? currentQ.options : ADULT_AGE_OPTIONS)?.map((option) => {
                       const isSelected = userData[currentQ.key as keyof UserData] === option;
+                      // Check if age option is locked (only for age selection)
+                      const isLocked = currentQ.isAgeSelection && option !== UNLOCKED_AGE_GROUP;
+                      
                       return (
                         <TouchableOpacity
                           key={option}
-                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                          style={[
+                            styles.optionButton, 
+                            isSelected && styles.optionButtonSelected,
+                            isLocked && styles.optionButtonLocked
+                          ]}
                           onPress={() => {
+                            if (isLocked) {
+                              Alert.alert('Not Implemented', 'This age group is not yet available.');
+                              return;
+                            }
                             setUserData({ ...userData, [currentQ.key]: option });
                             // No animation on selection - only on continue click
                           }}
-                          activeOpacity={0.7}
+                          activeOpacity={isLocked ? 1 : 0.7}
+                          disabled={isLocked}
                         >
-                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                          <Text style={[
+                            styles.optionText, 
+                            isSelected && styles.optionTextSelected,
+                            isLocked && styles.optionTextLocked
+                          ]}>
                             {option}
                           </Text>
-                          {isSelected && <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />}
+                          {isSelected && !isLocked && (
+                            <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />
+                          )}
+                          {isLocked && (
+                            <MaterialCommunityIcons name="lock" size={16} color="#94A3B8" style={styles.lockIcon} />
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -459,7 +481,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                 {(!currentQ.isLanguageSelection && !currentQ.isAgeSelection) && (
                   <View style={styles.inputWrapperContainer}>
                     <View style={styles.textInputWrapper}>
-                      <MaterialCommunityIcons name={currentQ.icon as any} size={24} color="#002D62" style={styles.inputIcon} />
+                      <MaterialCommunityIcons name={currentQ.icon as any} size={24} color="#2D4F9C" style={styles.inputIcon} />
                       <TextInput
                         key={currentQ.key + showPassword} // Force re-render when showPassword changes
                         style={styles.modernInput}
@@ -502,9 +524,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
                           onPressOut={() => {}}
                         >
                           <MaterialCommunityIcons 
-                            name={showPassword ? "eye-off" : "eye"} 
+                            name={showPassword ? "eye-off" : "eye"}
                             size={24} 
-                            color="#002D62" 
+                            color="#2D4F9C" 
                           />
                         </TouchableOpacity>
                       )}
@@ -603,12 +625,12 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   },
   progressBarBg: { 
     height: 8, 
-    backgroundColor: 'rgba(0,45,98,0.1)', 
+    backgroundColor: 'rgba(89,164,198,0.1)', 
     borderRadius: 4, 
     overflow: 'hidden',
     marginBottom: 8,
   },
-  progressBarFill: { height: '100%', backgroundColor: '#002D62', borderRadius: 4 },
+  progressBarFill: { height: '100%', backgroundColor: '#59A4C6', borderRadius: 4 },
   stepIndicators: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -619,11 +641,11 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(0,45,98,0.2)',
+    backgroundColor: 'rgba(66,137,186,0.2)',
     marginHorizontal: 2,
   },
   stepDotActive: {
-    backgroundColor: '#002D62',
+    backgroundColor: '#4289BA',
     width: 10,
     height: 10,
     borderRadius: 5,
@@ -656,7 +678,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   questionText: {
     fontSize: responsive.wp(5.5),
     fontWeight: '800',
-    color: '#002D62',
+    color: '#0D5B81',
     textAlign: 'center',
     marginBottom: responsive.hp(3),
     lineHeight: responsive.wp(7),
@@ -713,17 +735,24 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     flexDirection: 'row',
   },
   optionButtonSelected: {
-    backgroundColor: '#002D62',
-    borderColor: '#002D62',
-    shadowColor: "#002D62",
+    backgroundColor: '#4289BA',
+    borderColor: '#4289BA',
+    shadowColor: "#4289BA",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
   },
+  optionButtonLocked: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+    opacity: 0.6,
+  },
   optionText: { fontSize: responsive.wp(4), color: '#64748B', fontWeight: '600' },
   optionTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
+  optionTextLocked: { color: '#94A3B8', fontWeight: '500' },
   checkmark: { marginLeft: 6 },
+  lockIcon: { marginLeft: 6 },
 
   // Errors
   errorContainer: { marginTop: 10, width: '100%' },
@@ -774,12 +803,12 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   },
   // Continue Button
   continueButton: {
-    backgroundColor: '#002D62',
+    backgroundColor: '#4289BA',
     width: '100%',
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: "#002D62",
+    shadowColor: "#4289BA",
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 10,

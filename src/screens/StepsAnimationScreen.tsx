@@ -50,7 +50,7 @@ const StepsAnimationScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#002D62" />
+      <StatusBar barStyle="light-content" backgroundColor="#0D5B81" />
 
       {/* --- TOP SECTION: BLUE CURVE HEADER --- */}
       <View style={styles.headerContainer}>
@@ -128,13 +128,12 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
     },
     blueCurve: {
       position: 'absolute',
-      top: -responsive.hp(20), // Pull up to create the curve shape from a big circle
-      left: -width * 0.25,     // Center it
+      top: -responsive.hp(20),
+      left: -width * 0.25,
       width: width * 1.5,
       height: responsive.hp(55),
-      backgroundColor: '#002D62', // Brand Royal Blue
-      borderRadius: width,        // Makes it circular
-      // Shadow for depth over the white bg
+      backgroundColor: '#2D4F9C',
+      borderRadius: width,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.15,
@@ -197,7 +196,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
     },
     messageText: {
       fontSize: responsive.wp(4.5),
-      color: '#718096', // Cool Gray (Professional)
+      color: '#59A4C6',
       textAlign: 'center',
       fontWeight: '600',
       marginBottom: responsive.hp(2),
@@ -207,13 +206,13 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
 
     // --- BUTTON STYLES ---
     continueButton: {
-      backgroundColor: '#002D62', // Brand Blue (Replacing the pink)
+      backgroundColor: '#4289BA',
       width: responsive.wp(70),
       paddingVertical: responsive.hp(2),
       borderRadius: responsive.wp(8),
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#002D62',
+      shadowColor: '#4289BA',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.4,
       shadowRadius: 8,

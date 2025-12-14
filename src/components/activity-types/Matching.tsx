@@ -71,6 +71,8 @@ const Matching: React.FC<ActivityComponentProps> = ({
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [congratulationSound, setCongratulationSound] = useState<Audio.Sound | null>(null);
+  const [sadSound, setSadSound] = useState<Audio.Sound | null>(null);
   
   // Animations
   const shakeAnims = useRef<{ [key: string]: Animated.Value }>({});
@@ -194,8 +196,48 @@ const Matching: React.FC<ActivityComponentProps> = ({
   useEffect(() => {
     return () => {
       if (sound) sound.unloadAsync().catch(console.warn);
+      if (congratulationSound) congratulationSound.unloadAsync().catch(console.warn);
+      if (sadSound) sadSound.unloadAsync().catch(console.warn);
     };
-  }, [sound]);
+  }, [sound, congratulationSound, sadSound]);
+
+  const playCongratulationSound = async () => {
+    try {
+      if (congratulationSound) {
+        await congratulationSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/congratulation.wav')
+      );
+      setCongratulationSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setCongratulationSound(null);
+        }
+      });
+    } catch (err) {}
+  };
+
+  const playWrongSound = async () => {
+    try {
+      if (sadSound) {
+        await sadSound.unloadAsync();
+      }
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../../assets/sounds/wrong.mp3')
+      );
+      setSadSound(newSound);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          newSound.unloadAsync();
+          setSadSound(null);
+        }
+      });
+    } catch (err) {}
+  };
 
   // Play success animation when modal opens
   useEffect(() => {
@@ -253,7 +295,8 @@ const Matching: React.FC<ActivityComponentProps> = ({
     setIsPassed(passed);
     
     if (passed) {
-        // All correct - show success animation popup, then auto-navigate
+        // All correct - play congratulation sound and show success animation popup, then auto-navigate
+        playCongratulationSound();
         setTimeout(() => {
             setShowSuccessModal(true);
             // Auto-navigate after animation (2.5 seconds)
@@ -271,7 +314,8 @@ const Matching: React.FC<ActivityComponentProps> = ({
             }, 2500);
         }, 1000);
     } else {
-        // Has mistakes - show retry modal with animation
+        // Has mistakes - play wrong sound and show retry modal with animation
+        playWrongSound();
         setTimeout(() => {
             setShowResultModal(true);
         }, 1000);
@@ -517,7 +561,7 @@ const Matching: React.FC<ActivityComponentProps> = ({
             <View style={styles.errorModalContent}>
                 <LottieView
                     ref={errorAnimationRef}
-                    source={require('../../../assets/animations/Sad - Failed.json')}
+                    source={require('../../../assets/animations/wrong.json')}
                     autoPlay={false}
                     loop={false}
                     style={styles.errorAnimation}

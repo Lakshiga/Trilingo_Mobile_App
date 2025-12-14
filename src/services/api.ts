@@ -93,6 +93,54 @@ export interface ExerciseDto {
   updatedAt: string;
 }
 
+// Progress DTOs (backend ProgressDto)
+export interface ProgressDto {
+  id: number;
+  studentId?: string;
+  activityId: number;
+  activityName?: string;
+  score: number;
+  maxScore: number;
+  percentageScore: number;
+  completedAt: string;
+  timeSpentSeconds: number;
+  timeSpentFormatted: string;
+  attemptNumber: number;
+  isCompleted: boolean;
+  notes?: string;
+}
+
+export interface ProgressSummaryDto {
+  studentId: string;
+  studentNickname: string;
+  studentAvatar: string;
+  totalActivitiesCompleted: number;
+  totalActivitiesAttempted: number;
+  averageScore: number;
+  totalXpPoints: number;
+  totalTimeSpentSeconds: number;
+  totalTimeSpentFormatted: string;
+  lastActivityDate?: string;
+  recentActivities: Array<{
+    activityId: number;
+    activityName: string;
+    score: number;
+    maxScore: number;
+    completedAt: string;
+  }>;
+}
+
+export interface CreateProgressRequest {
+  studentId: string;
+  activityId: number;
+  score: number;
+  maxScore: number;
+  timeSpentSeconds: number;
+  attemptNumber: number;
+  isCompleted: boolean;
+  notes?: string;
+}
+
 // MainActivity DTO from backend (for Songs/Videos)
 export interface MainActivityDto {
   id: number;
@@ -127,8 +175,6 @@ class ApiService {
   constructor() {
     // Ensure API_BASE_URL is never undefined
     const baseUrl = API_BASE_URL || API_CONFIG.PRODUCTION;
-    console.log('Initializing API Service with base URL:', baseUrl);
-    
     if (!baseUrl) {
       console.error('API_BASE_URL is undefined! Using fallback:', API_CONFIG.PRODUCTION);
     }
@@ -192,10 +238,7 @@ class ApiService {
       // Check if user is logged in (lazy import to avoid circular dependency)
       const UserStorageClass = await getUserStorage();
       const currentUser = await UserStorageClass.getCurrentUser();
-      console.log('Current user:', currentUser);
-      // Use public API for guest users or when no user is logged in
       const usePublic = !currentUser || currentUser.isGuest === true;
-      console.log('Using public API:', usePublic);
       return usePublic;
     } catch (error) {
       console.error('Error checking user status:', error);
@@ -352,7 +395,6 @@ class ApiService {
 
   async put<T>(endpoint: string, data: any): Promise<ApiResponse<T>> {
     try {
-      console.log(`Trying authenticated API for PUT ${endpoint}`);
       const response = await this.api.put<ApiResponse<T>>(endpoint, data);
       return response.data;
     } catch (error: any) {
@@ -363,7 +405,6 @@ class ApiService {
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      console.log(`Trying authenticated API for DELETE ${endpoint}`);
       const response = await this.api.delete<ApiResponse<T>>(endpoint);
       return response.data;
     } catch (error: any) {
@@ -438,7 +479,6 @@ class ApiService {
         
         if (isRetryable && attempt < maxRetries) {
           const delay = retryDelay * Math.pow(2, attempt); // Exponential backoff
-          console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms for status ${status}`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -473,7 +513,6 @@ class ApiService {
         }
         
         // For other endpoints, try authenticated API if public fails with 401/403
-        console.log(`Public API failed for POST ${endpoint}, trying authenticated API...`);
         if (publicError.response?.status === 401 || publicError.response?.status === 403) {
           try {
             const response = await this.retryRequest(
@@ -495,8 +534,6 @@ class ApiService {
     } else {
       // Use authenticated API directly
       try {
-        console.log(`Trying authenticated API for POST ${endpoint}`);
-        
         const response = await this.retryRequest(
           () => this.api.post<T>(endpoint, data),
           3, // max 3 retries
@@ -527,33 +564,35 @@ class ApiService {
       const currentBaseUrl = this.api.defaults.baseURL || '';
       let uploadBaseUrl = currentBaseUrl;
       
-      // If using CloudFront, switch to direct backend URL
+      // If using CloudFront, switch to direct backend URL (uploads are blocked on CF)
       if (currentBaseUrl.includes('cloudfront.net')) {
-        // Try to get the direct backend URL from config
-        // Priority: PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > localhost
-        if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
+        const directOverride = (process.env as any).EXPO_PUBLIC_API_DIRECT || (process.env as any).API_DIRECT;
+        // Priority: env override > PHYSICAL_DEVICE > ANDROID_EMULATOR > IOS_SIMULATOR > PRODUCTION > localhost
+        if (directOverride && !directOverride.includes('cloudfront')) {
+          uploadBaseUrl = directOverride;
+        } else if (API_CONFIG.PHYSICAL_DEVICE && !API_CONFIG.PHYSICAL_DEVICE.includes('cloudfront')) {
           uploadBaseUrl = API_CONFIG.PHYSICAL_DEVICE;
         } else if (API_CONFIG.ANDROID_EMULATOR) {
           uploadBaseUrl = API_CONFIG.ANDROID_EMULATOR;
         } else if (API_CONFIG.IOS_SIMULATOR) {
           uploadBaseUrl = API_CONFIG.IOS_SIMULATOR;
+        } else if (API_CONFIG.PRODUCTION && !API_CONFIG.PRODUCTION.includes('cloudfront')) {
+          uploadBaseUrl = API_CONFIG.PRODUCTION;
         } else {
-          // Fallback to localhost
-          uploadBaseUrl = 'https://d3v81eez8ecmto.cloudfront.net/api';
+          // Fallbacks by platform
+          const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+          uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
         }
-        
-        console.log('Using direct backend URL for upload (CloudFront detected):', uploadBaseUrl);
-      } else {
-        // Already using direct backend, use as is
-        console.log('Using current API URL for upload:', uploadBaseUrl);
+      }
+      // Final safety: if still cloudfront, hard fallback to localhost
+      if (uploadBaseUrl.includes('cloudfront.net')) {
+        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+        uploadBaseUrl = isAndroid ? 'http://10.0.2.2:5166/api' : 'http://localhost:5166/api';
       }
       
       // Construct the full upload URL
       const uploadEndpoint = '/auth/upload-profile-image';
       const fullUploadUrl = uploadBaseUrl.replace(/\/$/, '') + uploadEndpoint;
-      
-      console.log('Upload endpoint:', uploadEndpoint);
-      console.log('Full upload URL:', fullUploadUrl);
       
       // Get file extension from URI
       let fileExtension = 'jpg';
@@ -596,17 +635,10 @@ class ApiService {
         type: mimeType,
       };
       
-      console.log('File data:', {
-        name: fileData.name,
-        type: fileData.type,
-        uri: imageUri.substring(0, 50) + '...', // Log partial URI
-      });
-      
       formData.append('file', fileData as any);
 
       // Get auth token for the request
       const token = await this.getAuthToken();
-      console.log('Auth token present:', !!token);
       
       // Create a separate axios instance for upload with the direct URL
       const uploadApi = axios.create({
@@ -702,7 +734,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log('User does not have permission to access activities');
         throw error;
       }
       throw this.handleError(error);
@@ -719,7 +750,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access activity ${id}`);
         throw error;
       }
       throw this.handleError(error);
@@ -736,7 +766,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access activities for stage ${stageId}`);
         throw error;
       }
       throw this.handleError(error);
@@ -816,6 +845,46 @@ class ApiService {
     }
   }
 
+  // Progress Methods
+  async postStudentProgress(payload: CreateProgressRequest): Promise<ApiResponse<ProgressDto>> {
+    try {
+      const response = await this.api.post<ApiResponse<ProgressDto>>('/StudentProgress', payload);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentProgress(studentId: string): Promise<ProgressDto[]> {
+    try {
+      const response = await this.api.get<ProgressDto[]>(`/StudentProgress/${studentId}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentProgressByActivity(studentId: string, activityId: number): Promise<ProgressDto[]> {
+    try {
+      const response = await this.api.get<ProgressDto[]>(
+        `/StudentProgress`,
+        { params: { studentId, activityId, isCompleted: true } }
+      );
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getStudentSummary(studentId: string): Promise<ProgressSummaryDto | null> {
+    try {
+      const response = await this.api.get<ProgressSummaryDto>(`/StudentProgress/${studentId}/summary`);
+      return response.data || null;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
   // Level Methods
   async getAllLevels(): Promise<LevelDto[]> {
     try {
@@ -827,7 +896,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log('User does not have permission to access levels');
         throw error;
       }
       throw this.handleError(error);
@@ -844,7 +912,6 @@ class ApiService {
       if (error.name === 'PermissionDeniedError' || 
           (error.response?.status === 403) ||
           (error.message && error.message.includes('PERMISSION_DENIED'))) {
-        console.log(`User does not have permission to access level ${id}`);
         throw error;
       }
       throw this.handleError(error);
@@ -915,8 +982,6 @@ class ApiService {
 
   async getStagesByLevelId(levelId: number): Promise<StageDto[]> {
     try {
-      console.log(`Fetching stages for levelId: ${levelId}`);
-      
       // This endpoint requires authentication (Admin or Parent role)
       // Use authenticated API directly, not public API first
       // Try lowercase first (ASP.NET Core routing may be case-sensitive)
@@ -926,7 +991,6 @@ class ApiService {
       } catch (lowercaseError: any) {
         // If lowercase fails with 404, try uppercase
         if (lowercaseError.response?.status === 404) {
-          console.log(`Trying uppercase route: /Stages/level/${levelId}`);
           response = await this.makeApiCall<StageDto[]>(`/Stages/level/${levelId}`, false);
         } else {
           throw lowercaseError;
@@ -934,8 +998,6 @@ class ApiService {
       }
       
       const stages = Array.isArray(response) ? response : [];
-      
-      console.log(`✅ Found ${stages.length} stages for level ${levelId}`);
       
       // Sort by ID to maintain order (matching database order)
       const sortedStages = stages.sort((a, b) => a.id - b.id);
