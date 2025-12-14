@@ -537,6 +537,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 10,
   },
   statBox: {
     alignItems: 'center',
