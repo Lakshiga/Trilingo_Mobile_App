@@ -69,6 +69,10 @@ const isValidProfileImage = (imageUrl: string): boolean => {
 export default function ProfileScreen() {
   const { isDarkMode, setDarkMode } = useTheme();
   const { currentUser, logout, updateUser } = useUser();
+  const [summary, setSummary] = useState<ProgressSummaryDto | null>(null);
+  const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
+  // Always prefer student nickname; fallback to cached nickname; avoid parent name
+  const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
   const navigation = useNavigation();
   const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
   const { isBackgroundEnabled, enableBackground, disableBackground } = useBackgroundAudio();
@@ -216,10 +220,11 @@ export default function ProfileScreen() {
       try {
         const studentId = currentUser?.id; // replace if selected child stored elsewhere
         if (!studentId) return;
-        const summary: ProgressSummaryDto | null = await apiService.getStudentSummary(studentId);
-        if (summary) {
-          setCompletedCount(summary.totalActivitiesCompleted);
-          setStars(summary.totalActivitiesCompleted * 10);
+        const summaryData: ProgressSummaryDto | null = await apiService.getStudentSummary(studentId);
+        if (summaryData) {
+          setSummary(summaryData);
+          setCompletedCount(summaryData.totalActivitiesCompleted);
+          setStars(summaryData.totalActivitiesCompleted * 10);
         }
       } catch (e) {
         // ignore summary errors
@@ -227,6 +232,19 @@ export default function ProfileScreen() {
     };
     fetchSummary();
   }, [currentUser]);
+
+  useEffect(() => {
+    // Load cached student profile (nickname) saved after child creation
+    const loadCachedStudent = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('@trilingo_student_profile');
+        if (raw) setCachedStudentProfile(JSON.parse(raw));
+      } catch {
+        setCachedStudentProfile(null);
+      }
+    };
+    loadCachedStudent();
+  }, []);
 
   // --- SETTINGS CONFIG ---
   const settingsData: SettingItem[] = [
@@ -331,7 +349,7 @@ export default function ProfileScreen() {
                />
              ) : (
                <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
-                 <Text style={{ fontSize: 45 }}>{emojiProfile || currentUser?.name?.charAt(0) || '👤'}</Text>
+              <Text style={{ fontSize: 45 }}>{emojiProfile || summary?.studentNickname?.charAt(0) || cachedStudentProfile?.nickname?.charAt(0) || '👤'}</Text>
                </View>
              )}
              <View style={styles.cameraBadge}>
@@ -341,7 +359,7 @@ export default function ProfileScreen() {
 
           <View style={styles.userInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.userName}>{currentUser?.name || currentUser?.username || 'Guest Hero'}</Text>
+              <Text style={styles.userName}>{displayName}</Text>
               {currentUser && !currentUser.isGuest && (
                  <MaterialIcons name="verified" size={20} color="#4FACFE" style={{marginLeft: 4}}/>
               )}

@@ -92,10 +92,8 @@ const RegisterScreenWrapper = () => {
   const handleRegisterComplete = async (userData: any) => {
     try {
       await register(userData);
-      // Navigate to home after registration
-      navigation.navigate('Home');
     } catch (error) {
-      console.error('Registration error:', error);
+      // Avoid double logging; let RegisterScreen handle inline errors
       throw error; // Let the RegisterScreen handle the error display
     }
   };

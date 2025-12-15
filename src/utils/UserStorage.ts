@@ -244,6 +244,8 @@ export class UserStorage {
           profileImageUrl: response.profileImageUrl,
         };
         await this.saveCurrentUser(newUserData);
+
+        // Student creation will be handled explicitly in the register flow
         return newUserData;
       }
 
@@ -293,8 +295,7 @@ export class UserStorage {
       // If we get here, it's a genuine error
       throw new Error(response.message || 'Registration failed');
     } catch (error: any) {
-      console.error('Registration error:', error.message);
-      
+      // No console spam; surface errors to caller
       // Check if it's a network error and provide helpful message
       if (error.message.includes('Network error') || error.message.includes('Connection')) {
         const diagnostic = await NetworkDiagnostics.testConnection();
