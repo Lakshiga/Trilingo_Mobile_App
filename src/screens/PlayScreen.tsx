@@ -7,6 +7,7 @@ import { Language } from '../utils/translations';
 import { renderActivityByTypeId, isActivityTypeSupported } from '../components/activity-types';
 import apiService, { ExerciseDto, ActivityDto } from '../services/api';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
+import { loadStudentLanguagePreference, languageCodeToKey } from '../utils/studentLanguage';
 
 const { width } = Dimensions.get('window');
 
@@ -45,9 +46,11 @@ const PlayScreen: React.FC = () => {
   const [loadingExercises, setLoadingExercises] = useState(true);
   const [conversationContent, setConversationContent] = useState<any>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
+  const [studentLangKey, setStudentLangKey] = useState<'en' | 'ta' | 'si' | null>(null);
   
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
-  const currentLang: string = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
+  const fallbackLangKey: 'en' | 'ta' | 'si' = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
+  const currentLang: string = studentLangKey || fallbackLangKey;
 
   const displayTitle: string = (activityTitle && typeof activityTitle === 'string' && activityTitle.trim()) 
     ? activityTitle.trim() 
@@ -61,6 +64,16 @@ const PlayScreen: React.FC = () => {
       resumeBackground().catch(() => null);
     };
   }, [requestAudioFocus, resumeBackground]);
+
+  useEffect(() => {
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      if (pref?.targetLanguageCode) {
+        setStudentLangKey(languageCodeToKey(pref.targetLanguageCode));
+      }
+    };
+    loadLang();
+  }, []);
 
   useEffect(() => {
     const fetchExerciseCount = async () => {
