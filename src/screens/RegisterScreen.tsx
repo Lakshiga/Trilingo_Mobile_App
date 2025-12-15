@@ -17,32 +17,30 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getTranslation, Language } from '../utils/translations'; // Ensure this path is correct
 import { useResponsive } from '../utils/responsive';
+import apiService from '../services/api';
+import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Age options
-const ADULT_AGE_OPTIONS = ['2-5', '6-8', '9-11', '12-14', '15+'];
-const UNLOCKED_AGE_GROUP = '2-5'; // Only this age group is unlocked
+// --- OPTIONS ---
+const CHILD_AGE_OPTIONS = ['2-4', '5-7', '8-10', '11-13', '14+'];
+const LANGUAGE_OPTIONS = ['English', 'Tamil', 'Sinhala'];
+
+// Map labels to locale codes for API
+const LANGUAGE_MAP: { [key: string]: string } = {
+  'English': 'en-US',
+  'Tamil': 'ta-LK',
+  'Sinhala': 'si-LK'
+};
 
 type RegisterScreenProps = {
   onRegisterComplete: (userData: any) => void;
   onBack: () => void;
 };
 
-interface UserData {
-  name: string;
-  age: string;
-  email: string;
-  username: string;
-  password: string;
-  nativeLanguage: string;
-  learningLanguage: string;
-}
-
-// Validation Item Component - Shows validation and hides when valid
+// Validation Item Component
 const ValidationItem: React.FC<{ label: string; isValid: boolean }> = ({ label, isValid }) => {
-  if (isValid) return null; // Hide when valid (one by one hide)
-  
+  if (isValid) return null;
   return (
     <View style={{ marginTop: 4 }}>
       <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '500' }}>• {label}</Text>
@@ -52,141 +50,130 @@ const ValidationItem: React.FC<{ label: string; isValid: boolean }> = ({ label, 
 
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onBack }) => {
   const responsive = useResponsive();
+  const navigation = useNavigation<any>();
   
+  // Stages: 'parent' -> 'success' -> 'child'
+  const [registrationStage, setRegistrationStage] = useState<'parent' | 'success' | 'child'>('parent');
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [userData, setUserData] = useState<UserData>({
-    name: '', age: '', email: '', username: '', password: '', nativeLanguage: '', learningLanguage: '',
+  
+  const [userData, setUserData] = useState({
+    // Parent Data
+    email: '',
+    username: '',
+    password: '',
+    name: '', // Will default to username if not asked
+    // Child Data
+    studentNickname: '',
+    studentAgeGroup: '',
+    studentNativeLanguageLabel: '',
+    studentTargetLanguageLabel: '',
+    studentAvatar: '😀',
   });
 
   // --- ANIMATION REFS ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  
-  // Lottie Animation Refs
   const womanWorkRef = useRef<LottieView>(null);
-  const lottieOpacity = useRef(new Animated.Value(0)).current; // Initially Hidden
+  const successRef = useRef<LottieView>(null);
+  const lottieOpacity = useRef(new Animated.Value(0)).current;
 
-  const [passwordValidations, setPasswordValidations] = useState<{
-    minLength: boolean;
-    hasUppercase: boolean;
-    hasLowercase: boolean;
-    hasNumber: boolean;
-    hasSpecialChar: boolean;
-  }>({
-    minLength: false,
-    hasUppercase: false,
-    hasLowercase: false,
-    hasNumber: false,
-    hasSpecialChar: false,
+  // --- VALIDATION STATE ---
+  const [passwordValidations, setPasswordValidations] = useState({
+    minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecialChar: false,
   });
   const [emailError, setEmailError] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
-  // --- FIX 2: DYNAMIC LANGUAGE LOGIC ---
-  // If user selects Tamil in Step 0, 'activeLanguage' becomes 'Tamil' immediately.
-  const activeLanguage = (userData.nativeLanguage as Language) || 'English';
-
-  // --- QUESTIONS ARRAY (Updates when activeLanguage changes) ---
-  const questions = useMemo(() => [
-    { 
-      key: 'nativeLanguage', 
-      // Step 0 is always in English or default, or you can translate it too
-      question: getTranslation('English', 'whatIsYourNativeLanguage'), 
-      isLanguageSelection: true, 
-      options: ['English', 'Tamil', 'Sinhala'], 
-      icon: 'translate' 
-    },
-    { 
-      key: 'learningLanguage', 
-      // From Step 1 onwards, use 'activeLanguage'
-      question: getTranslation(activeLanguage, 'whichLanguageToLearn'), 
-      isLanguageSelection: true, 
-      options: ['Tamil', 'Sinhala', 'English'], 
-      icon: 'school' 
-    },
-    { 
-      key: 'name', 
-      question: getTranslation(activeLanguage, 'whatIsYourName'), 
-      placeholder: getTranslation('English', 'enterYourFullName'), 
-      icon: 'account' 
-    },
-    { 
-      key: 'age', 
-      question: getTranslation(activeLanguage, 'whatIsYourAge'), 
-      isAgeSelection: true, 
-      icon: 'cake-variant' 
-    },
+  // --- QUESTIONS CONFIGURATION ---
+  const parentQuestions = useMemo(() => [
     { 
       key: 'email', 
-      question: getTranslation(activeLanguage, 'whatIsYourEmail'), 
+      question: "What is your Email?", 
       placeholder: "name@example.com", 
       keyboardType: 'email-address', 
       icon: 'email' 
     },
     { 
       key: 'username', 
-      question: getTranslation(activeLanguage, 'createAccount') + " - Username", // Adjust key if needed
-      placeholder: "cool_user123", 
-      icon: 'at' 
+      question: "Choose a Username", 
+      placeholder: "cool_parent123", 
+      icon: 'account' 
     },
     { 
       key: 'password', 
-      question: getTranslation(activeLanguage, 'createAccount') + " - Password", // Adjust key if needed
+      question: "Create a Password", 
       placeholder: "••••••••", 
       secure: true, 
       icon: 'lock' 
     },
-  ], [activeLanguage]); 
+  ], []);
 
-  // --- VALIDATIONS ---
-  const checkPasswordValidations = (password: string) => {
-    return {
-      minLength: password.length >= 8,
-      hasUppercase: /[A-Z]/.test(password),
-      hasLowercase: /[a-z]/.test(password),
-      hasNumber: /[0-9]/.test(password),
-      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
-    };
-  };
+  const childQuestions = useMemo(() => [
+    {
+      key: 'studentNickname',
+      question: "What is your child's name?",
+      placeholder: "Little Star",
+      icon: 'face-man-shimmer'
+    },
+    {
+      key: 'studentAgeGroup',
+      question: "How old is the child?",
+      isSelection: true,
+      options: CHILD_AGE_OPTIONS,
+      icon: 'cake-variant'
+    },
+    {
+      key: 'studentNativeLanguageLabel',
+      question: "Child's Native Language?",
+      isSelection: true,
+      options: LANGUAGE_OPTIONS,
+      icon: 'translate'
+    },
+    {
+      key: 'studentTargetLanguageLabel',
+      question: "Language to Learn?",
+      isSelection: true,
+      options: LANGUAGE_OPTIONS,
+      icon: 'school'
+    },
+  ], []);
 
-  const checkEmailValidation = (email: string) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
+  // Determine current question based on stage
+  const activeQuestions = registrationStage === 'child' ? childQuestions : parentQuestions;
+  const currentQ = activeQuestions[currentStep] || activeQuestions[0];
+  const progress = (registrationStage === 'child') 
+    ? (currentStep + 1) / childQuestions.length 
+    : (currentStep + 1) / parentQuestions.length;
 
-  const isPasswordValid = (validations: typeof passwordValidations) => {
-    return validations.minLength && 
-           validations.hasUppercase && 
-           validations.hasLowercase && 
-           validations.hasNumber && 
-           validations.hasSpecialChar;
-  };
+  // --- VALIDATION LOGIC ---
+  const checkPasswordValidations = (password: string) => ({
+    minLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  });
 
-  // --- KEYBOARD LISTENERS ---
+  const checkEmailValidation = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const isPasswordValid = (v: typeof passwordValidations) => 
+    v.minLength && v.hasUppercase && v.hasLowercase && v.hasNumber && v.hasSpecialChar;
+
+  // --- EFFECTS ---
   useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setIsKeyboardVisible(true)
-    );
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setIsKeyboardVisible(false)
-    );
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
+    const keyboardShow = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setIsKeyboardVisible(true));
+    const keyboardHide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => { keyboardShow.remove(); keyboardHide.remove(); };
   }, []);
 
-  // --- STEP TRANSITION ANIMATION ---
+  // Step Transition Animation
   useEffect(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
     scaleAnim.setValue(0.95);
-    // Reset password visibility when step changes
     setShowPassword(false);
 
     Animated.parallel([
@@ -194,143 +181,186 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
     ]).start();
-  }, [currentStep]);
 
-  // --- FIX 1: ANIMATION CONTROL LOGIC ---
-  const currentQ = questions[currentStep];
-  // Check if the current field has data
-  const hasData = !!userData[currentQ.key as keyof UserData];
-
-  useEffect(() => {
-    // Reset animation state when step changes - keep it hidden
+    // Reset validations/animations for new step
     lottieOpacity.setValue(0);
-    if (womanWorkRef.current) {
-      womanWorkRef.current.pause();
-      womanWorkRef.current.reset();
-    }
-    // Reset validations when step changes
-    setPasswordValidations({
-      minLength: false,
-      hasUppercase: false,
-      hasLowercase: false,
-      hasNumber: false,
-      hasSpecialChar: false,
-    });
+    if (womanWorkRef.current) { womanWorkRef.current.pause(); womanWorkRef.current.reset(); }
+    setPasswordValidations({ minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecialChar: false });
     setEmailError('');
-  }, [currentStep]);
+
+    // Disable animation on step change
+    lottieOpacity.setValue(0);
+  }, [currentStep, registrationStage]);
 
   // --- HANDLERS ---
-  const handleNext = () => {
-    // Hide keyboard when continue is clicked
-    Keyboard.dismiss();
 
-    if (!hasData) {
+  const handleNext = () => {
+    Keyboard.dismiss();
+    const val = userData[currentQ.key as keyof typeof userData];
+    
+    // 1. Check Empty
+    if (!val) {
       Alert.alert("Required", "Please fill in the details to proceed.");
-      Keyboard.dismiss(); // Hide keyboard on error
       return;
     }
 
-    // Validate email and password on continue click
-    let hasValidationErrors = false;
-
+    // 2. Validations
+    let hasError = false;
     if (currentQ.key === 'email') {
-      const isValid = checkEmailValidation(userData.email);
-      if (!isValid) { 
+      if (!checkEmailValidation(userData.email)) {
         setEmailError('Invalid Email');
-        Keyboard.dismiss();
-        hasValidationErrors = true;
+        hasError = true;
+      }
+    } else if (currentQ.key === 'password') {
+      const v = checkPasswordValidations(userData.password);
+      if (!isPasswordValid(v)) hasError = true;
+    }
+
+    if (hasError) return;
+
+    const isLastStep = currentStep === activeQuestions.length - 1;
+    if (isLastStep) {
+      if (registrationStage === 'parent') {
+        handleParentRegistration();
       } else {
-        setEmailError('');
-        // Show animation only on continue click when email is valid
-        Animated.timing(lottieOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start(() => {
-          if (womanWorkRef.current) {
-            womanWorkRef.current.play();
-          }
-        });
+        handleChildCreation();
       }
-    }
-    
-    if (currentQ.key === 'password') {
-      const validations = checkPasswordValidations(userData.password);
-      if (!isPasswordValid(validations)) { 
-        Keyboard.dismiss();
-        hasValidationErrors = true;
-        return; // Don't proceed if validation fails
-      }
-      // Password valid - Show animation only on continue click
-      Animated.timing(lottieOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        if (womanWorkRef.current) {
-          womanWorkRef.current.play();
-        }
-      });
-    }
-
-    // For other fields - Show animation on continue click (if data exists)
-    if (currentQ.key !== 'email' && currentQ.key !== 'password') {
-      Animated.timing(lottieOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        if (womanWorkRef.current) {
-          womanWorkRef.current.play();
-        }
-      });
-    }
-
-    // Only proceed if validations pass
-    if (hasValidationErrors) {
-      return; // Don't proceed
-    }
-
-    if (currentStep === questions.length - 1) {
-      // Last step - wait 2 seconds then complete
-      setTimeout(() => {
-        handleRegisterComplete();
-      }, 2000);
     } else {
-      // Wait 2 seconds, then navigate to next step
-      setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-          Animated.timing(slideAnim, { toValue: -20, duration: 200, useNativeDriver: true }),
-        ]).start(() => {
-          setCurrentStep(prev => prev + 1);
-        });
-      }, 2000);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: -20, duration: 200, useNativeDriver: true }),
+      ]).start(() => setCurrentStep(p => p + 1));
     }
   };
 
-  const handleRegisterComplete = async () => {
+  const handleParentRegistration = async () => {
     setIsLoading(true);
     try {
-      await onRegisterComplete({ ...userData, isAdmin: false, isGuest: false });
+      // Use username as name if name wasn't asked explicitly
+      const payload = {
+        ...userData,
+        name: userData.username, 
+        isAdmin: false,
+        isGuest: false
+      };
+      
+      await onRegisterComplete(payload);
+      
+      // Move to Success Screen
+      setRegistrationStage('success');
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      const msg = error?.message || '';
+      if (msg.toLowerCase().includes('email') && msg.toLowerCase().includes('taken')) {
+        setEmailError('Email already taken');
+        setRegistrationStage('parent');
+        setCurrentStep(0); // email is step 0 in parentQuestions
+        return;
+      } else {
+        Alert.alert('Registration Failed', msg);
+        return;
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startChildSetup = () => {
+    setRegistrationStage('child');
+    setCurrentStep(0);
+  };
+
+  const calculateDobFromAgeGroup = (ageGroup: string) => {
+    const currentYear = new Date().getFullYear();
+    let substractYears = 5; // Default
+    if (ageGroup === '2-4') substractYears = 3;
+    if (ageGroup === '5-7') substractYears = 6;
+    if (ageGroup === '8-10') substractYears = 9;
+    if (ageGroup === '11-13') substractYears = 12;
+    if (ageGroup === '14+') substractYears = 15;
+    
+    return `${currentYear - substractYears}-01-01T00:00:00Z`;
+  };
+
+  const handleChildCreation = async () => {
+    setIsLoading(true);
+    try {
+      const dob = calculateDobFromAgeGroup(userData.studentAgeGroup);
+      const nativeCode = LANGUAGE_MAP[userData.studentNativeLanguageLabel] || 'en-US';
+      const targetCode = LANGUAGE_MAP[userData.studentTargetLanguageLabel] || 'ta-LK';
+
+      const student = await apiService.createStudent({
+        nickname: userData.studentNickname,
+        avatar: userData.studentAvatar,
+        dateOfBirth: dob,
+        nativeLanguageCode: nativeCode,
+        targetLanguageCode: targetCode,
+      });
+      
+      // Cache student profile locally so home/profile can show student name
+      try {
+        await AsyncStorage.setItem(
+          '@trilingo_student_profile',
+          JSON.stringify({
+            id: student?.id,
+            nickname: userData.studentNickname,
+            avatar: userData.studentAvatar,
+          })
+        );
+      } catch (e) {
+        // ignore cache errors
+      }
+      
+      // Navigate to Home
+      navigation.navigate('Home'); 
+    } catch (error: any) {
+      Alert.alert('Student Creation Failed', error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleBack = () => {
+    if (registrationStage === 'success') return; // Can't go back from success immediately
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
+    } else if (registrationStage === 'child') {
+       // Optional: Allow going back to see success screen?
+       // For now, prevent going back to parent registration to avoid duplicate API calls
+       Alert.alert("Notice", "Parent account already created.");
     } else {
       onBack();
     }
   };
 
-  const progress = (currentStep + 1) / questions.length;
   const styles = getStyles(responsive);
 
+  // --- RENDER SUCCESS SCREEN ---
+  if (registrationStage === 'success') {
+    return (
+      <View style={styles.successContainer}>
+        <LinearGradient
+          colors={['#E0F2FE', '#FFFFFF']}
+          style={StyleSheet.absoluteFill}
+        />
+        <LottieView
+          ref={successRef}
+          source={require('../../assets/animations/success-check.json')} // Make sure you have a success lottie or generic
+          autoPlay
+          loop={true}
+          style={{ width: '50%', height: '50%' }}
+        />
+        <Text style={styles.successTitle}>Registered Successfully!</Text>
+        <Text style={styles.successSub}>Your parent account is ready.</Text>
+        <Text style={styles.successSub}>Now, let's set up the profile for your child.</Text>
+        
+        <TouchableOpacity style={styles.continueButton} onPress={startChildSetup}>
+           <Text style={styles.continueText}>Set Up Child Profile</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // --- RENDER FORM ---
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
@@ -355,72 +385,42 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
         >
         <View style={styles.contentSafeArea}>
           
-          {/* TOP BAR */}
+          {/* HEADER */}
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <MaterialCommunityIcons name="arrow-left" size={28} color="#0D5B81" />
-            </TouchableOpacity>
+            {registrationStage === 'parent' && (
+              <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                <MaterialCommunityIcons name="arrow-left" size={28} color="#0D5B81" />
+              </TouchableOpacity>
+            )}
             <View style={styles.progressBarContainer}>
               <View style={styles.progressBarBg}>
                 <Animated.View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
               </View>
-              {/* Step Indicators (Dots) */}
-              <View style={styles.stepIndicators}>
-                {questions.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.stepDot,
-                      index <= currentStep && styles.stepDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+              <Text style={styles.stageLabel}>
+                {registrationStage === 'parent' ? 'Parent Details' : 'Child Profile'}
+              </Text>
             </View>
           </View>
 
-          {/* INPUT AREA - Moves to top when keyboard opens */}
+          {/* INPUT AREA */}
           <View style={[styles.inputAreaWrapper, isKeyboardVisible && styles.inputAreaWrapperKeyboard]}>
             
-            {/* --- ANIMATION AREA (Hidden when keyboard is open) --- */}
             {!isKeyboardVisible && (
               <View style={styles.mascotArea}>
-                  {/* Animation - Always rendered but hidden until continue click */}
-                  <Animated.View style={{ 
-                    opacity: lottieOpacity, 
-                    transform: [{ scale: lottieOpacity }],
-                    width: '100%',
-                    height: '100%',
-                    position: 'absolute',
-                  }}>
+                  <Animated.View style={{ opacity: lottieOpacity, transform: [{ scale: lottieOpacity }], position: 'absolute', width: '100%', height: '100%' }}>
                     <LottieView
                       ref={womanWorkRef}
                       source={require('../../assets/animations/Woman work from home with laptops.json')}
                       style={styles.lottieFile}
-                      autoPlay={false} 
                       loop={true}
-                      speed={1}
                     />
                   </Animated.View>
-                  
-                  {/* Placeholder Icon when Animation is Hidden */}
-                  <Animated.View style={{ 
-                    opacity: lottieOpacity.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 0],
-                    }),
-                    position: 'absolute',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    width: '100%',
-                    height: '100%',
-                  }}>
+                  <Animated.View style={{ opacity: lottieOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), position: 'absolute' }}>
                     <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#2D4F9C" style={{ opacity: 0.15 }} />
                   </Animated.View>
               </View>
             )}
 
-            {/* --- GLASSMORPHIC CARD --- */}
             <Animated.View 
               style={[
                 styles.questionCard, 
@@ -431,160 +431,80 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
               
               <View style={styles.inputContainer}>
                 
-                {/* 1. SELECTION GRIDS */}
-                {(currentQ.isLanguageSelection || currentQ.isAgeSelection) && (
+                {/* SELECTION (Age / Language) */}
+                {(currentQ as any).isSelection ? (
                   <View style={styles.gridContainer}>
-                    {(currentQ.isLanguageSelection ? currentQ.options : ADULT_AGE_OPTIONS)?.map((option) => {
-                      const isSelected = userData[currentQ.key as keyof UserData] === option;
-                      // Check if age option is locked (only for age selection)
-                      const isLocked = currentQ.isAgeSelection && option !== UNLOCKED_AGE_GROUP;
-                      
+                    {(currentQ as any).options?.map((option: string) => {
+                      const isSelected = userData[currentQ.key as keyof typeof userData] === option;
                       return (
                         <TouchableOpacity
                           key={option}
-                          style={[
-                            styles.optionButton, 
-                            isSelected && styles.optionButtonSelected,
-                            isLocked && styles.optionButtonLocked
-                          ]}
-                          onPress={() => {
-                            if (isLocked) {
-                              Alert.alert('Not Implemented', 'This age group is not yet available.');
-                              return;
-                            }
-                            setUserData({ ...userData, [currentQ.key]: option });
-                            // No animation on selection - only on continue click
-                          }}
-                          activeOpacity={isLocked ? 1 : 0.7}
-                          disabled={isLocked}
+                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                          onPress={() => setUserData({ ...userData, [currentQ.key]: option })}
+                          activeOpacity={0.7}
                         >
-                          <Text style={[
-                            styles.optionText, 
-                            isSelected && styles.optionTextSelected,
-                            isLocked && styles.optionTextLocked
-                          ]}>
-                            {option}
-                          </Text>
-                          {isSelected && !isLocked && (
-                            <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />
-                          )}
-                          {isLocked && (
-                            <MaterialCommunityIcons name="lock" size={16} color="#94A3B8" style={styles.lockIcon} />
-                          )}
+                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{option}</Text>
+                          {isSelected && <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />}
                         </TouchableOpacity>
                       );
                     })}
                   </View>
-                )}
-
-                {/* 2. TEXT INPUTS */}
-                {(!currentQ.isLanguageSelection && !currentQ.isAgeSelection) && (
+                ) : (
+                  /* TEXT INPUT */
                   <View style={styles.inputWrapperContainer}>
                     <View style={styles.textInputWrapper}>
                       <MaterialCommunityIcons name={currentQ.icon as any} size={24} color="#2D4F9C" style={styles.inputIcon} />
                       <TextInput
-                        key={currentQ.key + showPassword} // Force re-render when showPassword changes
+                        key={currentQ.key + showPassword}
                         style={styles.modernInput}
-                        value={userData[currentQ.key as keyof UserData] as string}
+                        value={userData[currentQ.key as keyof typeof userData] as string}
                         onChangeText={(text) => {
                           setUserData({ ...userData, [currentQ.key]: text });
-                          
-                          // Email validation - Show error only, no animation
                           if(currentQ.key === 'email') {
-                            if (text.length > 0) {
-                              const isValid = checkEmailValidation(text);
-                              setEmailError(isValid ? '' : 'Invalid Email');
-                            } else {
-                              setEmailError('');
-                            }
+                            // Clear any previous duplicate/format errors while typing
+                            setEmailError(text.length > 0 && !checkEmailValidation(text) ? 'Invalid Email' : '');
                           }
-                          // Password validation - Show validations only, no animation
-                          else if(currentQ.key === 'password') {
-                            const validations = checkPasswordValidations(text);
-                            setPasswordValidations(validations);
-                          }
-                          // Other fields - No animation on input
+                          if(currentQ.key === 'password') setPasswordValidations(checkPasswordValidations(text));
                         }}
                         placeholder={currentQ.placeholder}
                         placeholderTextColor="#94A3B8"
                         autoFocus={true}
-                        keyboardType={currentQ.keyboardType as any}
-                        secureTextEntry={currentQ.secure ? !showPassword : false}
+                        keyboardType={(currentQ as any).keyboardType ?? 'default' as any}
+                        secureTextEntry={((currentQ as any).secure ?? false) && !showPassword}
                         autoCapitalize={currentQ.key === 'email' ? 'none' : 'words'}
                       />
-                      {currentQ.secure && (
-                        <TouchableOpacity 
-                          onPress={() => {
-                            setShowPassword(prev => !prev);
-                          }}
-                          style={styles.eyeToggleButton}
-                          activeOpacity={0.6}
-                          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                          onPressIn={() => {}}
-                          onPressOut={() => {}}
-                        >
-                          <MaterialCommunityIcons 
-                            name={showPassword ? "eye-off" : "eye"}
-                            size={24} 
-                            color="#2D4F9C" 
-                          />
+                      {((currentQ as any).secure ?? false) && (
+                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeToggleButton}>
+                          <MaterialCommunityIcons name={showPassword ? "eye-off" : "eye"} size={24} color="#2D4F9C" />
                         </TouchableOpacity>
                       )}
                     </View>
                     
-                    {/* VALIDATIONS - Show below text box (real-time) */}
-                    {currentQ.key === 'email' && (
-                      <View style={styles.validationContainer}>
-                        {emailError ? (
-                          <Text style={styles.validationError}>Invalid Email</Text>
-                        ) : userData.email.length > 0 ? (
-                          <Text style={styles.validationSuccess}>✓ Valid Email</Text>
-                        ) : null}
-                      </View>
-                    )}
+                    {currentQ.key === 'email' && emailError ? <Text style={styles.validationError}>{emailError}</Text> : null}
                     {currentQ.key === 'password' && (
                       <View style={styles.validationContainer}>
-                        <ValidationItem 
-                          label="Minimum 8 characters" 
-                          isValid={passwordValidations.minLength}
-                        />
-                        <ValidationItem 
-                          label="One uppercase letter" 
-                          isValid={passwordValidations.hasUppercase}
-                        />
-                        <ValidationItem 
-                          label="One lowercase letter" 
-                          isValid={passwordValidations.hasLowercase}
-                        />
-                        <ValidationItem 
-                          label="One number" 
-                          isValid={passwordValidations.hasNumber}
-                        />
-                        <ValidationItem 
-                          label="One special character" 
-                          isValid={passwordValidations.hasSpecialChar}
-                        />
+                         <ValidationItem label="Min 8 chars" isValid={passwordValidations.minLength} />
+                         <ValidationItem label="Uppercase" isValid={passwordValidations.hasUppercase} />
+                         <ValidationItem label="Lowercase" isValid={passwordValidations.hasLowercase} />
+                         <ValidationItem label="Number" isValid={passwordValidations.hasNumber} />
+                         <ValidationItem label="Symbol" isValid={passwordValidations.hasSpecialChar} />
                       </View>
                     )}
                   </View>
                 )}
               </View>
             </Animated.View>
-
           </View>
-
         </View>
         </ScrollView>
         
-        {/* BOTTOM BUTTON - Stays above keyboard */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[styles.continueButton, isLoading && styles.disabledButton]} 
             onPress={handleNext}
             disabled={isLoading}
-            activeOpacity={0.8}
           >
-            {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>Continue</Text>}
+            {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>{currentStep === activeQuestions.length - 1 ? "Finish" : "Continue"}</Text>}
           </TouchableOpacity>
         </View>
       </ImageBackground>
@@ -596,226 +516,61 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   container: { flex: 1 },
   backgroundImage: { flex: 1, width: '100%', height: '100%' },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  contentSafeArea: {
-    flex: 1,
-    paddingTop: responsive.hp(4),
-    paddingHorizontal: responsive.wp(6),
-    paddingBottom: responsive.hp(1),
-  },
-  inputAreaWrapper: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: responsive.hp(2),
-  },
-  inputAreaWrapperKeyboard: {
-    justifyContent: 'flex-start',
-    paddingTop: responsive.hp(1),
-  },
+  scrollContent: { flexGrow: 1 },
+  contentSafeArea: { flex: 1, paddingTop: responsive.hp(4), paddingHorizontal: responsive.wp(6), paddingBottom: responsive.hp(1) },
+  inputAreaWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: responsive.hp(2) },
+  inputAreaWrapperKeyboard: { justifyContent: 'flex-start', paddingTop: responsive.hp(1) },
 
+  // Success Screen
+  successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  successTitle: { fontSize: 28, fontWeight: 'bold', color: '#0D5B81', marginTop: 20 },
+  successSub: { fontSize: 16, color: '#64748B', textAlign: 'center', marginTop: 20 },
+  
   // Header
   topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   backButton: { padding: 10, backgroundColor: '#FFF', borderRadius: 12, elevation: 3 },
-  progressBarContainer: { 
-    flex: 1, 
-    marginLeft: 15, 
-  },
-  progressBarBg: { 
-    height: 8, 
-    backgroundColor: 'rgba(89,164,198,0.1)', 
-    borderRadius: 4, 
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
+  progressBarContainer: { flex: 1, marginLeft: 15 },
+  progressBarBg: { height: 8, backgroundColor: 'rgba(89,164,198,0.1)', borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#59A4C6', borderRadius: 4 },
-  stepIndicators: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 2,
-  },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(66,137,186,0.2)',
-    marginHorizontal: 2,
-  },
-  stepDotActive: {
-    backgroundColor: '#4289BA',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
+  stageLabel: { fontSize: 12, color: '#64748B', marginTop: 4, fontWeight: '600' },
 
-  // Animation Area
-  mascotArea: {
-    height: responsive.hp(18),
-    width: responsive.hp(18),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: responsive.hp(2),
-  },
+  // Mascot
+  mascotArea: { height: responsive.hp(18), width: responsive.hp(18), justifyContent: 'center', alignItems: 'center', marginBottom: responsive.hp(2) },
   lottieFile: { width: '100%', height: '100%' },
 
   // Card
   questionCard: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: responsive.hp(4),
-    paddingHorizontal: responsive.wp(6),
-    shadowColor: "#002D62",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
-    alignItems: 'center',
+    width: '100%', backgroundColor: '#FFFFFF', borderRadius: 24, paddingVertical: responsive.hp(4),
+    paddingHorizontal: responsive.wp(6), shadowColor: "#002D62", shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1, shadowRadius: 20, elevation: 10, alignItems: 'center',
   },
-  questionText: {
-    fontSize: responsive.wp(5.5),
-    fontWeight: '800',
-    color: '#0D5B81',
-    textAlign: 'center',
-    marginBottom: responsive.hp(3),
-    lineHeight: responsive.wp(7),
-  },
+  questionText: { fontSize: responsive.wp(5.5), fontWeight: '800', color: '#0D5B81', textAlign: 'center', marginBottom: responsive.hp(3) },
   inputContainer: { width: '100%', alignItems: 'center' },
 
   // Inputs
-  inputWrapperContainer: {
-    width: '100%',
-  },
-  textInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    position: 'relative',
-  },
+  inputWrapperContainer: { width: '100%' },
+  textInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 16, paddingHorizontal: 15, paddingVertical: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   inputIcon: { marginRight: 10 },
-  modernInput: {
-    flex: 1,
-    fontSize: responsive.wp(4.5),
-    color: '#334155',
-    fontWeight: '600',
-  },
-  eyeToggleButton: {
-    padding: 8,
-    marginLeft: 5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 40,
-    minHeight: 40,
-    zIndex: 10,
-    backgroundColor: 'transparent',
-  },
+  modernInput: { flex: 1, fontSize: responsive.wp(4.5), color: '#334155', fontWeight: '600' },
+  eyeToggleButton: { padding: 8 },
 
-  // Options
+  // Selection Grid
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
-  optionButton: {
-    backgroundColor: '#F8FAFC',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    minWidth: '40%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 5,
-    flexDirection: 'row',
-  },
-  optionButtonSelected: {
-    backgroundColor: '#4289BA',
-    borderColor: '#4289BA',
-    shadowColor: "#4289BA",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  optionButtonLocked: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#E2E8F0',
-    opacity: 0.6,
-  },
+  optionButton: { backgroundColor: '#F8FAFC', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#CBD5E1', minWidth: '40%', alignItems: 'center', justifyContent: 'center', marginBottom: 5, flexDirection: 'row' },
+  optionButtonSelected: { backgroundColor: '#4289BA', borderColor: '#4289BA', elevation: 5 },
   optionText: { fontSize: responsive.wp(4), color: '#64748B', fontWeight: '600' },
   optionTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
-  optionTextLocked: { color: '#94A3B8', fontWeight: '500' },
   checkmark: { marginLeft: 6 },
-  lockIcon: { marginLeft: 6 },
 
-  // Errors
-  errorContainer: { marginTop: 10, width: '100%' },
-  errorText: { color: '#EF4444', fontSize: 13, marginLeft: 5 },
-  errorContainerBelow: { 
-    marginTop: 8, 
-    width: '100%',
-    paddingLeft: 5,
-  },
-  errorTextBelow: { 
-    color: '#EF4444', 
-    fontSize: 12, 
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  validationContainer: {
-    marginTop: 8,
-    width: '100%',
-    paddingLeft: 5,
-  },
-  validationItem: {
-    marginTop: 4,
-  },
-  validationText: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  validationError: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  validationSuccess: {
-    color: '#10B981',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
+  // Validation
+  validationContainer: { marginTop: 8, width: '100%', paddingLeft: 5 },
+  validationError: { color: '#EF4444', fontSize: 12, fontWeight: '500', marginTop: 4 },
 
-  // Button Container - Stays above keyboard
-  buttonContainer: {
-    paddingHorizontal: responsive.wp(6),
-    paddingBottom: responsive.hp(2),
-    paddingTop: responsive.hp(1),
-    backgroundColor: 'transparent',
-  },
-  // Continue Button
-  continueButton: {
-    backgroundColor: '#4289BA',
-    width: '100%',
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: "#4289BA",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
-  },
+  // Button
+  buttonContainer: { paddingHorizontal: responsive.wp(6), paddingBottom: responsive.hp(2), paddingTop: responsive.hp(1) },
+  continueButton: { backgroundColor: '#4289BA', width: '100%', paddingVertical: 18, borderRadius: 16, alignItems: 'center', elevation: 8,marginTop:10 },
   disabledButton: { opacity: 0.7 },
-  continueText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', letterSpacing: 0.5 },
+  continueText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });
 
 export default RegisterScreen;

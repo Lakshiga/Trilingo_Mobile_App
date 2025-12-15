@@ -111,7 +111,6 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       const newUser = await UserStorage.registerUser(userData);
       setCurrentUser(newUser);
     } catch (error) {
-      console.error('Registration error:', error);
       throw error;
     }
   };

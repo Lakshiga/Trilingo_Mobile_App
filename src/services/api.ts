@@ -303,6 +303,22 @@ class ApiService {
     }
   }
 
+  // Create a student profile (requires authenticated parent token)
+  async createStudent(payload: {
+    nickname: string;
+    avatar?: string;
+    dateOfBirth: string; // ISO string
+    nativeLanguageCode: string;
+    targetLanguageCode: string;
+  }): Promise<any> {
+    try {
+      const response = await this.api.post('/students', payload);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
   async logout(): Promise<void> {
     try {
       // Call backend logout if available

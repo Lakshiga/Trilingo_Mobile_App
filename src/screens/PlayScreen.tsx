@@ -5,7 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { Language } from '../utils/translations';
 import { renderActivityByTypeId, isActivityTypeSupported } from '../components/activity-types';
-import apiService from '../services/api';
+import apiService, { ExerciseDto, ActivityDto } from '../services/api';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 
 const { width } = Dimensions.get('window');
@@ -40,8 +40,11 @@ const PlayScreen: React.FC = () => {
   const activityTitle = params.activityTitle;
   
   const [exerciseCount, setExerciseCount] = useState(0);
+  const [exercises, setExercises] = useState<ExerciseDto[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [loadingExercises, setLoadingExercises] = useState(true);
+  const [conversationContent, setConversationContent] = useState<any>(null);
+  const [loadingConversation, setLoadingConversation] = useState(false);
   
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const currentLang: string = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
@@ -67,10 +70,13 @@ const PlayScreen: React.FC = () => {
       }
       try {
         setLoadingExercises(true);
-        const exercises = await apiService.getExercisesByActivityId(activityId);
-        setExerciseCount(exercises?.length || 0);
+        const result = await apiService.getExercisesByActivityId(activityId);
+        setExercises(result || []);
+        setExerciseCount(result?.length || 0);
+        setCurrentExerciseIndex(0);
       } catch (error) {
         setExerciseCount(0);
+        setExercises([]);
       } finally {
         setLoadingExercises(false);
       }
@@ -78,13 +84,38 @@ const PlayScreen: React.FC = () => {
     fetchExerciseCount();
   }, [activityId]);
 
+  useEffect(() => {
+    const fetchConversation = async () => {
+      if (!activityId || activityTypeId !== 14) return;
+      try {
+        setLoadingConversation(true);
+        const activity: ActivityDto | null = await apiService.getActivityById(activityId);
+        if (activity?.details_JSON) {
+          try {
+            const parsed = JSON.parse(activity.details_JSON);
+            // Keep the full structure so ConversationPlayer can pick title/instruction + conversationData
+            setConversationContent(parsed);
+          } catch (e) {
+            setConversationContent(null);
+          }
+        }
+      } catch {
+        setConversationContent(null);
+      } finally {
+        setLoadingConversation(false);
+      }
+    };
+    fetchConversation();
+  }, [activityId, activityTypeId]);
+
   if (!activityId || !activityTypeId) {
     navigation.goBack();
     return null;
   }
 
   const handleNextExercise = () => {
-    if (currentExerciseIndex < exerciseCount - 1) {
+    const count = exercises.length || exerciseCount;
+    if (currentExerciseIndex < count - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
     } else {
       // Finish: submit progress (10 stars) then exit
@@ -167,8 +198,58 @@ const PlayScreen: React.FC = () => {
       <View style={styles.centerContent}>
         {(() => {
           try {
+            const currentExercise = exercises[currentExerciseIndex];
+            const parsedContent = currentExercise?.jsonData ? safeJsonParse(currentExercise.jsonData) : null;
+
+            // Conversation player path: use details_JSON content
+            const isConversation = activityTypeId === 14;
+
+            let contentForRender = isConversation
+              ? conversationContent || parsedContent
+              : parsedContent;
+
+            if (isConversation) {
+              const hasConversationData = !!contentForRender?.conversationData;
+              const looksLikeConversation =
+                !!contentForRender?.dialogues ||
+                !!contentForRender?.speakers ||
+                !!contentForRender?.audioUrl;
+
+              // Normalize to the shape ConversationPlayer expects
+              if (!hasConversationData && looksLikeConversation) {
+                contentForRender = {
+                  title: contentForRender?.title ?? activityTitle ?? 'Conversation',
+                  instruction: contentForRender?.instruction ?? '',
+                  conversationData: contentForRender,
+                };
+              } else if (hasConversationData) {
+                contentForRender = {
+                  title: contentForRender?.title ?? activityTitle ?? 'Conversation',
+                  instruction: contentForRender?.instruction ?? '',
+                  conversationData: contentForRender.conversationData,
+                };
+              }
+            }
+
+            if (isConversation && loadingConversation) {
+              return <ActivityIndicator size="large" color={THEME.primary} />;
+            }
+
+            if (!isConversation) {
+              if (loadingExercises) {
+                return <ActivityIndicator size="large" color={THEME.primary} />;
+              }
+              if (!currentExercise || !contentForRender) {
+                return <Text style={{ padding: 16 }}>No exercise content available.</Text>;
+              }
+            } else {
+              if (!contentForRender) {
+                return <Text style={{ padding: 16 }}>No conversation content available.</Text>;
+              }
+            }
+
             const activityComponent = renderActivityByTypeId(activityTypeId, {
-              content: null,
+              content: contentForRender,
               currentLang: currentLang as any,
               onComplete: handleNextExercise,
               activityId: activityId,
@@ -346,5 +427,14 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
+
+// Safe JSON parse helper
+const safeJsonParse = (data: string) => {
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
+};
 
 export default PlayScreen;

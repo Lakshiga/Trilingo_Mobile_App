@@ -40,6 +40,40 @@ interface ConversationPlayerContent {
   conversationData: ConversationData;
 }
 
+const normalizeConversationPayload = (raw: any): ConversationData | null => {
+  if (!raw) return null;
+
+  // Pick the likely conversation object
+  const base =
+    raw.conversationData ||
+    raw.conversation ||
+    raw.data ||
+    raw;
+
+  if (!base) return null;
+
+  // Clone to avoid mutating caller data
+  const normalized: any = { ...base };
+
+  // Normalize dialogue arrays
+  if (!normalized.dialogues) {
+    if (Array.isArray(base.dialogues)) normalized.dialogues = base.dialogues;
+    else if (Array.isArray(base.dialogs)) normalized.dialogues = base.dialogs;
+    else if (Array.isArray(base.dialogue)) normalized.dialogues = base.dialogue;
+    else if (Array.isArray(base.lines)) normalized.dialogues = base.lines;
+  }
+
+  // Normalize audio url key
+  if (!normalized.audioUrl && base.audio_url) {
+    normalized.audioUrl = base.audio_url;
+  }
+
+  // Basic shape check
+  if (!normalized.dialogues || !Array.isArray(normalized.dialogues)) return null;
+
+  return normalized as ConversationData;
+};
+
 const ConversationPlayer: React.FC<ActivityComponentProps> = ({
   content,
   currentLang = 'ta',
@@ -58,9 +92,9 @@ const ConversationPlayer: React.FC<ActivityComponentProps> = ({
     | { conversationData?: ConversationData }
     | any;
 
-  const conversationData: ConversationData | null = rawConversationData
-    ? (rawConversationData.conversationData || rawConversationData)
-    : null;
+  const conversationData: ConversationData | null =
+    normalizeConversationPayload(rawConversationData) ||
+    normalizeConversationPayload(content);
 
   const getText = (text: MultiLingualText | undefined | null): string => {
     if (!text) return '';

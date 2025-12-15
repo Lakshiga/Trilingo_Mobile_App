@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, 
   StatusBar, ActivityIndicator, Alert, Animated, Easing, Dimensions 
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -113,6 +114,7 @@ const HomeScreen: React.FC = () => {
     title: string;
   } | null>(null);
   const [profileImageError, setProfileImageError] = useState(false);
+  const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
 
   // DATA definition inside component to control order
   const categories: CategoryItem[] = [
@@ -201,6 +203,21 @@ const HomeScreen: React.FC = () => {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    // Load cached student profile (nickname) saved after child creation
+    const loadCachedStudent = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('@trilingo_student_profile');
+        if (raw) {
+          setCachedStudentProfile(JSON.parse(raw));
+        }
+      } catch {
+        setCachedStudentProfile(null);
+      }
+    };
+    loadCachedStudent();
+  }, []);
+
+  useEffect(() => {
     if (currentUser) {
       resumeBackground().catch(() => null);
     } else {
@@ -277,6 +294,8 @@ const HomeScreen: React.FC = () => {
   };
 
   const styles = getStyles(responsive);
+  // Always prefer student nickname; fallback to cached nickname, then neutral label
+  const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
 
   if (loading) {
     return (
@@ -298,7 +317,7 @@ const HomeScreen: React.FC = () => {
         <View style={styles.headerTextContainer}>
           <Text style={styles.greetingText}>Hello,</Text>
           <Text style={styles.appName}>
-            {currentUser?.name || 'Hello!'}
+            {displayName}
           </Text>
         </View>
         <TouchableOpacity 
