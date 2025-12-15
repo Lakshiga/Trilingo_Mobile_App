@@ -39,11 +39,11 @@ const LevelsScreen: React.FC = () => {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
-  // Kids Theme Colors
-  const THEME_COLOR = '#4FACFE'; // Bright Sky Blue
-  const ACCENT_COLOR = '#FFB75E'; // Golden Yellow
-  const TEXT_COLOR = '#2C3E50'; // Soft Dark Blue
-  const BG_COLOR = '#E6F7FF'; // Very light blue bg
+  // Kids Theme Colors - Matching Home Page Blue Theme
+  const THEME_COLOR = '#0284C7'; // Blue (matching home page)
+  const ACCENT_COLOR = '#0EA5E9'; // Light Blue
+  const TEXT_COLOR = '#0369A1'; // Dark Blue
+  const BG_COLOR = '#E0F2FE'; // Light blue bg (matching home page)
 
   useEffect(() => {
     const fetchLevels = async () => {
@@ -408,21 +408,21 @@ const getStyles = (
     fontWeight: '600',
   },
 
-  // Play Button
+  // Play Button - More vibrant
   playButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FF9F43', // Fun Orange
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF6B9D', // Pink
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: "#FF9F43",
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: "#FF6B9D",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 6,
-    borderBottomWidth: 3,
-    borderBottomColor: '#E67E22', // Darker orange for 3D
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 
   // --- EMPTY / ERROR ---

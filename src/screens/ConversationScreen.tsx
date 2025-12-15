@@ -9,7 +9,7 @@ import {
   Alert,
   Animated,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -111,32 +111,49 @@ const ConversationScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <LinearGradient
+        colors={['#E0F2FE', '#DBEAFE', '#E0E7FF']}
+        style={styles.loadingContainer}
+      >
         <LottieView
           source={require('../../assets/animations/Loading animation.json')}
           autoPlay
           loop
           style={styles.loadingAnimation}
         />
-        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+        <Text style={styles.loadingText}>
           Loading conversations...
         </Text>
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <LinearGradient
+      colors={['#E0F2FE', '#DBEAFE', '#E0E7FF']}
+      style={styles.container}
+    >
+      {/* Animated Header */}
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={26} color="#0D5B81" />
+          <MaterialIcons name="arrow-back" size={26} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.headerTitle}>Conversations</Text>
+          <View style={styles.headerTitleContainer}>
+            <MaterialCommunityIcons name="microphone" size={28} color="#FFFFFF" />
+            <Text style={styles.headerTitle}>Speak Up! 🎤</Text>
+          </View>
           <Text style={styles.headerSubtitle}>Practice speaking with guided chats</Text>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView
         style={styles.scrollView}
@@ -153,74 +170,103 @@ const ConversationScreen: React.FC = () => {
           ]}
         >
           {conversations.length > 0 ? (
-            conversations.map((conversation) => {
+            conversations.map((conversation, index) => {
               const conversationName = getConversationName(conversation);
               
               return (
-                <TouchableOpacity
+                <Animated.View
                   key={conversation.id}
-                  style={styles.card}
-                  onPress={() => handleConversationPress(conversation)}
-                  activeOpacity={0.9}
+                  style={{
+                    opacity: fadeAnim,
+                    transform: [{
+                      translateY: slideAnim.interpolate({
+                        inputRange: [0, 50],
+                        outputRange: [0, 50 - (index * 10)],
+                      }),
+                    }],
+                  }}
                 >
-                  <View style={styles.cardLeft}>
-                    <View style={styles.iconPill}>
-                      <MaterialIcons name="chat" size={20} color="#fff" />
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => handleConversationPress(conversation)}
+                    activeOpacity={0.9}
+                  >
+                    <View style={styles.cardLeft}>
+                      <LinearGradient
+                        colors={['#4F46E5', '#7C3AED']}
+                        style={styles.iconPill}
+                      >
+                        <MaterialCommunityIcons name="microphone-message" size={22} color="#fff" />
+                      </LinearGradient>
+                      <View style={styles.textBlock}>
+                        <Text style={styles.cardTitle} numberOfLines={2}>{conversationName}</Text>
+                        <Text style={styles.cardSubtitle}>Conversation • Guided</Text>
+                      </View>
                     </View>
-                    <View style={styles.textBlock}>
-                      <Text style={styles.cardTitle} numberOfLines={2}>{conversationName}</Text>
-                      <Text style={styles.cardSubtitle}>Conversation • Guided</Text>
-                    </View>
-                  </View>
-                  <MaterialIcons name="chevron-right" size={26} color="#9CA3AF" />
-                </TouchableOpacity>
+                    <MaterialIcons name="chevron-right" size={28} color="#4F46E5" />
+                  </TouchableOpacity>
+                </Animated.View>
               );
             })
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No conversations available yet.</Text>
-              <Text style={styles.emptySubtext}>Check back later!</Text>
+              <MaterialCommunityIcons name="microphone-off" size={60} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No conversations available yet. 🎤</Text>
+              <Text style={styles.emptySubtext}>Check back later for fun chats!</Text>
             </View>
           )}
         </Animated.View>
       </ScrollView>
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6FAFF',
   },
   header: {
     paddingTop: 50,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#0284C7',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#E4EEF5',
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   headerTextWrap: {
     flex: 1,
   },
   headerTitle: {
-    color: '#0D5B81',
+    color: '#FFFFFF',
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   headerSubtitle: {
-    color: '#6B7280',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
     fontWeight: '600',
+    marginTop: 4,
   },
   scrollView: {
     flex: 1,
@@ -234,18 +280,19 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 20,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: '#E0E7FF',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    marginBottom: 12,
   },
   cardLeft: {
     flexDirection: 'row',
@@ -254,31 +301,35 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconPill: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#5A8DEE',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   textBlock: {
     flex: 1,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1E293B',
   },
   cardSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF',
   },
   loadingAnimation: {
     width: 200,
@@ -286,23 +337,29 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 16,
+    fontSize: 18,
+    color: '#0284C7',
+    fontWeight: '700',
   },
   emptyContainer: {
-    backgroundColor: '#F3F4F6',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
+    borderWidth: 2,
+    borderColor: '#E0E7FF',
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#374151',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0284C7',
+    marginTop: 12,
   },
   emptySubtext: {
-    fontSize: 13,
-    color: '#6B7280',
+    fontSize: 15,
+    color: '#0EA5E9',
+    fontWeight: '600',
   },
 });
 

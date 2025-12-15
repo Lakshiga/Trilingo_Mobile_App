@@ -74,7 +74,7 @@ export default function ProfileScreen() {
   // Always prefer student nickname; fallback to cached nickname; avoid parent name
   const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
   const navigation = useNavigation();
-  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || 'English';
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || ('English' as Language);
   const { isBackgroundEnabled, enableBackground, disableBackground } = useBackgroundAudio();
   
   const [notifications, setNotifications] = useState(true);
@@ -136,10 +136,23 @@ export default function ProfileScreen() {
         await updateUser({ profileImageUrl: serverUrl });
         Alert.alert('Awesome!', 'Profile picture updated!');
       } else {
-        throw new Error(response.message);
+        throw new Error(response.message || 'Upload failed');
       }
     } catch (error: any) {
-      Alert.alert('Oops!', 'Could not upload image.');
+      // If upload fails, save locally as fallback
+      console.warn('Server upload failed, saving locally:', error.message);
+      await saveImageToStorage(imageUri);
+      setProfileImage(imageUri);
+      
+      // Show user-friendly error message
+      const errorMessage = error.message || 'Could not upload to server';
+      if (errorMessage.includes('Session expired')) {
+        Alert.alert('Session Expired', 'Please log in again to upload images.');
+      } else if (errorMessage.includes('blocked') || errorMessage.includes('403')) {
+        Alert.alert('Upload Blocked', 'Image saved locally. Server upload is temporarily unavailable.');
+      } else {
+        Alert.alert('Saved Locally', 'Image saved on this device. Server upload failed.');
+      }
     }
   };
 
@@ -260,7 +273,7 @@ export default function ProfileScreen() {
       title: 'Language',
       icon: 'translate',
       type: 'navigate',
-      subtitle: nativeLanguage,
+      subtitle: nativeLanguage || 'English',
       color: '#00C9FF', // Cyan
     },
     {
@@ -349,7 +362,9 @@ export default function ProfileScreen() {
                />
              ) : (
                <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
-              <Text style={{ fontSize: 45 }}>{emojiProfile || summary?.studentNickname?.charAt(0) || cachedStudentProfile?.nickname?.charAt(0) || '👤'}</Text>
+                 <Text style={{ fontSize: 45 }}>
+                   {emojiProfile ? String(emojiProfile) : (summary?.studentNickname?.charAt(0) || cachedStudentProfile?.nickname?.charAt(0) || '👤')}
+                 </Text>
                </View>
              )}
              <View style={styles.cameraBadge}>
@@ -359,7 +374,7 @@ export default function ProfileScreen() {
 
           <View style={styles.userInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.userName}>{displayName}</Text>
+              <Text style={styles.userName}>{String(displayName || 'Student')}</Text>
               {currentUser && !currentUser.isGuest && (
                  <MaterialIcons name="verified" size={20} color="#4FACFE" style={{marginLeft: 4}}/>
               )}
@@ -402,8 +417,8 @@ export default function ProfileScreen() {
               </View>
               
               <View style={styles.settingContent}>
-                <Text style={styles.settingLabel}>{item.title}</Text>
-                {item.subtitle && <Text style={styles.settingSubLabel}>{item.subtitle}</Text>}
+                <Text style={styles.settingLabel}>{String(item.title || '')}</Text>
+                {item.subtitle && String(item.subtitle).trim() ? <Text style={styles.settingSubLabel}>{String(item.subtitle)}</Text> : null}
               </View>
 
               {item.type === 'toggle' ? (

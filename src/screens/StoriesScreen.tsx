@@ -112,14 +112,14 @@ const StoriesScreen: React.FC = () => {
           // Get pages count
           const pages = storyData.pages || storyData.pageCount || 10;
           
-          // Gradients
+          // Gradients - Blue theme matching home page
           const gradients: readonly [string, string, ...string[]][] = [
-            ['#FFA17F', '#FF6B6B'] as const,
-            ['#667EEA', '#764BA2'] as const,
-            ['#38B2AC', '#2B6CB0'] as const,
-            ['#48BB78', '#38A169'] as const,
-            ['#ED64A6', '#9F7AEA'] as const,
-            ['#F6AD55', '#DD6B20'] as const,
+            ['#0EA5E9', '#0284C7'] as const,
+            ['#0284C7', '#0369A1'] as const,
+            ['#0369A1', '#075985'] as const,
+            ['#0EA5E9', '#075985'] as const,
+            ['#0284C7', '#0EA5E9'] as const,
+            ['#0369A1', '#0284C7'] as const,
           ];
           
           return {

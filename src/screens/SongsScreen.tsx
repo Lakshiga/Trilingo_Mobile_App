@@ -128,13 +128,13 @@ const SongsScreen: React.FC = () => {
           // Get artist
           const artist = songData.artist || 'Unknown Artist';
 
-          // Gradients for songs
+          // Gradients for songs - Blue theme matching home page
           const gradients: readonly [string, string][] = [
-            ['#FF6B9D', '#FF8FAB'] as const,
-            ['#4ECDC4', '#6EDDD8'] as const,
-            ['#5B9FFF', '#7BB5FF'] as const,
-            ['#A77BCA', '#BA91DA'] as const,
-            ['#FFA726', '#FFB84D'] as const,
+            ['#0EA5E9', '#0284C7'] as const,
+            ['#0284C7', '#0369A1'] as const,
+            ['#0369A1', '#075985'] as const,
+            ['#0EA5E9', '#075985'] as const,
+            ['#0284C7', '#0EA5E9'] as const,
           ];
 
           return {
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     top: 40,
     left: 20,
     zIndex: 10,
-    backgroundColor: 'rgba(255, 107, 157, 0.8)',
+    backgroundColor: 'rgba(2, 132, 199, 0.8)',
     borderRadius: 25,
     padding: 12,
     elevation: 5,

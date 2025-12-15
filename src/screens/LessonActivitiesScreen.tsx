@@ -52,11 +52,11 @@ const LessonActivitiesScreen: React.FC = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
-  // --- KIDS THEME COLORS ---
-  const THEME_COLOR = '#4FACFE'; // Sky Blue
-  const ACCENT_COLOR = '#FFB75E'; // Golden Yellow
-  const TEXT_COLOR = '#2C3E50'; // Dark Blue
-  const BG_COLOR = '#E6F7FF'; // Light Background
+  // --- KIDS THEME COLORS - Matching Home Page Blue Theme ---
+  const THEME_COLOR = '#0284C7'; // Blue (matching home page)
+  const ACCENT_COLOR = '#0EA5E9'; // Light Blue
+  const TEXT_COLOR = '#0369A1'; // Dark Blue
+  const BG_COLOR = '#E0F2FE'; // Light blue bg (matching home page)
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -207,8 +207,8 @@ const LessonActivitiesScreen: React.FC = () => {
               const activityName = getActivityName(item.activity);
               const iconName = getActivityIcon(activityName); // Get dynamic icon
               
-              // Alternating colors for bubbles
-              const bubbleColors = ['#4FACFE', '#FF9F43', '#FF6B6B', '#1DD1A1', '#5F27CD'];
+              // Alternating colors for bubbles - More vibrant!
+              const bubbleColors = ['#6366F1', '#FF6B9D', '#4ECDC4', '#F6AD55', '#A77BCA', '#FF9F43'];
               const currentBubbleColor = bubbleColors[index % bubbleColors.length];
 
               const isCompleted = completedActivities.has(item.activity.id);
@@ -397,19 +397,21 @@ const getStyles = (
     backgroundColor: '#4FACFE',
   },
 
-  // Play Button
+  // Play Button - More vibrant
   playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FF9F43', // Orange
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FF6B9D', // Pink
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: "#FF9F43",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: "#FF6B9D",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 
   // --- LOADING / EMPTY ---

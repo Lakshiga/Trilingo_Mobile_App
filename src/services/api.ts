@@ -576,11 +576,16 @@ class ApiService {
   // Upload profile image
   async uploadProfileImage(imageUri: string): Promise<AuthResponse> {
     try {
-      // Use the same base URL as API (prefer production/CF) without falling back to localhost
-      const uploadBaseUrl =
-        (this.api.defaults.baseURL || API_CONFIG.PRODUCTION || API_CONFIG.CLOUDFRONT || '').replace(/\/$/, '');
+      // Use the authenticated API instance which already has the correct baseURL
+      const baseUrl = this.api.defaults.baseURL || API_CONFIG.PRODUCTION || 'https://d3v81eez8ecmto.cloudfront.net/api';
+      const uploadBaseUrl = baseUrl.replace(/\/$/, '');
       const uploadEndpoint = '/auth/upload-profile-image';
       const fullUploadUrl = `${uploadBaseUrl}${uploadEndpoint}`;
+      
+      // Validate URL before making request
+      if (!fullUploadUrl || fullUploadUrl.includes('undefined') || !fullUploadUrl.startsWith('http')) {
+        throw new Error('Invalid upload URL. Please check API configuration.');
+      }
       
       // Get file extension from URI
       let fileExtension = 'jpg';
@@ -628,46 +633,53 @@ class ApiService {
       // Get auth token for the request
       const token = await this.getAuthToken();
       
-      // Create a separate axios instance for upload with the direct URL
-      // Make the request using full URL (avoid localhost rewrites)
-      const headers: any = { 'Content-Type': 'multipart/form-data' };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
       }
+      
+      // Use axios directly for FormData upload with full URL
+      // Don't set Content-Type - let axios set it with boundary for multipart/form-data
+      const headers: any = {};
+      headers.Authorization = `Bearer ${token}`;
+      
       const response = await axios.post<AuthResponse>(fullUploadUrl, formData, {
         timeout: 30000,
         headers,
+        // Ensure axios doesn't modify the FormData
+        transformRequest: [(data) => data],
       });
       
+      // Backend returns AuthResponseDto directly (not wrapped)
       return response.data;
     } catch (error: any) {
-      console.error('Upload error:', error);
-      console.error('Upload error details:', {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-        status: error.response?.status,
-        baseURL: this.api.defaults.baseURL,
-        url: error.config?.url,
-        fullURL: error.config ? `${error.config.baseURL}${error.config.url}` : 'unknown',
-      });
+      // Log error details for debugging (but don't expose sensitive info)
+      const errorStatus = error.response?.status;
+      const errorCode = error.code;
       
-      // Provide more specific error message
-      if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
-        throw new Error(
-          `Network error: Cannot connect to upload service.\n` +
-          `Upload URL: ${error.config ? `${error.config.baseURL || ''}${error.config.url || ''}` : fullUploadUrl}`
-        );
+      // Handle specific error cases
+      if (errorStatus === 403) {
+        // 403 Forbidden - CloudFront blocking or authentication issue
+        throw new Error('Upload blocked by server. Please try again later or contact support.');
+      } else if (errorStatus === 401) {
+        // 401 Unauthorized - Token expired
+        await this.clearAuthToken();
+        throw new Error('Session expired. Please log in again.');
+      } else if (errorCode === 'NETWORK_ERROR' || error.message === 'Network Error') {
+        throw new Error('Network error: Cannot connect to upload service. Please check your internet connection.');
+      } else if (errorStatus >= 500) {
+        throw new Error('Server error. Please try again later.');
       }
       
-      throw this.handleError(error);
+      // For other errors, provide a generic message
+      throw new Error(error.response?.data?.message || error.message || 'Failed to upload image. Please try again.');
     }
   }
 
   // Get user profile
-  async getUserProfile(): Promise<ApiResponse<any>> {
+  async getUserProfile(): Promise<AuthResponse> {
     try {
-      const response = await this.makeApiCall<ApiResponse<any>>('/auth/profile');
+      // Backend returns AuthResponseDto directly, not wrapped in ApiResponse
+      const response = await this.makeApiCall<AuthResponse>('/auth/profile', false);
       return response;
     } catch (error: any) {
       throw this.handleError(error);

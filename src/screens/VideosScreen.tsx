@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   Image,
   Modal,
   StatusBar,
-  Dimensions
+  Dimensions,
+  Animated
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import apiService from '../services/api';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
 import { getLanguageKey } from '../utils/languageUtils';
@@ -75,6 +78,8 @@ const VideosScreen: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     const fetchVideos = async () => {
@@ -182,6 +187,12 @@ const VideosScreen: React.FC = () => {
         });
 
         setVideos(videoList);
+        
+        // Animate entrance
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
+        ]).start();
       } catch (error) {
         console.error('Error fetching videos:', error);
       } finally {
@@ -193,28 +204,60 @@ const VideosScreen: React.FC = () => {
   }, [langKey]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <LinearGradient
+      colors={['#E0F2FE', '#DBEAFE', '#E0E7FF']}
+      style={styles.container}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor="#E0F2FE" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Animated Header */}
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} color="#1E293B" />
+          <MaterialCommunityIcons name="arrow-left" size={26} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Video Library</Text>
-      </View>
+        <View style={styles.headerTitleContainer}>
+          <MaterialCommunityIcons name="youtube-tv" size={28} color="#FFFFFF" />
+          <Text style={styles.headerTitle}>Cartoons 🎬</Text>
+        </View>
+        <View style={{ width: 40 }} />
+      </Animated.View>
 
       {/* Loading */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#002D62" />
+          <LottieView
+            source={require('../../assets/animations/Loading animation.json')}
+            autoPlay
+            loop
+            style={styles.loadingAnimation}
+          />
+          <Text style={styles.loadingText}>Loading videos...</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContent}>
           {videos.length > 0 ? (
-            videos.map((item) => (
-              <TouchableOpacity
+            videos.map((item, index) => (
+              <Animated.View
                 key={item.id}
+                style={{
+                  opacity: fadeAnim,
+                  transform: [{
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 50],
+                      outputRange: [0, 50 - (index * 10)],
+                    }),
+                  }],
+                }}
+              >
+              <TouchableOpacity
                 style={styles.card}
                 activeOpacity={0.9}
                 onPress={() => setSelectedVideo(item)}
@@ -235,7 +278,7 @@ const VideosScreen: React.FC = () => {
                   {/* Play Overlay */}
                   <View style={styles.playOverlay}>
                     <View style={styles.playBtn}>
-                      <MaterialIcons name="play-arrow" size={32} color="#FFF" />
+                      <MaterialIcons name="play-arrow" size={36} color="#FFF" />
                     </View>
                   </View>
                 </View>
@@ -246,10 +289,13 @@ const VideosScreen: React.FC = () => {
                   <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
                 </View>
               </TouchableOpacity>
+              </Animated.View>
             ))
           ) : (
             <View style={styles.center}>
-              <Text style={{color: '#999'}}>No videos found.</Text>
+              <MaterialCommunityIcons name="video-off" size={60} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No videos found yet! 🎥</Text>
+              <Text style={styles.emptySubtext}>Check back later for fun cartoons!</Text>
             </View>
           )}
         </ScrollView>
@@ -285,41 +331,67 @@ const VideosScreen: React.FC = () => {
           )}
         </View>
       </Modal>
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F1F5F9', // Light Gray-Blue background
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Header
+  loadingAnimation: {
+    width: 200,
+    height: 200,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 18,
+    color: '#0284C7',
+    fontWeight: '700',
+  },
+  // Header - More colorful
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 50,
-    paddingBottom: 15,
+    paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#FFFFFF',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
+    backgroundColor: '#0284C7',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   backBtn: {
-    padding: 5,
-    marginRight: 15,
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#002D62',
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   // List
   listContent: {
@@ -327,15 +399,16 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 24,
     marginBottom: 20,
     overflow: 'hidden',
-    // Soft Shadow
-    shadowColor: "#64748B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: "#4F46E5",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: '#E0E7FF',
   },
   thumbnailWrapper: {
     height: 180,
@@ -353,28 +426,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(0, 45, 98, 0.8)', // Brand Blue, semi-transparent
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#0284C7',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFF',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
   cardContent: {
     padding: 16,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '900',
     color: '#1E293B',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   cardDesc: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#64748B',
-    lineHeight: 20,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0284C7',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 16,
+    color: '#0EA5E9',
+    marginTop: 8,
   },
   // Modal Close
   closeBtn: {

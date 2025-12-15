@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
@@ -55,18 +56,301 @@ const BouncyButton = ({ onPress, children, style, scaleTo = 0.95 }: any) => {
   );
 };
 
-// --- 2. BACKGROUND DOODLES (To fill white space) ---
-const BackgroundDoodles = () => {
-  // Random icons scattered in the background with low opacity
+// --- 2. ANIMATED BACKGROUND DOODLES (Bold top-to-bottom loop animation with blue theme) ---
+const BackgroundDoodles: React.FC = () => {
+  const { width, height } = Dimensions.get('window');
+  
+  // Create multiple animation refs for different elements moving from top to bottom
+  const anim1 = useRef(new Animated.Value(-100)).current;
+  const anim2 = useRef(new Animated.Value(-150)).current;
+  const anim3 = useRef(new Animated.Value(-200)).current;
+  const anim4 = useRef(new Animated.Value(-120)).current;
+  const anim5 = useRef(new Animated.Value(-180)).current;
+  const anim6 = useRef(new Animated.Value(-130)).current;
+  const anim7 = useRef(new Animated.Value(-160)).current;
+  const anim8 = useRef(new Animated.Value(-90)).current;
+  const anim9 = useRef(new Animated.Value(-110)).current;
+  const anim10 = useRef(new Animated.Value(-140)).current;
+  const anim11 = useRef(new Animated.Value(-170)).current;
+  const anim12 = useRef(new Animated.Value(-125)).current;
+
+  useEffect(() => {
+    // Continuous top-to-bottom loop animations
+    const createLoopAnimation = (animValue: Animated.Value, delay: number, duration: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: height + 200, // Move from top to bottom
+            duration: duration,
+            useNativeDriver: true,
+            easing: Easing.linear,
+          }),
+          Animated.timing(animValue, {
+            toValue: -200, // Reset to top
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    // Start all animations with varied speeds
+    createLoopAnimation(anim1, 0, 8000).start();
+    createLoopAnimation(anim2, 1000, 10000).start();
+    createLoopAnimation(anim3, 2000, 12000).start();
+    createLoopAnimation(anim4, 500, 9000).start();
+    createLoopAnimation(anim5, 1500, 11000).start();
+    createLoopAnimation(anim6, 300, 8500).start();
+    createLoopAnimation(anim7, 1800, 10500).start();
+    createLoopAnimation(anim8, 700, 9500).start();
+    createLoopAnimation(anim9, 1200, 10200).start();
+    createLoopAnimation(anim10, 400, 8800).start();
+    createLoopAnimation(anim11, 1600, 10800).start();
+    createLoopAnimation(anim12, 600, 9200).start();
+  }, []);
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <MaterialCommunityIcons name="star" size={40} color="#59A4C6" style={{ position: 'absolute', top: 50, left: 20, opacity: 0.1 }} />
-      <MaterialCommunityIcons name="shape-circle-plus" size={50} color="#4289BA" style={{ position: 'absolute', top: 150, right: -10, opacity: 0.05 }} />
-      <MaterialCommunityIcons name="balloon" size={60} color="#2D4F9C" style={{ position: 'absolute', top: 300, left: -20, opacity: 0.05 }} />
-      <MaterialCommunityIcons name="music-note" size={40} color="#0D5B81" style={{ position: 'absolute', bottom: 100, right: 30, opacity: 0.1 }} />
-      <MaterialCommunityIcons name="pencil" size={50} color="#59A4C6" style={{ position: 'absolute', bottom: 250, left: 50, opacity: 0.05 }} />
-      <MaterialCommunityIcons name="alphabetical" size={80} color="#2D4F9C" style={{ position: 'absolute', top: '50%', right: '40%', opacity: 0.03 }} />
+      {/* Bold blue-themed icons and shapes moving from top to bottom */}
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '8%', 
+        transform: [{ translateY: anim1 }] 
+      }}>
+        <MaterialCommunityIcons name="star" size={60} color="#0EA5E9" style={{ opacity: 0.25 }} />
+      </Animated.View>
+      
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '22%', 
+        transform: [{ translateY: anim2 }] 
+      }}>
+        <MaterialCommunityIcons name="shape-circle-plus" size={70} color="#0284C7" style={{ opacity: 0.2 }} />
+      </Animated.View>
+      
+      <Animated.View style={{ 
+        position: 'absolute', 
+        right: '12%', 
+        transform: [{ translateY: anim3 }] 
+      }}>
+        <MaterialCommunityIcons name="book-open-page-variant" size={80} color="#0369A1" style={{ opacity: 0.22 }} />
+      </Animated.View>
+      
+      <Animated.View style={{ 
+        position: 'absolute', 
+        right: '28%', 
+        transform: [{ translateY: anim4 }] 
+      }}>
+        <MaterialCommunityIcons name="music-note" size={65} color="#0EA5E9" style={{ opacity: 0.23 }} />
+      </Animated.View>
+      
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '48%', 
+        transform: [{ translateY: anim5 }] 
+      }}>
+        <MaterialCommunityIcons name="alphabetical" size={75} color="#0284C7" style={{ opacity: 0.2 }} />
+      </Animated.View>
+
+      {/* Additional shapes */}
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '15%', 
+        transform: [{ translateY: anim6 }] 
+      }}>
+        <MaterialCommunityIcons name="hexagon" size={55} color="#0EA5E9" style={{ opacity: 0.22 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        right: '20%', 
+        transform: [{ translateY: anim7 }] 
+      }}>
+        <MaterialCommunityIcons name="triangle" size={68} color="#0369A1" style={{ opacity: 0.21 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '35%', 
+        transform: [{ translateY: anim8 }] 
+      }}>
+        <MaterialCommunityIcons name="square" size={58} color="#0284C7" style={{ opacity: 0.24 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        right: '8%', 
+        transform: [{ translateY: anim9 }] 
+      }}>
+        <MaterialCommunityIcons name="pentagon" size={62} color="#0EA5E9" style={{ opacity: 0.23 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '5%', 
+        transform: [{ translateY: anim10 }] 
+      }}>
+        <MaterialCommunityIcons name="diamond" size={64} color="#0284C7" style={{ opacity: 0.2 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        right: '35%', 
+        transform: [{ translateY: anim11 }] 
+      }}>
+        <MaterialCommunityIcons name="octagon" size={72} color="#0369A1" style={{ opacity: 0.22 }} />
+      </Animated.View>
+
+      <Animated.View style={{ 
+        position: 'absolute', 
+        left: '60%', 
+        transform: [{ translateY: anim12 }] 
+      }}>
+        <MaterialCommunityIcons name="heart" size={56} color="#0EA5E9" style={{ opacity: 0.25 }} />
+      </Animated.View>
+      
+      {/* Additional static decorative elements */}
+      <MaterialCommunityIcons name="circle" size={100} color="#0EA5E9" style={{ position: 'absolute', top: '20%', right: '5%', opacity: 0.08 }} />
+      <MaterialCommunityIcons name="circle" size={120} color="#0284C7" style={{ position: 'absolute', bottom: '15%', left: '8%', opacity: 0.06 }} />
+      <MaterialCommunityIcons name="circle" size={90} color="#0369A1" style={{ position: 'absolute', top: '60%', left: '3%', opacity: 0.07 }} />
+      <MaterialCommunityIcons name="circle" size={110} color="#0EA5E9" style={{ position: 'absolute', bottom: '30%', right: '2%', opacity: 0.06 }} />
     </View>
+  );
+};
+
+// --- ANIMATED CATEGORY CARD COMPONENT (With Cartoon Images) ---
+const AnimatedCategoryCard = ({ item, index, onPress }: { item: CategoryItem; index: number; onPress: () => void }) => {
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  const pressAnim = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    Animated.spring(cardAnim, {
+      toValue: 1,
+      delay: index * 100,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(pressAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+      friction: 3,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 3,
+    }).start();
+  };
+  
+  return (
+    <Animated.View 
+      style={[
+        { width: '48%', marginBottom: 15 },
+        {
+          opacity: cardAnim,
+          transform: [{
+            scale: cardAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.8, 1],
+            }),
+          }],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={0.9}
+      >
+        <Animated.View
+          style={{
+            transform: [{ scale: pressAnim }],
+          }}
+        >
+          <LinearGradient colors={item.colors} style={{
+            borderRadius: 28,
+            padding: 16,
+            minHeight: 160,
+            justifyContent: 'flex-start',
+            alignItems: 'center',
+            elevation: 8,
+            shadowColor: '#000', 
+            shadowOffset: { width: 0, height: 8 }, 
+            shadowOpacity: 0.25,
+            shadowRadius: 12,
+            borderWidth: 3,
+            borderColor: 'rgba(255, 255, 255, 0.4)',
+            overflow: 'hidden',
+          }}>
+            {/* Cartoon/Anime Image */}
+            <View style={{
+              width: 90, 
+              height: 90, 
+              borderRadius: 45,
+              backgroundColor: 'rgba(255, 255, 255, 0.25)',
+              justifyContent: 'center', 
+              alignItems: 'center',
+              marginBottom: 10,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 6,
+              elevation: 5,
+              borderWidth: 3,
+              borderColor: 'rgba(255, 255, 255, 0.5)',
+            }}>
+              <Image
+                source={item.imagePath}
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  resizeMode: 'contain',
+                }}
+              />
+            </View>
+
+            {/* Title and Subtitle */}
+            <Text style={{
+              fontSize: 18, 
+              fontWeight: '900', 
+              color: '#FFF', 
+              textAlign: 'center',
+              marginBottom: 4,
+              textShadowColor: 'rgba(0, 0, 0, 0.3)',
+              textShadowOffset: { width: 0, height: 2 },
+              textShadowRadius: 4,
+            }}>{item.title}</Text>
+            <Text style={{
+              fontSize: 13, 
+              fontWeight: '700', 
+              color: 'rgba(255,255,255,0.95)', 
+              marginTop: 2,
+              textAlign: 'center',
+            }}>{item.subtitle}</Text>
+
+            {/* Clickable Indicator - Arrow Icon */}
+            <View style={{
+              marginTop: 8,
+              backgroundColor: 'rgba(255, 255, 255, 0.3)',
+              borderRadius: 15,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}>
+              <MaterialCommunityIcons name="arrow-right-circle" size={20} color="#FFF" />
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
@@ -78,6 +362,7 @@ interface CategoryItem {
   type: string;
   icon: any;
   colors: readonly [string, string];
+  imagePath: any; // Image source for cartoon/anime image
 }
 
 // Progress data interface
@@ -115,15 +400,28 @@ const HomeScreen: React.FC = () => {
   } | null>(null);
   const [profileImageError, setProfileImageError] = useState(false);
   const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
+  
+  // Animation refs for entrance animations
+  const headerAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const categoriesAnim = useRef(new Animated.Value(0)).current;
 
-  // DATA definition inside component to control order
+  // DATA definition inside component - Blue/Teal theme matching admin dashboard with cartoon images
   const categories: CategoryItem[] = [
-    { id: 'letters', title: 'ABC & 123', subtitle: 'Basics', type: 'letters', icon: 'alphabetical-variant', colors: ['#59A4C6', '#4289BA'] },
-    { id: 'stories', title: 'Story Time', subtitle: 'Read', type: 'stories', icon: 'book-open-page-variant', colors: ['#749FCD', '#2D4F9C'] },
-    { id: 'videos', title: 'Cartoons', subtitle: 'Watch', type: 'videos', icon: 'youtube-tv', colors: ['#4289BA', '#0D5B81'] },
-    { id: 'songs', title: 'Music', subtitle: 'Dance', type: 'songs', icon: 'music-circle', colors: ['#59A4C6', '#2D4F9C'] },
-    { id: 'conversation', title: 'Speak Up', subtitle: 'Talk', type: 'conversation', icon: 'microphone', colors: ['#59A4C6', '#0D5B81'] }
+    { id: 'stories', title: 'Story Time', subtitle: 'Read', type: 'stories', icon: 'book-open-page-variant', colors: ['#0EA5E9', '#0284C7'], imagePath: require('../../assets/story-play.png') },
+    { id: 'videos', title: 'Cartoons', subtitle: 'Watch', type: 'videos', icon: 'youtube-tv', colors: ['#0369A1', '#075985'], imagePath: require('../../assets/watching-video.png') },
+    { id: 'songs', title: 'Music', subtitle: 'Dance', type: 'songs', icon: 'music-circle', colors: ['#0284C7', '#0EA5E9'], imagePath: require('../../assets/listen-song.png') },
+    { id: 'conversation', title: 'Speak Up', subtitle: 'Talk', type: 'conversation', icon: 'microphone', colors: ['#075985', '#0369A1'], imagePath: require('../../assets/conversation.png') }
   ];
+
+  useEffect(() => {
+    // Entrance animations
+    Animated.stagger(200, [
+      Animated.spring(headerAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
+      Animated.spring(progressAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
+      Animated.spring(categoriesAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -230,7 +528,6 @@ const HomeScreen: React.FC = () => {
     // Mapping Logic...
     const routeMap: Record<string, string> = {
       learning: 'Lessons',
-      letters: 'LetterSelection',
       songs: 'Songs',
       videos: 'Videos',
       stories: 'Stories',
@@ -241,14 +538,18 @@ const HomeScreen: React.FC = () => {
 
   const renderProfileImage = () => {
     if (!currentUser) {
-      return <View style={{ width: 72, height: 72 }} />;
+      return (
+        <View style={styles.profilePlaceholder}>
+          <MaterialCommunityIcons name="account" size={24} color="#0284C7" />
+        </View>
+      );
     }
     
     const raw = currentUser.profileImageUrl;
     if (raw && isEmojiLike(raw)) {
       return (
-        <View style={[styles.profileImage, styles.emojiContainer]}>
-          <Text style={{ fontSize: 20 }}>{raw}</Text>
+        <View style={[styles.profilePlaceholder, styles.emojiContainer]}>
+          <Text style={{ fontSize: 18 }}>{raw}</Text>
         </View>
       );
     }
@@ -264,7 +565,11 @@ const HomeScreen: React.FC = () => {
       );
     }
 
-    return null;
+    return (
+      <View style={styles.profilePlaceholder}>
+        <MaterialCommunityIcons name="account" size={24} color="#0284C7" />
+      </View>
+    );
   };
 
   const calculateProgress = () => {
@@ -276,6 +581,7 @@ const HomeScreen: React.FC = () => {
   };
 
   const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return '0h 0m';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
@@ -295,7 +601,7 @@ const HomeScreen: React.FC = () => {
 
   const styles = getStyles(responsive);
   // Always prefer student nickname; fallback to cached nickname, then neutral label
-  const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
+  const displayName = String(summary?.studentNickname || cachedStudentProfile?.nickname || 'Student');
 
   if (loading) {
     return (
@@ -312,21 +618,36 @@ const HomeScreen: React.FC = () => {
       {/* Background Pattern */}
       <BackgroundDoodles />
 
-      {/* --- HEADER --- */}
-      <View style={styles.header}>
+      {/* --- HEADER (Animated) - Compact with Profile on Top Right --- */}
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: headerAnim,
+            transform: [{
+              translateY: headerAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-30, 0],
+              }),
+            }],
+          },
+        ]}
+      >
         <View style={styles.headerTextContainer}>
           <Text style={styles.greetingText}>Hello,</Text>
           <Text style={styles.appName}>
-            {displayName}
+            {displayName}{' '}
+            <Text>👋</Text>
           </Text>
         </View>
         <TouchableOpacity 
           onPress={() => (navigation as any).navigate('Profile')}
           style={styles.profileButton}
+          activeOpacity={0.7}
         >
           {renderProfileImage()}
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
@@ -340,71 +661,91 @@ const HomeScreen: React.FC = () => {
           />
         </View>
         
-        {/* --- PROGRESS SUMMARY --- */}
+        {/* --- PROGRESS SUMMARY (Animated) --- */}
         {progressData && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Your Progress</Text>
-              <Text style={styles.levelText}>Level {progressData.level}</Text>
-            </View>
-            
-            <View style={styles.xpContainer}>
-              <Text style={styles.xpText}>{progressData.totalXpPoints} XP</Text>
-              <Text style={styles.nextLevelText}>Next level: {progressData.nextLevelXp} XP</Text>
-            </View>
-            
-            <View style={styles.progressBarBackground}>
-              <Animated.View 
-                style={[
-                  styles.progressBarFill, 
-                  { 
-                    width: `${calculateProgress()}%`,
-                    backgroundColor: calculateProgress() === 100 ? '#4CAF50' : '#59A4C6'
-                  }
-                ]} 
-              />
-            </View>
-            
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <MaterialCommunityIcons name="star" size={24} color="#FFD700" />
-                <Text style={styles.statValue}>{progressData.totalActivitiesCompleted}</Text>
-                <Text style={styles.statLabel}>Stars</Text>
-              </View>
-              
-              <View style={styles.statBox}>
-                <MaterialCommunityIcons name="trophy" size={24} color="#9E72C3" />
-                <Text style={styles.statValue}>{progressData.level}</Text>
-                <Text style={styles.statLabel}>Level</Text>
-              </View>
-              
-              <View style={styles.statBox}>
-                <MaterialCommunityIcons name="chart-line" size={24} color="#4CAF50" />
-                <Text style={styles.statValue}>{Math.round(progressData.averageScore)}%</Text>
-                <Text style={styles.statLabel}>Accuracy</Text>
-              </View>
-              
-              <View style={styles.statBox}>
-                <MaterialCommunityIcons name="clock-outline" size={24} color="#2196F3" />
-                <Text style={styles.statValue}>{formatTime(progressData.totalTimeSpentSeconds)}</Text>
-                <Text style={styles.statLabel}>Time</Text>
-              </View>
-            </View>
+          <Animated.View 
+            style={[
+              {
+                opacity: progressAnim,
+                transform: [{
+                  scale: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1],
+                  }),
+                }],
+              },
+            ]}
+          >
+            <BlurView
+              intensity={30}
+              tint="light"
+              style={styles.progressContainer}
+            >
+              <View style={styles.progressGlassOverlay}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressTitle}>Your Progress</Text>
+                  <Text style={styles.levelText}>Level {String(progressData.level || 1)}</Text>
+                </View>
+                
+                <View style={styles.xpContainer}>
+                  <Text style={styles.xpText}>{String(progressData.totalXpPoints || 0)} XP</Text>
+                  <Text style={styles.nextLevelText}>Next level: {String(progressData.nextLevelXp || 300)} XP</Text>
+                </View>
+                
+                <View style={styles.progressBarBackground}>
+                  <Animated.View 
+                    style={[
+                      styles.progressBarFill, 
+                      { 
+                        width: `${calculateProgress()}%`,
+                        backgroundColor: calculateProgress() === 100 ? '#0284C7' : '#0284C7'
+                      }
+                    ]} 
+                  />
+                </View>
+                
+                <View style={styles.statsRow}>
+                  <View style={styles.statBox}>
+                    <MaterialCommunityIcons name="star" size={24} color="#0284C7" />
+                    <Text style={styles.statValue}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
+                    <Text style={styles.statLabel}>Stars</Text>
+                  </View>
+                  
+                  <View style={styles.statBox}>
+                    <MaterialCommunityIcons name="trophy" size={24} color="#0369A1" />
+                    <Text style={styles.statValue}>{String(progressData.level || 1)}</Text>
+                    <Text style={styles.statLabel}>Level</Text>
+                  </View>
+                  
+                  <View style={styles.statBox}>
+                    <MaterialCommunityIcons name="chart-line" size={24} color="#0EA5E9" />
+                    <Text style={styles.statValue}>{String(Math.round(progressData.averageScore || 0))}%</Text>
+                    <Text style={styles.statLabel}>Accuracy</Text>
+                  </View>
+                  
+                  <View style={styles.statBox}>
+                    <MaterialCommunityIcons name="clock-outline" size={24} color="#0284C7" />
+                    <Text style={styles.statValue}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
+                    <Text style={styles.statLabel}>Time</Text>
+                  </View>
+                </View>
 
-            {continueTarget && (
-              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                <Text style={styles.continueButtonText}>Continue</Text>
-                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
-              </TouchableOpacity>
-            )}
-            {!continueTarget && (
-              <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                <Text style={styles.continueButtonText}>Start</Text>
-                <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+                {continueTarget && (
+                  <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                    <Text style={styles.continueButtonText}>Continue</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+                  </TouchableOpacity>
+                )}
+                {!continueTarget && (
+                  <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                    <Text style={styles.continueButtonText}>Start</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </BlurView>
+           </Animated.View>
+         )}
 
         {/* --- QUICK ACTIONS --- */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -412,7 +753,7 @@ const HomeScreen: React.FC = () => {
         <View style={styles.quickActionsContainer}>
           <BouncyButton onPress={() => handleNavigation('learning')}>
             <LinearGradient 
-              colors={['#59A4C6', '#2D4F9C']} 
+              colors={['#0284C7', '#0369A1']} 
               style={styles.actionCard}
             >
               <MaterialCommunityIcons name="map-marker-path" size={32} color="#FFF" />
@@ -422,24 +763,31 @@ const HomeScreen: React.FC = () => {
           </BouncyButton>
         </View>
 
-        {/* --- ACTIVITY CATEGORIES --- */}
-        <Text style={styles.sectionTitle}>Learning Categories</Text>
-        
-        <View style={styles.gridContainer}>
-          {categories.map((item) => (
-            <View key={item.id} style={styles.gridItemWrapper}>
-              <BouncyButton onPress={() => handleNavigation(item.type)}>
-                <LinearGradient colors={item.colors} style={styles.gridItem}>
-                  <View style={styles.gridIconContainer}>
-                    <MaterialCommunityIcons name={item.icon} size={32} color="#FFF" />
-                  </View>
-                  <Text style={styles.gridTitle}>{item.title}</Text>
-                  <Text style={styles.gridSubtitle}>{item.subtitle}</Text>
-                </LinearGradient>
-              </BouncyButton>
-            </View>
-          ))}
-        </View>
+        {/* --- ACTIVITY CATEGORIES (Animated) --- */}
+        <Animated.View
+          style={{
+            opacity: categoriesAnim,
+            transform: [{
+              translateY: categoriesAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [30, 0],
+              }),
+            }],
+          }}
+        >
+          <Text style={styles.sectionTitle}>Learning Categories 🎨</Text>
+          
+          <View style={styles.gridContainer}>
+            {categories.map((item, index) => (
+              <AnimatedCategoryCard
+                key={item.id}
+                item={item}
+                index={index}
+                onPress={() => handleNavigation(item.type)}
+              />
+            ))}
+          </View>
+        </Animated.View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -449,63 +797,112 @@ const HomeScreen: React.FC = () => {
 
 // --- STYLES ---
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
-  // Light background
-  container: { flex: 1, backgroundColor: '#E6F7FF' }, 
+  // Light blue background matching admin dashboard theme
+  container: { flex: 1, backgroundColor: '#E0F2FE' }, 
   centerContainer: { justifyContent: 'center', alignItems: 'center' },
   
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 25,
-    paddingTop: responsive.hp(6),
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    // Use symmetric vertical padding so text + profile icon sit exactly in the center
+    paddingVertical: 12,
+    marginBottom: 15,
   },
   headerTextContainer: {
     flex: 1,
+    justifyContent: 'center',
+    paddingRight: 15,
   },
-  greetingText: { fontSize: 16, color: '#2D4F9C', fontWeight: '600' },
-  appName: { fontSize: 26, fontWeight: '900', color: '#0D3846', marginTop: 5 },
+  greetingText: { 
+    fontSize: 18, 
+    color: '#0284C7', 
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  appName: { 
+    fontSize: 28, 
+    fontWeight: '900', 
+    color: '#0369A1', 
+    marginTop: 2,
+    lineHeight: 34,
+  },
   profileButton: {
-    width: 72,
-    height: 72,
-  },
-  profileImage: { width: 72, height: 72, borderRadius: 0, resizeMode: 'cover' },
-  profilePlaceholder: { 
-    width: 72, 
-    height: 72, 
-    justifyContent: 'center', 
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#0284C7',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  emojiContainer: { justifyContent: 'center', alignItems: 'center' },
+  profileImage: { 
+    width: 46, 
+    height: 46, 
+    borderRadius: 23, 
+    resizeMode: 'cover',
+  },
+  profilePlaceholder: { 
+    width: 46, 
+    height: 46, 
+    borderRadius: 23,
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+  },
+  emojiContainer: { 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    width: 46,
+    height: 46,
+  },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
 
-  // Hero animation card
+  // Hero animation card - White background with increased border radius
   heroCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 85,
     padding: 16,
     marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
+    overflow: 'hidden',
   },
   heroAnimation: {
     width: '100%',
     height: 200,
   },
 
-  // Progress Section
+  // Progress Section - Enhanced glass view effect
   progressContainer: {
-    backgroundColor: 'rgba(66, 137, 186, 0.12)',
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 28,
+    padding: 22,
     marginBottom: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(89, 164, 198, 0.3)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+    overflow: 'hidden',
+  },
+  progressGlassOverlay: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   progressHeader: {
     flexDirection: 'row',
@@ -514,18 +911,23 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     marginBottom: 15,
   },
   progressTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0284C7',
   },
   levelText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#59A4C6',
-    backgroundColor: 'rgba(89, 164, 198, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   xpContainer: {
     flexDirection: 'row',
@@ -533,25 +935,33 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     marginBottom: 10,
   },
   xpText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#59A4C6',
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0284C7',
   },
   nextLevelText: {
     fontSize: 14,
-    color: '#A3C4DD',
+    color: '#0369A1',
+    fontWeight: '600',
   },
   progressBarBackground: {
-    height: 12,
-    backgroundColor: 'rgba(66, 137, 186, 0.3)',
-    borderRadius: 6,
+    height: 16,
+    backgroundColor: '#BFDBFE',
+    borderRadius: 10,
     marginBottom: 20,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#93C5FD',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#59A4C6',
-    borderRadius: 6,
+    backgroundColor: '#0284C7',
+    borderRadius: 8,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statsRow: {
     flexDirection: 'row',
@@ -563,39 +973,50 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     flex: 1,
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0284C7',
     marginTop: 5,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#A3C4DD',
+    fontSize: 13,
+    color: '#0369A1',
     marginTop: 3,
+    fontWeight: '600',
   },
   continueButton: {
     marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#59A4C6',
-    paddingVertical: 14,
-    borderRadius: 14,
+    backgroundColor: '#0284C7',
+    paddingVertical: 16,
+    borderRadius: 18,
     gap: 8,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: '#0EA5E9',
   },
   continueButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
   },
 
   sectionTitle: { 
-    fontSize: 22, 
-    fontWeight: '800', 
-    color: '#FFFFFF', 
-    marginBottom: 15, 
+    fontSize: 24, 
+    fontWeight: '900', 
+    color: '#0369A1', 
+    marginBottom: 18, 
     marginLeft: 5,
-    marginTop: 10,
+    marginTop: 12,
+    textShadowColor: 'rgba(2, 132, 199, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
 
   // Quick Actions
@@ -603,16 +1024,18 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     marginBottom: 25,
   },
   actionCard: {
-    borderRadius: 20,
-    padding: 20,
-    minHeight: 100,
+    borderRadius: 24,
+    padding: 24,
+    minHeight: 110,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    elevation: 8,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   actionTitle: {
     fontSize: 18,
@@ -622,7 +1045,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   },
   actionSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 5,
   },
 
@@ -637,36 +1060,47 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     marginBottom: 15,
   },
   gridItem: {
-    borderRadius: 20,
-    padding: 15,
-    minHeight: 130,
+    borderRadius: 24,
+    padding: 18,
+    minHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   gridIconContainer: {
-    width: 50, 
-    height: 50, 
-    borderRadius: 25,
-    backgroundColor: 'rgba(89,164,198,0.25)',
+    width: 60, 
+    height: 60, 
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center', 
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   gridTitle: { 
-    fontSize: 16, 
-    fontWeight: '800', 
+    fontSize: 18, 
+    fontWeight: '900', 
     color: '#FFF', 
     textAlign: 'center',
-    marginBottom: 5,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   gridSubtitle: { 
-    fontSize: 12, 
-    fontWeight: '600', 
-    color: 'rgba(255,255,255,0.8)', 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: 'rgba(255,255,255,0.95)', 
     marginTop: 2,
     textAlign: 'center',
   },

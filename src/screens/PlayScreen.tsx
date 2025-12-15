@@ -17,13 +17,13 @@ type PlayScreenRouteParams = {
   jsonMethod?: string;
 };
 
-// --- THEME COLORS ---
+// --- THEME COLORS - Matching Home Page Blue Theme ---
 const THEME = {
-  bg: '#F0F8FF',        // Very light Alice Blue
-  primary: '#4FACFE',   // Sky Blue (Header)
+  bg: '#E0F2FE',        // Light blue bg (matching home page)
+  primary: '#0284C7',   // Blue (Header - matching home page)
   bottomBar: '#FFFFFF', // White Bottom Bar
-  accent: '#FFB75E',    // Orange
-  text: '#2C3E50',      // Dark Blue Text
+  accent: '#0EA5E9',    // Light Blue
+  text: '#0369A1',      // Dark Blue Text (matching home page)
   disabled: '#E0E0E0',  // Gray
 };
 
