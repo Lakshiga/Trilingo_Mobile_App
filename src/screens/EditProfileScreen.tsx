@@ -14,6 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService from '../services/api';
+import { getTranslation, Language } from '../utils/translations';
 
 interface EditProfileScreenProps {
   navigation: any;
@@ -23,16 +24,19 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
   const { theme, isDarkMode } = useTheme();
   const { currentUser, updateUser } = useUser();
   
+  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || ('English' as Language);
+  const tx = (key: string): string => getTranslation(nativeLanguage, key as any);
+  
   const [name, setName] = useState(currentUser?.name || '');
   const [email, setEmail] = useState(currentUser?.email || '');
   const [age, setAge] = useState(currentUser?.age || '');
-  const [nativeLanguage, setNativeLanguage] = useState(currentUser?.nativeLanguage || 'English');
+  const [nativeLanguageState, setNativeLanguageState] = useState(currentUser?.nativeLanguage || 'English');
   const [learningLanguage, setLearningLanguage] = useState(currentUser?.learningLanguage || 'Tamil');
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
     if (!name || !email) {
-      Alert.alert('Error', 'Name and email are required');
+      Alert.alert(tx('error'), tx('nameAndEmailRequired'));
       return;
     }
 
@@ -44,10 +48,10 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           name,
           email,
           age,
-          nativeLanguage,
+          nativeLanguage: nativeLanguageState,
           learningLanguage,
         });
-        Alert.alert('Success', 'Profile updated successfully');
+        Alert.alert(tx('success'), tx('profileUpdatedSuccessfully'));
         navigation.goBack();
       } else {
         // For regular users, update on backend
@@ -55,7 +59,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           name,
           email,
           age,
-          nativeLanguage,
+          nativeLanguage: nativeLanguageState,
           learningLanguage,
         });
 
@@ -64,18 +68,18 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
             name,
             email,
             age,
-            nativeLanguage,
+            nativeLanguage: nativeLanguageState,
             learningLanguage,
           });
-          Alert.alert('Success', 'Profile updated successfully');
+          Alert.alert(tx('success'), tx('profileUpdatedSuccessfully'));
           navigation.goBack();
         } else {
-          Alert.alert('Error', response.message || 'Failed to update profile');
+          Alert.alert(tx('error'), response.message || tx('failedToUpdateProfile'));
         }
       }
     } catch (error: any) {
       console.error('Update error:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      Alert.alert(tx('error'), error.message || tx('failedToUpdateProfile'));
     } finally {
       setLoading(false);
     }
@@ -91,14 +95,14 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           <MaterialIcons name="arrow-back" size={24} color={isDarkMode ? '#F9FAFB' : '#1F2937'} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: isDarkMode ? '#F9FAFB' : '#1F2937' }]}>
-          Edit Profile
+          {tx('editProfile')}
         </Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>Name</Text>
+            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>{tx('name')}</Text>
             <TextInput
               style={[
                 styles.input,
@@ -110,13 +114,13 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               ]}
               value={name}
               onChangeText={setName}
-              placeholder="Enter your name"
+              placeholder={tx('enterYourName')}
               placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9CA3AF'}
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>Email</Text>
+            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>{tx('email')}</Text>
             <TextInput
               style={[
                 styles.input,
@@ -128,7 +132,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               ]}
               value={email}
               onChangeText={setEmail}
-              placeholder="Enter your email"
+              placeholder={tx('enterYourEmail')}
               placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9CA3AF'}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -136,7 +140,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>Age</Text>
+            <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>{tx('age')}</Text>
             <TextInput
               style={[
                 styles.input,
@@ -148,7 +152,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               ]}
               value={age}
               onChangeText={setAge}
-              placeholder="Enter your age"
+              placeholder={tx('enterYourAge')}
               placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9CA3AF'}
               keyboardType="numeric"
             />
@@ -156,7 +160,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
 
           <View style={styles.inputContainer}>
             <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>
-              Native Language
+              {tx('nativeLanguage')}
             </Text>
             <TextInput
               style={[
@@ -167,16 +171,16 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
                   borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
                 },
               ]}
-              value={nativeLanguage}
-              onChangeText={setNativeLanguage}
-              placeholder="Enter your native language"
+              value={nativeLanguageState}
+              onChangeText={setNativeLanguageState}
+              placeholder={tx('enterYourNativeLanguage')}
               placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9CA3AF'}
             />
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={[styles.label, { color: isDarkMode ? '#F9FAFB' : '#374151' }]}>
-              Learning Language
+              {tx('learningLanguage')}
             </Text>
             <TextInput
               style={[
@@ -189,7 +193,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               ]}
               value={learningLanguage}
               onChangeText={setLearningLanguage}
-              placeholder="Enter language you're learning"
+              placeholder={tx('enterLanguageLearning')}
               placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9CA3AF'}
             />
           </View>
@@ -207,7 +211,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
             >
               <MaterialIcons name="save" size={24} color="#fff" />
               <Text style={styles.saveButtonText}>
-                {loading ? 'Saving...' : 'Save Changes'}
+                {loading ? tx('saving') : tx('saveChanges')}
               </Text>
             </LinearGradient>
           </TouchableOpacity>

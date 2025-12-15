@@ -401,6 +401,7 @@ const HomeScreen: React.FC = () => {
     title: string;
   } | null>(null);
   const [profileImageError, setProfileImageError] = useState(false);
+  const [profileImageLocal, setProfileImageLocal] = useState<string | null>(null);
   const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
   const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
@@ -430,6 +431,29 @@ const HomeScreen: React.FC = () => {
         return item.name_en || item.name_ta || item.name_si || 'Activity';
     }
   };
+
+  const getProfileStorageKey = (user: any) => {
+    if (!user) return 'guest_profile_image';
+    if ((user as any).isGuest) return 'guest_profile_image';
+    return `profile_image_${user.id || user.username || 'user'}`;
+  };
+
+  useEffect(() => {
+    const loadProfileImageFromStorage = async () => {
+      try {
+        const key = getProfileStorageKey(currentUser);
+        const stored = await AsyncStorage.getItem(key);
+        if (stored) {
+          setProfileImageLocal(stored);
+        } else {
+          setProfileImageLocal(null);
+        }
+      } catch {
+        setProfileImageLocal(null);
+      }
+    };
+    loadProfileImageFromStorage();
+  }, [currentUser]);
 
   useEffect(() => {
     // Load native language preference for UI labels
@@ -584,7 +608,7 @@ const HomeScreen: React.FC = () => {
       );
     }
     
-    const raw = currentUser.profileImageUrl;
+    const raw = profileImageLocal || currentUser.profileImageUrl;
     if (raw && isEmojiLike(raw)) {
       return (
         <View style={[styles.profilePlaceholder, styles.emojiContainer]}>

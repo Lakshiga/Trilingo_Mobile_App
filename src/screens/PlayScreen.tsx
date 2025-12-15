@@ -43,6 +43,8 @@ const PlayScreen: React.FC = () => {
   
   const [exerciseCount, setExerciseCount] = useState(0);
   const [exercises, setExercises] = useState<ExerciseDto[]>([]);
+  const [activityDetails, setActivityDetails] = useState<ActivityDto | null>(null);
+  const [loadingActivityDetails, setLoadingActivityDetails] = useState(false);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [loadingExercises, setLoadingExercises] = useState(true);
   const [conversationContent, setConversationContent] = useState<any>(null);
@@ -84,19 +86,40 @@ const PlayScreen: React.FC = () => {
       }
       try {
         setLoadingExercises(true);
+        // Fetch activity details for fallback (conversation/song content)
+        setLoadingActivityDetails(true);
+        const activityDetail = await apiService.getActivityById(activityId);
+        setActivityDetails(activityDetail || null);
+
         const result = await apiService.getExercisesByActivityId(activityId);
+        const count = result?.length || 0;
         setExercises(result || []);
-        setExerciseCount(result?.length || 0);
+        setExerciseCount(count);
         setCurrentExerciseIndex(0);
+
+        // Fallback: if no exercises but this is a Song or Conversation activity, try details_JSON directly
+        if (count === 0 && (activityTypeId === 6 || activityTypeId === 14)) {
+          const activity: ActivityDto | null = activityDetail || (await apiService.getActivityById(activityId));
+          if (activity?.details_JSON) {
+            setExercises([
+              {
+                id: activity.id,
+                jsonData: activity.details_JSON,
+              } as ExerciseDto,
+            ]);
+            setExerciseCount(1);
+          }
+        }
       } catch (error) {
         setExerciseCount(0);
         setExercises([]);
       } finally {
         setLoadingExercises(false);
+        setLoadingActivityDetails(false);
       }
     };
     fetchExerciseCount();
-  }, [activityId]);
+  }, [activityId, activityTypeId]);
 
   useEffect(() => {
     const fetchConversation = async () => {
@@ -236,11 +259,64 @@ const PlayScreen: React.FC = () => {
             const parsedContent = currentExercise?.jsonData ? safeJsonParse(currentExercise.jsonData) : null;
 
             // Conversation player path: use details_JSON content
-            const isConversation = activityTypeId === 14;
+            const isConversation = Number(activityTypeId) === 14;
 
             let contentForRender = isConversation
-              ? conversationContent || parsedContent
+              ? conversationContent || parsedContent || (activityDetails?.details_JSON ? safeJsonParse(activityDetails.details_JSON) : null)
               : parsedContent;
+
+            // If conversation content came as an array, pick the first item
+            if (isConversation && Array.isArray(contentForRender)) {
+              contentForRender = contentForRender[0] || null;
+            }
+
+            // If still missing for conversation, try parsing current exercise again (fallback)
+            if (isConversation && !contentForRender && currentExercise?.jsonData) {
+              contentForRender = safeJsonParse(currentExercise.jsonData);
+            }
+            // Safety: if still missing, attempt to parse conversationContent directly or use parsedContent
+            if (isConversation && !contentForRender) {
+              contentForRender = safeJsonParse(conversationContent || parsedContent || (activityDetails?.details_JSON ?? ''));
+            }
+            // If still a string (double-encoded), parse once more
+            if (isConversation && typeof contentForRender === 'string') {
+              contentForRender = safeJsonParse(contentForRender);
+            }
+
+            // Final safety: ensure we return a normalized conversation shape so the player renders
+            if (isConversation) {
+              const hasConvData = contentForRender?.conversationData;
+              const looksLikeConv =
+                contentForRender?.dialogues ||
+                contentForRender?.speakers ||
+                contentForRender?.audioUrl;
+
+              if (!hasConvData && looksLikeConv) {
+                contentForRender = {
+                  title: contentForRender?.title || activityTitle || 'Conversation',
+                  instruction: contentForRender?.instruction || '',
+                  conversationData: {
+                    title: contentForRender?.title || activityTitle || 'Conversation',
+                    audioUrl: contentForRender?.audioUrl,
+                    speakers: contentForRender?.speakers || [],
+                    dialogues: contentForRender?.dialogues || [],
+                  },
+                };
+              } else if (hasConvData) {
+                contentForRender = {
+                  title: contentForRender?.title || activityTitle || 'Conversation',
+                  instruction: contentForRender?.instruction || '',
+                  conversationData: contentForRender.conversationData,
+                };
+              } else if (!contentForRender) {
+                // as a last resort, pass an empty skeleton to avoid null
+                contentForRender = {
+                  title: activityTitle || 'Conversation',
+                  instruction: '',
+                  conversationData: { title: activityTitle || 'Conversation', audioUrl: {}, speakers: [], dialogues: [] },
+                };
+              }
+            }
 
             if (isConversation) {
               const hasConversationData = !!contentForRender?.conversationData;
@@ -265,20 +341,16 @@ const PlayScreen: React.FC = () => {
               }
             }
 
-            if (isConversation && loadingConversation) {
-              return <ActivityIndicator size="large" color={THEME.primary} />;
-            }
-
-            if (!isConversation) {
+            if (isConversation) {
+              if (loadingExercises || loadingConversation || loadingActivityDetails) {
+                return <ActivityIndicator size="large" color={THEME.primary} />;
+              }
+            } else {
               if (loadingExercises) {
                 return <ActivityIndicator size="large" color={THEME.primary} />;
               }
               if (!currentExercise || !contentForRender) {
                 return <Text style={{ padding: 16 }}>No exercise content available.</Text>;
-              }
-            } else {
-              if (!contentForRender) {
-                return <Text style={{ padding: 16 }}>No conversation content available.</Text>;
               }
             }
 

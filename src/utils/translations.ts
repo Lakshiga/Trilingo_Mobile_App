@@ -59,14 +59,65 @@ export interface Translations {
   changePassword: string;
   logout: string;
   version: string;
+  editProfile: string;
+  name: string;
+  email: string;
+  age: string;
+  nativeLanguage: string;
+  learningLanguage: string;
+  enterYourName: string;
+  enterYourEmail: string;
+  enterYourAge: string;
+  enterYourNativeLanguage: string;
+  enterLanguageLearning: string;
+  saveChanges: string;
+  saving: string;
+  profileUpdatedSuccessfully: string;
+  failedToUpdateProfile: string;
+  nameAndEmailRequired: string;
+  myProfile: string;
+  myDetails: string;
+  backgroundMusic: string;
+  nightMode: string;
+  level1Explorer: string;
+  stars: string;
+  completed: string;
+  ready: string;
+  pickSticker: string;
+  profilePicture: string;
+  changePicture: string;
+  saveLocally: string;
+  uploadFailed: string;
+  savedLocally: string;
+  sessionExpired: string;
+  pleaseLoginAgain: string;
+  uploadBlocked: string;
+  serverUnavailable: string;
+  awesome: string;
+  profileUpdated: string;
+  cool: string;
+  pictureSaved: string;
+  ohNo: string;
+  needCameraPermission: string;
+  needGalleryPermission: string;
+  newLook: string;
+  howWantToLook: string;
+  pickAvatar: string;
+  takePhoto: string;
+  gallery: string;
+  stay: string;
+  byeBye: string;
+  leaving: string;
+  seeYou: string;
+  verified: string;
   
   // Registration
   whatIsYourName: string;
   enterYourFullName: string;
   whatIsYourAge: string;
-  enterYourAge: string;
+  enterYourAgeReg: string;
   whatIsYourEmail: string;
-  enterYourEmail: string;
+  enterYourEmailReg: string;
   createAccount: string;
   username: string;
   chooseUsername: string;
@@ -179,13 +230,64 @@ const translations: Record<Language, Translations> = {
     notifications: 'Notifications',
     changePassword: 'Change Password',
     logout: 'Logout',
-    version: 'Version 1.0.0',
+    version: 'Version 1.0.0 • Q-bit Kids',
+    editProfile: 'Edit Profile',
+    name: 'Name',
+    email: 'Email',
+    age: 'Age',
+    nativeLanguage: 'Native Language',
+    learningLanguage: 'Learning Language',
+    enterYourName: 'Enter your name',
+    enterYourEmail: 'Enter your email',
+    enterYourAge: 'Enter your age',
+    enterYourNativeLanguage: 'Enter your native language',
+    enterLanguageLearning: 'Enter language you\'re learning',
+    saveChanges: 'Save Changes',
+    saving: 'Saving...',
+    profileUpdatedSuccessfully: 'Profile updated successfully',
+    failedToUpdateProfile: 'Failed to update profile',
+    nameAndEmailRequired: 'Name and email are required',
+    myProfile: 'My Profile',
+    myDetails: 'My Details',
+    backgroundMusic: 'Background Music',
+    nightMode: 'Night Mode',
+    level1Explorer: '⭐ Level 1 Explorer',
+    stars: 'Stars',
+    completed: 'Completed',
+    ready: 'Ready to learn!',
+    pickSticker: 'Pick a Sticker!',
+    profilePicture: 'Profile Picture',
+    changePicture: 'Change Picture',
+    saveLocally: 'Saved on device',
+    uploadFailed: 'Server upload failed',
+    savedLocally: 'Image saved on this device. Server upload failed.',
+    sessionExpired: 'Session Expired',
+    pleaseLoginAgain: 'Please log in again to upload images.',
+    uploadBlocked: 'Upload Blocked',
+    serverUnavailable: 'Image saved locally. Server upload is temporarily unavailable.',
+    awesome: 'Awesome!',
+    profileUpdated: 'Profile picture updated!',
+    cool: 'Cool!',
+    pictureSaved: 'Picture saved on this device.',
+    ohNo: 'Oh no!',
+    needCameraPermission: 'We need camera permission.',
+    needGalleryPermission: 'We need gallery permission.',
+    newLook: 'New Look!',
+    howWantToLook: 'How do you want to look today?',
+    pickAvatar: 'Pick Avatar',
+    takePhoto: 'Take Photo',
+    gallery: 'Gallery',
+    stay: 'Stay',
+    byeBye: 'Bye Bye',
+    leaving: 'Leaving?',
+    seeYou: 'See you next time, hero!',
+    verified: 'Verified',
     whatIsYourName: 'What is your name?',
     enterYourFullName: 'Enter your full name',
     whatIsYourAge: 'What is your age?',
-    enterYourAge: 'Enter your age',
+    enterYourAgeReg: 'Enter your age',
     whatIsYourEmail: 'What is your email address?',
-    enterYourEmail: 'Enter your email',
+    enterYourEmailReg: 'Enter your email',
     createAccount: 'Create an account — please enter:',
     username: 'Username',
     chooseUsername: 'Choose a username',
@@ -282,13 +384,64 @@ const translations: Record<Language, Translations> = {
     notifications: 'அறிவிப்புகள்',
     changePassword: 'கடவுச்சொல்லை மாற்றவும்',
     logout: 'வெளியேறு',
-    version: 'பதிப்பு 1.0.0',
+    version: 'பதிப்பு 1.0.0 • Q-bit Kids',
+    editProfile: 'சுயவிவரத்தை திருத்தவும்',
+    name: 'பெயர்',
+    email: 'மின்னஞ்சல்',
+    age: 'வயது',
+    nativeLanguage: 'தாய்மொழி',
+    learningLanguage: 'கற்றுக்கொள்ளும் மொழி',
+    enterYourName: 'உங்கள் பெயரை உள்ளிடவும்',
+    enterYourEmail: 'உங்கள் மின்னஞ்சலை உள்ளிடவும்',
+    enterYourAge: 'உங்கள் வயதை உள்ளிடவும்',
+    enterYourNativeLanguage: 'உங்கள் தாய்மொழியை உள்ளிடவும்',
+    enterLanguageLearning: 'நீங்கள் கற்றுக்கொள்ளும் மொழியை உள்ளிடவும்',
+    saveChanges: 'மாற்றங்களை சேமிக்கவும்',
+    saving: 'சேமிக்கிறது...',
+    profileUpdatedSuccessfully: 'சுயவிவரம் வெற்றிகரமாக புதுப்பிக்கப்பட்டது',
+    failedToUpdateProfile: 'சுயவிவரத்தை புதுப்பிக்க முடியவில்லை',
+    nameAndEmailRequired: 'பெயர் மற்றும் மின்னஞ்சல் தேவை',
+    myProfile: 'என் சுயவிவரம்',
+    myDetails: 'என் விவரங்கள்',
+    backgroundMusic: 'பின்னணி இசை',
+    nightMode: 'இரவு நிலை',
+    level1Explorer: '⭐ நிலை 1 ஆராய்ச்சியாளர்',
+    stars: 'நட்சத்திரங்கள்',
+    completed: 'நிறைவு',
+    ready: 'படிக்க தயாராக!',
+    pickSticker: 'ஒரு ஸ்டிக்கரைத் தேர்ந்தெடு!',
+    profilePicture: 'சுயவிவரப் படம்',
+    changePicture: 'படத்தை மாற்றவும்',
+    saveLocally: 'சாதனத்தில் சேமிக்கப்பட்டது',
+    uploadFailed: 'சேவையக பதிவேற்றம் தோல்வியுற்றது',
+    savedLocally: 'படம் இந்த சாதனத்தில் சேமிக்கப்பட்டது. சேவையக பதிவேற்றம் தோல்வியுற்றது.',
+    sessionExpired: 'அமர்வு காலாவதியானது',
+    pleaseLoginAgain: 'படங்களைப் பதிவேற்ற மீண்டும் உள்நுழைக.',
+    uploadBlocked: 'பதிவேற்றம் தடுக்கப்பட்டது',
+    serverUnavailable: 'படம் உள்ளூரில் சேமிக்கப்பட்டது. சேவையக பதிவேற்றம் தற்காலிகமாக கிடைக்கவில்லை.',
+    awesome: 'அருமை!',
+    profileUpdated: 'சுயவிவரப் படம் புதுப்பிக்கப்பட்டது!',
+    cool: 'அருமை!',
+    pictureSaved: 'படம் இந்த சாதனத்தில் சேமிக்கப்பட்டது.',
+    ohNo: 'அடடா!',
+    needCameraPermission: 'கேமரா அனுமதி தேவை.',
+    needGalleryPermission: 'கேலரி அனுமதி தேவை.',
+    newLook: 'புதிய தோற்றம்!',
+    howWantToLook: 'இன்று நீங்கள் எப்படி தோற்றம் காட்ட விரும்புகிறீர்களா?',
+    pickAvatar: 'அவதாரத்தைத் தேர்ந்தெடுக்கவும்',
+    takePhoto: 'புகைப்படம் எடுக்கவும்',
+    gallery: 'கேலரி',
+    stay: 'இரு',
+    byeBye: 'பை பை',
+    leaving: 'செல்கிறீர்களா?',
+    seeYou: 'அடுத்த முறை உங்களை பார்க்கலாம், ஹீரோ!',
+    verified: 'சரிபார்க்கப்பட்டது',
     whatIsYourName: 'உங்கள் பெயர் என்ன?',
     enterYourFullName: 'உங்கள் முழு பெயரை உள்ளிடவும்',
     whatIsYourAge: 'உங்கள் வயது என்ன?',
-    enterYourAge: 'உங்கள் வயதை உள்ளிடவும்',
+    enterYourAgeReg: 'உங்கள் வயதை உள்ளிடவும்',
     whatIsYourEmail: 'உங்கள் மின்னஞ்சல் முகவரி என்ன?',
-    enterYourEmail: 'உங்கள் மின்னஞ்சலை உள்ளிடவும்',
+    enterYourEmailReg: 'உங்கள் மின்னஞ்சலை உள்ளிடவும்',
     createAccount: 'கணக்கை உருவாக்கவும் — தயவுசெய்து உள்ளிடவும்:',
     username: 'பயனர்பெயர்',
     chooseUsername: 'பயனர்பெயரைத் தேர்ந்தெடுக்கவும்',
@@ -385,13 +538,64 @@ const translations: Record<Language, Translations> = {
     notifications: 'දැනුම්දීම්',
     changePassword: 'මුරපදය වෙනස් කරන්න',
     logout: 'පිටවීම',
-    version: 'අනුවාදය 1.0.0',
+    version: 'අනුවාදය 1.0.0 • Q-bit Kids',
+    editProfile: 'පැතිකඩ සංස්කරණය කරන්න',
+    name: 'නම',
+    email: 'විද්‍යුත් තැපැල්',
+    age: 'වයස',
+    nativeLanguage: 'මව් භාෂාව',
+    learningLanguage: 'ඉගෙන ගන්නා භාෂාව',
+    enterYourName: 'ඔබේ නම ඇතුළත් කරන්න',
+    enterYourEmail: 'ඔබේ විද්‍යුත් තැපැල් ඇතුළත් කරන්න',
+    enterYourAge: 'ඔබේ වයස ඇතුළත් කරන්න',
+    enterYourNativeLanguage: 'ඔබේ මව් භාෂාව ඇතුළත් කරන්න',
+    enterLanguageLearning: 'ඔබ ඉගෙන ගන්නා භාෂාව ඇතුළත් කරන්න',
+    saveChanges: 'වෙනස්කම් සුරකින්න',
+    saving: 'සුරකිමින්...',
+    profileUpdatedSuccessfully: 'පැතිකඩ සාර්ථකව යාවත්කාලීන කර ඇත',
+    failedToUpdateProfile: 'පැතිකඩ යාවත්කාලීන කිරීමට නොහැකි විය',
+    nameAndEmailRequired: 'නම සහ විද්‍යුත් තැපැල් අවශ්‍යයි',
+    myProfile: 'මගේ ප්‍රොෆයිල්',
+    myDetails: 'මගේ විස්තර',
+    backgroundMusic: 'පසුබිම් සංගීතය',
+    nightMode: 'රාත්‍රී ප්‍රකාරය',
+    level1Explorer: '⭐ මට්ටම් 1 ගවේෂක',
+    stars: 'තරු',
+    completed: 'සම්පූර්ණයි',
+    ready: 'ඉගෙන ගන්න සූදානම්!',
+    pickSticker: 'ස්ටිකර් එකක් තෝරන්න!',
+    profilePicture: 'පැතිකඩ ඡායාරූපය',
+    changePicture: 'රූපය වෙනස් කරන්න',
+    saveLocally: 'උපාංගයේ සුරකින ලදී',
+    uploadFailed: 'සේවාදායකයේ උඩුගත කිරීම අසාර්ථක විය',
+    savedLocally: 'රූපය මෙම උපාංගයේ සුරකින ලදී. සේවාදායකයේ උඩුගත කිරීම අසාර්ථක විය.',
+    sessionExpired: 'සැසිය කල් අවසන් විය',
+    pleaseLoginAgain: 'රූප උඩුගත කිරීමට නැවත පිවිසෙන්න.',
+    uploadBlocked: 'උඩුගත කිරීම අවහිර කර ඇත',
+    serverUnavailable: 'රූපය දේශීයව සුරකින ලදී. සේවාදායකයේ උඩුගත කිරීම තාවකාලිකව නොමැත.',
+    awesome: 'නියමයි!',
+    profileUpdated: 'පැතිකඩ ඡායාරූපය යාවත්කාලීන කර ඇත!',
+    cool: 'නියමයි!',
+    pictureSaved: 'රූපය මෙම උපාංගයේ සුරකින ලදී.',
+    ohNo: 'ඕහෝ නැහැ!',
+    needCameraPermission: 'අපිට කැමරා අවසරය අවශ්‍යයි.',
+    needGalleryPermission: 'අපිට ගැලරි අවසරය අවශ්‍යයි.',
+    newLook: 'නව පෙනුම!',
+    howWantToLook: 'අද ඔබ කෙසේ පෙනී සිටින්න කැමතිද?',
+    pickAvatar: 'අවතාරයක් තෝරන්න',
+    takePhoto: 'ඡායාරූපයක් ගන්න',
+    gallery: 'ගැලරිය',
+    stay: 'ඉන්න',
+    byeBye: 'බායි බායි',
+    leaving: 'යනවාද?',
+    seeYou: 'ඊළඟ වර ඔබව දැකින්නේ මමු, හීරෝ!',
+    verified: 'සත්‍යාපනය කළ',
     whatIsYourName: 'ඔබේ නම කුමක්ද?',
     enterYourFullName: 'ඔබේ සම්පූර්ණ නම ඇතුළත් කරන්න',
     whatIsYourAge: 'ඔබේ වයස කුමක්ද?',
-    enterYourAge: 'ඔබේ වයස ඇතුළත් කරන්න',
+    enterYourAgeReg: 'ඔබේ වයස ඇතුළත් කරන්න',
     whatIsYourEmail: 'ඔබේ විද්‍යුත් තැපැල් ලිපිනය කුමක්ද?',
-    enterYourEmail: 'ඔබේ විද්‍යුත් තැපැල් ඇතුළත් කරන්න',
+    enterYourEmailReg: 'ඔබේ විද්‍යුත් තැපැල් ඇතුළත් කරන්න',
     createAccount: 'ගිණුමක් සාදන්න — කරුණාකර ඇතුළත් කරන්න:',
     username: 'පරිශීලක නාමය',
     chooseUsername: 'පරිශීලක නාමයක් තෝරන්න',
@@ -448,4 +652,3 @@ export const getTranslation = (language: Language, key: keyof Translations): str
 export const getTranslations = (language: Language): Translations => {
   return translations[language] || translations.English;
 };
-

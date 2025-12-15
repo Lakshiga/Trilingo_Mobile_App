@@ -107,7 +107,7 @@ const ConversationScreen: React.FC = () => {
   }, [learningLanguage, nativeLanguage]);
 
   const handleConversationPress = (activity: ActivityDto) => {
-    const conversationName = getLearningLanguageField(learningLanguage, activity);
+    const conversationName = getConversationName(activity);
     (navigation as any).navigate('PlayScreen', {
       activityId: activity.id,
       activityTypeId: activity.activityTypeId,
@@ -116,7 +116,15 @@ const ConversationScreen: React.FC = () => {
   };
 
   const getConversationName = (activity: ActivityDto) => {
-    return getLearningLanguageField(learningLanguage, activity);
+    switch (nativeLanguage) {
+      case 'Tamil':
+        return activity.name_ta || activity.name_en || activity.name_si || activity.name_ta || '';
+      case 'Sinhala':
+        return activity.name_si || activity.name_en || activity.name_ta || activity.name_si || '';
+      case 'English':
+      default:
+        return activity.name_en || activity.name_ta || activity.name_si || activity.name_en || '';
+    }
   };
 
   if (loading) {
