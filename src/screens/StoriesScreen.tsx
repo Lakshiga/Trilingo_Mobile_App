@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
-import { Language } from '../utils/translations';
+import { getTranslations, Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
 import {
   findActivityTypeIds,
@@ -47,6 +48,17 @@ const StoriesScreen: React.FC = () => {
   const { theme, isDarkMode } = useTheme();
   const { currentUser } = useUser();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
+  const t = useMemo(() => getTranslations(nativeLanguage), [nativeLanguage]);
+
+  useEffect(() => {
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+    };
+    loadLang();
+  }, []);
   
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
@@ -253,11 +265,11 @@ const StoriesScreen: React.FC = () => {
     // Handler for when the story card is pressed
     const handleStoryPress = () => {
       // Navigate to the DynamicActivityScreen with the story's activity data
-      (navigation as any).navigate('DynamicActivity', {
-        activityTypeId: story.activityId,
-        activityTitle: 'Stories', // This will show "Stories" as the title
-        storyData: story.storyData,
-      });
+          (navigation as any).navigate('DynamicActivity', {
+            activityTypeId: story.activityId,
+            activityTitle: t.storiesTitle, // localized title
+            storyData: story.storyData,
+          });
     };
 
     const cardStyle = {
@@ -336,7 +348,7 @@ const StoriesScreen: React.FC = () => {
             {/* Read button */}
             <View style={styles.readButton}>
               <MaterialIcons name="play-arrow" size={20} color="#fff" />
-              <Text style={styles.readText}>Read</Text>
+              <Text style={styles.readText}>{t.storiesReadLabel}</Text>
             </View>
 
             {/* Decorative corner */}
@@ -385,8 +397,8 @@ const StoriesScreen: React.FC = () => {
             ]}
           >
             <Text style={styles.headerEmoji}>📚</Text>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Story Time!</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Pick a story to read</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{t.storiesTitle}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t.storiesSubtitle}</Text>
           </Animated.View>
 
           {/* Loading Indicator */}
@@ -399,7 +411,7 @@ const StoriesScreen: React.FC = () => {
                 style={styles.loadingAnimation}
               />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-                Loading stories...
+                {t.storiesLoading}
               </Text>
             </View>
           )}
@@ -414,10 +426,10 @@ const StoriesScreen: React.FC = () => {
               ) : (
                 <View style={styles.emptyContainer}>
                   <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                    No stories available yet.
+                    {t.storiesEmptyTitle}
                   </Text>
                   <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                    Check back later!
+                    {t.storiesEmptySubtitle}
                   </Text>
                 </View>
               )}

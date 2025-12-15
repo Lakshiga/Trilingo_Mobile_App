@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Fragment, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Dimensions, StatusBar, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons, Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
@@ -126,13 +127,14 @@ const PlayScreen: React.FC = () => {
     return null;
   }
 
-  const handleNextExercise = () => {
+  const handleNextExercise = async () => {
     const count = exercises.length || exerciseCount;
     if (currentExerciseIndex < count - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
     } else {
-      // Finish: submit progress (10 stars) then exit
-      submitProgress().finally(() => navigation.goBack());
+      // Finish: submit progress (10 stars) then exit after save
+      await submitProgress();
+      navigation.goBack();
     }
   };
 
@@ -145,9 +147,27 @@ const PlayScreen: React.FC = () => {
   // --- Progress submit logic ---
   const submitProgress = async () => {
     try {
-      if (!activityId || !currentUser?.id) return;
-      // NOTE: replace with selected student id if you store it elsewhere
-      const studentId = currentUser.id;
+      if (!activityId) return;
+
+      // Prefer cached student profile id (child), fallback to currentUser.id
+      let studentId: string | undefined = undefined;
+      try {
+        const raw = await AsyncStorage.getItem('@trilingo_student_profile');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          studentId = parsed?.id || parsed?.studentId;
+        }
+      } catch {
+        // ignore cache errors
+      }
+      if (!studentId && currentUser?.id) {
+        studentId = currentUser.id;
+      }
+      if (!studentId) {
+        Alert.alert('Oops', 'Student profile missing. Please re-login.');
+        return;
+      }
+
       await apiService.postStudentProgress({
         studentId,
         activityId,
@@ -157,6 +177,7 @@ const PlayScreen: React.FC = () => {
         attemptNumber: 1,
         isCompleted: true,
       });
+      // Optional: you could toast success here
     } catch (error: any) {
       const msg = error?.response?.data?.message || `${error}`;
       if (typeof msg === 'string' && msg.toLowerCase().includes('already recorded')) {

@@ -20,6 +20,7 @@ import { useUser } from '../context/UserContext';
 import apiService, { StageDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import { useResponsive } from '../utils/responsive';
 import { findMainActivityIds, LEARNING_MAIN_ACTIVITY_NAMES, filterActivitiesByIds } from '../utils/activityMappings';
 
@@ -36,6 +37,7 @@ const LessonsScreen: React.FC = () => {
   const { currentUser } = useUser();
   const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
   const params = route.params as RouteParams;
   const levelId = params?.levelId || 1;
@@ -100,7 +102,16 @@ const LessonsScreen: React.FC = () => {
       }
     };
 
-    if (levelId) fetchLessons();
+    const loadLangAndFetch = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+      if (levelId) {
+        await fetchLessons();
+      }
+    };
+
+    loadLangAndFetch();
 
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -122,12 +133,23 @@ const LessonsScreen: React.FC = () => {
     }
     (navigation as any).navigate('LessonActivities', { 
       lessonId: lesson.id, 
-      lessonName: getLearningLanguageField(learningLanguage, lesson),
+      lessonName: getLessonName(lesson),
       levelId: levelId 
     });
   };
 
-  const getLessonName = (lesson: StageDto) => getLearningLanguageField(learningLanguage, lesson);
+  const getLessonName = (lesson: StageDto) => {
+    // Use student's native language for list/UI; fallback to learning language if missing
+    switch (nativeLanguage) {
+      case 'Tamil':
+        return lesson.name_ta || getLearningLanguageField(learningLanguage, lesson);
+      case 'Sinhala':
+        return lesson.name_si || getLearningLanguageField(learningLanguage, lesson);
+      case 'English':
+      default:
+        return lesson.name_en || getLearningLanguageField(learningLanguage, lesson);
+    }
+  };
 
   const styles = getStyles(responsive, THEME_COLOR, ACCENT_COLOR, TEXT_COLOR, BG_COLOR);
 
