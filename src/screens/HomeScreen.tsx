@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, 
   StatusBar, ActivityIndicator, Alert, Animated, Easing, Dimensions 
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../theme/ThemeContext';
@@ -14,6 +14,8 @@ import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
 import { useResponsive } from '../utils/responsive';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 import apiService, { ProgressSummaryDto, ActivityDto, ActivityTypeDto } from '../services/api';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
+import { Language, getTranslations } from '../utils/translations';
 import LottieView from 'lottie-react-native';
 
 const { width } = Dimensions.get('window');
@@ -400,6 +402,7 @@ const HomeScreen: React.FC = () => {
   } | null>(null);
   const [profileImageError, setProfileImageError] = useState(false);
   const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
   // Animation refs for entrance animations
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -407,14 +410,36 @@ const HomeScreen: React.FC = () => {
   const categoriesAnim = useRef(new Animated.Value(0)).current;
 
   // DATA definition inside component - Blue/Teal theme matching admin dashboard with cartoon images
+  const t = getTranslations(nativeLanguage);
   const categories: CategoryItem[] = [
-    { id: 'stories', title: 'Story Time', subtitle: 'Read', type: 'stories', icon: 'book-open-page-variant', colors: ['#0EA5E9', '#0284C7'], imagePath: require('../../assets/story-play.png') },
-    { id: 'videos', title: 'Cartoons', subtitle: 'Watch', type: 'videos', icon: 'youtube-tv', colors: ['#0369A1', '#075985'], imagePath: require('../../assets/watching-video.png') },
-    { id: 'songs', title: 'Music', subtitle: 'Dance', type: 'songs', icon: 'music-circle', colors: ['#0284C7', '#0EA5E9'], imagePath: require('../../assets/listen-song.png') },
-    { id: 'conversation', title: 'Speak Up', subtitle: 'Talk', type: 'conversation', icon: 'microphone', colors: ['#075985', '#0369A1'], imagePath: require('../../assets/conversation.png') }
+    { id: 'stories', title: t.homeStoryTitle, subtitle: t.homeStorySubtitle, type: 'stories', icon: 'book-open-page-variant', colors: ['#0EA5E9', '#0284C7'], imagePath: require('../../assets/story-play.png') },
+    { id: 'videos', title: t.homeVideosTitle, subtitle: t.homeVideosSubtitle, type: 'videos', icon: 'youtube-tv', colors: ['#0369A1', '#075985'], imagePath: require('../../assets/watching-video.png') },
+    { id: 'songs', title: t.homeSongsTitle, subtitle: t.homeSongsSubtitle, type: 'songs', icon: 'music-circle', colors: ['#0284C7', '#0EA5E9'], imagePath: require('../../assets/listen-song.png') },
+    { id: 'conversation', title: t.homeConversationTitle, subtitle: t.homeConversationSubtitle, type: 'conversation', icon: 'microphone', colors: ['#075985', '#0369A1'], imagePath: require('../../assets/conversation.png') }
   ];
 
+  // Get activity/lesson names in student's native language; fall back gracefully
+  const getActivityNameForLang = (item: { name_en?: string; name_ta?: string; name_si?: string }) => {
+    switch (nativeLanguage) {
+      case 'Tamil':
+        return item.name_ta || item.name_en || item.name_si || 'Activity';
+      case 'Sinhala':
+        return item.name_si || item.name_en || item.name_ta || 'Activity';
+      case 'English':
+      default:
+        return item.name_en || item.name_ta || item.name_si || 'Activity';
+    }
+  };
+
   useEffect(() => {
+    // Load native language preference for UI labels
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+    };
+    loadLang();
+
     // Entrance animations
     Animated.stagger(200, [
       Animated.spring(headerAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
@@ -423,82 +448,91 @@ const HomeScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        if (currentUser?.id) {
-          try {
-            const s = await apiService.getStudentSummary(currentUser.id);
-            setSummary(s || null);
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Prefer cached student profile id (child), fallback to currentUser.id
+      const studentId = cachedStudentProfile?.id || currentUser?.id;
+      if (studentId) {
+        try {
+          const s = await apiService.getStudentSummary(studentId);
+          setSummary(s || null);
 
-            if (s) {
-              setProgressData({
-                totalActivitiesCompleted: s.totalActivitiesCompleted,
-                totalActivitiesAttempted: s.totalActivitiesAttempted,
-                averageScore: s.averageScore,
-                totalXpPoints: s.totalXpPoints,
-                totalTimeSpentSeconds: s.totalTimeSpentSeconds,
-                level: Math.floor(s.totalXpPoints / 300) + 1,
-                nextLevelXp: ((Math.floor(s.totalXpPoints / 300) + 1) * 300)
-              });
-            }
+          if (s) {
+            setProgressData({
+              totalActivitiesCompleted: s.totalActivitiesCompleted,
+              totalActivitiesAttempted: s.totalActivitiesAttempted,
+              averageScore: s.averageScore,
+              totalXpPoints: s.totalXpPoints,
+              totalTimeSpentSeconds: s.totalTimeSpentSeconds,
+              level: Math.floor(s.totalXpPoints / 300) + 1,
+              nextLevelXp: ((Math.floor(s.totalXpPoints / 300) + 1) * 300)
+            });
+          }
 
-            // Determine continue target from most recent completed activity -> move to the next one if available
-            const recent = s?.recentActivities?.[0];
-            if (recent?.activityId) {
-              try {
-                // Try to derive next activity: current activity + 1 (sequence-based)
-                const currentActivity = await apiService.getActivityById(recent.activityId);
-                if (currentActivity) {
-                  // heuristic: fetch the list for the same stage and pick the next by sequenceOrder
-                  const siblings = await apiService.getActivitiesByStage(currentActivity.stageId);
-                  const sorted = siblings.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
-                  const idx = sorted.findIndex(a => a.id === currentActivity.id);
-                  const next = idx >= 0 && idx + 1 < sorted.length ? sorted[idx + 1] : currentActivity;
-                  const activityType: ActivityTypeDto | null = await apiService.getActivityTypeById(next.activityTypeId);
-                  if (activityType) {
-                    setContinueTarget({
-                      activityId: next.id,
-                      activityTypeId: activityType.id,
-                      title: next.name_en || next.name_ta || next.name_si || 'Activity',
-                    });
-                  } else {
-                    setContinueTarget(null);
-                  }
+          // Determine continue target from most recent completed activity -> move to the next one if available
+          const recent = s?.recentActivities?.[0];
+          if (recent?.activityId) {
+            try {
+              // Try to derive next activity: current activity + 1 (sequence-based)
+              const currentActivity = await apiService.getActivityById(recent.activityId);
+              if (currentActivity) {
+                // heuristic: fetch the list for the same stage and pick the next by sequenceOrder
+                const siblings = await apiService.getActivitiesByStage(currentActivity.stageId);
+                const sorted = siblings.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+                const idx = sorted.findIndex(a => a.id === currentActivity.id);
+                const next = idx >= 0 && idx + 1 < sorted.length ? sorted[idx + 1] : currentActivity;
+                const activityType: ActivityTypeDto | null = await apiService.getActivityTypeById(next.activityTypeId);
+                if (activityType) {
+                  setContinueTarget({
+                    activityId: next.id,
+                    activityTypeId: activityType.id,
+                    title: getActivityNameForLang(next),
+                  });
+                } else {
+                  setContinueTarget(null);
                 }
-              } catch {
-                setContinueTarget(null);
               }
-            } else {
+            } catch {
               setContinueTarget(null);
             }
-          } catch (error) {
-            console.warn('Failed to fetch progress data:', error);
-            setProgressData(prev => prev || {
-              totalActivitiesCompleted: 0,
-              totalActivitiesAttempted: 0,
-              averageScore: 0,
-              totalXpPoints: 0,
-              totalTimeSpentSeconds: 0,
-              level: 1,
-              nextLevelXp: 300
-            });
-            setSummary(null);
+          } else {
             setContinueTarget(null);
           }
-        } else {
+        } catch (error) {
+          console.warn('Failed to fetch progress data:', error);
+          setProgressData(prev => prev || {
+            totalActivitiesCompleted: 0,
+            totalActivitiesAttempted: 0,
+            averageScore: 0,
+            totalXpPoints: 0,
+            totalTimeSpentSeconds: 0,
+            level: 1,
+            nextLevelXp: 300
+          });
           setSummary(null);
           setContinueTarget(null);
         }
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setLoading(false);
+      } else {
+        setSummary(null);
+        setContinueTarget(null);
       }
-    };
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setLoading(false);
+    }
+  }, [currentUser?.id, cachedStudentProfile?.id, nativeLanguage]);
+
+  useEffect(() => {
     fetchData();
-  }, [currentUser?.id]);
+  }, [fetchData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   useEffect(() => {
     // Load cached student profile (nickname) saved after child creation
@@ -529,11 +563,16 @@ const HomeScreen: React.FC = () => {
     const routeMap: Record<string, string> = {
       learning: 'Lessons',
       songs: 'Songs',
+      music: 'Songs', // alias to ensure Music card always opens songs list
       videos: 'Videos',
       stories: 'Stories',
       conversation: 'Conversation',
     };
-    navigation.navigate(routeMap[categoryType] as never);
+
+    const route = routeMap[categoryType];
+    if (route) {
+      navigation.navigate(route as never);
+    }
   };
 
   const renderProfileImage = () => {
@@ -634,7 +673,7 @@ const HomeScreen: React.FC = () => {
         ]}
       >
         <View style={styles.headerTextContainer}>
-          <Text style={styles.greetingText}>Hello,</Text>
+          <Text style={styles.greetingText}>{t.homeHello},</Text>
           <Text style={styles.appName}>
             {displayName}{' '}
             <Text>👋</Text>
@@ -683,13 +722,13 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.progressGlassOverlay}>
                 <View style={styles.progressHeader}>
-                  <Text style={styles.progressTitle}>Your Progress</Text>
-                  <Text style={styles.levelText}>Level {String(progressData.level || 1)}</Text>
+                  <Text style={styles.progressTitle}>{t.homeProgressTitle}</Text>
+                  <Text style={styles.levelText}>{t.homeLevelLabel} {String(progressData.level || 1)}</Text>
                 </View>
                 
                 <View style={styles.xpContainer}>
                   <Text style={styles.xpText}>{String(progressData.totalXpPoints || 0)} XP</Text>
-                  <Text style={styles.nextLevelText}>Next level: {String(progressData.nextLevelXp || 300)} XP</Text>
+                  <Text style={styles.nextLevelText}>{t.homeNextLevel} {String(progressData.nextLevelXp || 300)} XP</Text>
                 </View>
                 
                 <View style={styles.progressBarBackground}>
@@ -708,37 +747,37 @@ const HomeScreen: React.FC = () => {
                   <View style={styles.statBox}>
                     <MaterialCommunityIcons name="star" size={24} color="#0284C7" />
                     <Text style={styles.statValue}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
-                    <Text style={styles.statLabel}>Stars</Text>
+                    <Text style={styles.statLabel}>{t.homeStarsLabel}</Text>
                   </View>
                   
                   <View style={styles.statBox}>
                     <MaterialCommunityIcons name="trophy" size={24} color="#0369A1" />
                     <Text style={styles.statValue}>{String(progressData.level || 1)}</Text>
-                    <Text style={styles.statLabel}>Level</Text>
+                    <Text style={styles.statLabel}>{t.homeLevelLabel}</Text>
                   </View>
                   
                   <View style={styles.statBox}>
                     <MaterialCommunityIcons name="chart-line" size={24} color="#0EA5E9" />
                     <Text style={styles.statValue}>{String(Math.round(progressData.averageScore || 0))}%</Text>
-                    <Text style={styles.statLabel}>Accuracy</Text>
+                    <Text style={styles.statLabel}>{t.homeAccuracyLabel}</Text>
                   </View>
                   
                   <View style={styles.statBox}>
                     <MaterialCommunityIcons name="clock-outline" size={24} color="#0284C7" />
                     <Text style={styles.statValue}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
-                    <Text style={styles.statLabel}>Time</Text>
+                    <Text style={styles.statLabel}>{t.homeTimeLabel}</Text>
                   </View>
                 </View>
 
                 {continueTarget && (
                   <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                    <Text style={styles.continueButtonText}>Continue</Text>
+                    <Text style={styles.continueButtonText}>{t.continue}</Text>
                     <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
                   </TouchableOpacity>
                 )}
                 {!continueTarget && (
                   <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                    <Text style={styles.continueButtonText}>Start</Text>
+                    <Text style={styles.continueButtonText}>{t.start}</Text>
                     <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
                   </TouchableOpacity>
                 )}
@@ -747,21 +786,6 @@ const HomeScreen: React.FC = () => {
            </Animated.View>
          )}
 
-        {/* --- QUICK ACTIONS --- */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        
-        <View style={styles.quickActionsContainer}>
-          <BouncyButton onPress={() => handleNavigation('learning')}>
-            <LinearGradient 
-              colors={['#0284C7', '#0369A1']} 
-              style={styles.actionCard}
-            >
-              <MaterialCommunityIcons name="map-marker-path" size={32} color="#FFF" />
-              <Text style={styles.actionTitle}>Adventure Map</Text>
-              <Text style={styles.actionSubtitle}>Continue your journey</Text>
-            </LinearGradient>
-          </BouncyButton>
-        </View>
 
         {/* --- ACTIVITY CATEGORIES (Animated) --- */}
         <Animated.View
@@ -775,7 +799,7 @@ const HomeScreen: React.FC = () => {
             }],
           }}
         >
-          <Text style={styles.sectionTitle}>Learning Categories 🎨</Text>
+          <Text style={styles.sectionTitle}>{t.homeCategoriesTitle} 🎨</Text>
           
           <View style={styles.gridContainer}>
             {categories.map((item, index) => (
@@ -808,6 +832,7 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     paddingHorizontal: 20,
     // Use symmetric vertical padding so text + profile icon sit exactly in the center
     paddingVertical: 12,
+    marginTop: 12,
     marginBottom: 15,
   },
   headerTextContainer: {

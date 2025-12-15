@@ -18,6 +18,7 @@ import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto, ActivityTypeDto, ProgressDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
 import { Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import { useResponsive } from '../utils/responsive';
 
 interface RouteParams {
@@ -37,6 +38,7 @@ const LessonActivitiesScreen: React.FC = () => {
   const { currentUser } = useUser();
   const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
   const params = route.params as RouteParams;
   const lessonId = params?.lessonId || 1;
@@ -120,7 +122,13 @@ const LessonActivitiesScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      fetchActivities();
+      const loadLangAndFetch = async () => {
+        const pref = await loadStudentLanguagePreference();
+        const native = languageCodeToLanguage(pref.nativeLanguageCode);
+        setNativeLanguage(native);
+        await fetchActivities();
+      };
+      loadLangAndFetch();
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
@@ -133,13 +141,21 @@ const LessonActivitiesScreen: React.FC = () => {
     (navigation as any).navigate('PlayScreen', {
       activityId: activity.id,
       activityTypeId: activityType.id,
-      activityTitle: getLearningLanguageField(learningLanguage, activity),
+      activityTitle: getActivityName(activity),
       jsonMethod: activityType.jsonMethod,
     });
   };
 
   const getActivityName = (activity: ActivityDto) => {
-    return getLearningLanguageField(learningLanguage, activity);
+    switch (nativeLanguage) {
+      case 'Tamil':
+        return activity.name_ta || getLearningLanguageField(learningLanguage, activity);
+      case 'Sinhala':
+        return activity.name_si || getLearningLanguageField(learningLanguage, activity);
+      case 'English':
+      default:
+        return activity.name_en || getLearningLanguageField(learningLanguage, activity);
+    }
   };
 
   // Helper to get icon based on name/type

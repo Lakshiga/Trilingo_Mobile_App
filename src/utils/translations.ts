@@ -6,6 +6,50 @@ export interface Translations {
   welcomeTo: string;
   learnWithFun: string;
   startLearningAdventure: string;
+  homeHello: string;
+  homeProgressTitle: string;
+  homeNextLevel: string;
+  homeStarsLabel: string;
+  homeLevelLabel: string;
+  homeAccuracyLabel: string;
+  homeTimeLabel: string;
+  homeAdventureTitle: string;
+  homeAdventureSubtitle: string;
+  homeCategoriesTitle: string;
+  homeStoryTitle: string;
+  homeStorySubtitle: string;
+  homeVideosTitle: string;
+  homeVideosSubtitle: string;
+  homeSongsTitle: string;
+  homeSongsSubtitle: string;
+  homeConversationTitle: string;
+  homeConversationSubtitle: string;
+  homeQuickActionsTitle: string;
+
+  // Songs Screen
+  songsTitle: string;
+  songsSearchPlaceholder: string;
+  songsLoading: string;
+  songsEmptyTitle: string;
+  songsEmptySubtitle: string;
+  songsNowPlaying: string;
+  songsUnknown: string;
+
+  // Stories Screen
+  storiesTitle: string;
+  storiesLoading: string;
+  storiesEmptyTitle: string;
+  storiesEmptySubtitle: string;
+  storiesSubtitle: string;
+  storiesReadLabel: string;
+
+  // Conversation Screen
+  conversationTitle: string;
+  conversationSubtitle: string;
+  conversationLoading: string;
+  conversationEmptyTitle: string;
+  conversationEmptySubtitle: string;
+  conversationCardSubtitle: string;
   
   // Profile Screen
   settings: string;
@@ -91,6 +135,44 @@ const translations: Record<Language, Translations> = {
     welcomeTo: 'Welcome to',
     learnWithFun: 'Learn with Fun & Creativity',
     startLearningAdventure: '🌟 Start learning 🌟',
+    homeHello: 'Hello',
+    homeProgressTitle: 'Your Progress',
+    homeNextLevel: 'Next level:',
+    homeStarsLabel: 'Stars',
+    homeLevelLabel: 'Level',
+    homeAccuracyLabel: 'Accuracy',
+    homeTimeLabel: 'Time',
+    homeAdventureTitle: 'Adventure Map',
+    homeAdventureSubtitle: 'Continue your journey',
+    homeCategoriesTitle: 'Learning Categories',
+    homeStoryTitle: 'Story Time',
+    homeStorySubtitle: 'Read',
+    homeVideosTitle: 'Cartoons',
+    homeVideosSubtitle: 'Watch',
+    homeSongsTitle: 'Music',
+    homeSongsSubtitle: 'Dance',
+    homeConversationTitle: 'Speak Up',
+    homeConversationSubtitle: 'Talk',
+    homeQuickActionsTitle: 'Quick Actions',
+    songsTitle: 'Songs',
+    songsSearchPlaceholder: 'Search songs or artists...',
+    songsLoading: 'Loading songs...',
+    songsEmptyTitle: 'No songs available yet.',
+    songsEmptySubtitle: 'Check back later!',
+    songsNowPlaying: '🎵 Now Playing 🎵',
+    songsUnknown: 'Unknown Song',
+    storiesTitle: 'Stories',
+    storiesLoading: 'Loading stories...',
+    storiesEmptyTitle: 'No stories available yet.',
+    storiesEmptySubtitle: 'Check back later!',
+    storiesSubtitle: 'Pick a story to read',
+    storiesReadLabel: 'Read',
+    conversationTitle: 'Speak Up!',
+    conversationSubtitle: 'Practice speaking with guided chats',
+    conversationLoading: 'Loading conversations...',
+    conversationEmptyTitle: 'No conversations available yet. 🎤',
+    conversationEmptySubtitle: 'Check back later for fun chats!',
+    conversationCardSubtitle: 'Conversation • Guided',
     settings: 'Settings',
     changeLanguage: 'Change Language',
     darkMode: 'Dark Mode',
@@ -152,10 +234,48 @@ const translations: Record<Language, Translations> = {
     completeExercisesBelow: 'Complete the exercises below',
   },
   Tamil: {
-    welcome: 'ட்ரிலிங்கோவிற்கு வரவேற்கிறோம்!',
+    welcome: 'Q-bit ற்கு வரவேற்கிறோம்!',
     welcomeTo: 'வரவேற்கிறோம்',
     learnWithFun: 'வேடிக்கையுடனும் படைப்பாற்றலுடனும் கற்றுக்கொள்ளுங்கள்',
     startLearningAdventure: '🌟கற்கத் தொடங்குங்கள்!🌟',
+    homeHello: 'வணக்கம்',
+    homeProgressTitle: 'உங்கள் முன்னேற்றம்',
+    homeNextLevel: 'அடுத்த நிலை:',
+    homeStarsLabel: 'நட்சத்திரங்கள்',
+    homeLevelLabel: 'நிலை',
+    homeAccuracyLabel: 'துல்லியம்',
+    homeTimeLabel: 'நேரம்',
+    homeAdventureTitle: 'சாகச வரைபடம்',
+    homeAdventureSubtitle: 'உங்கள் பயணத்தைத் தொடருங்கள்',
+    homeCategoriesTitle: 'கற்பது வகைகள்',
+    homeStoryTitle: 'கதைகள்',
+    homeStorySubtitle: 'படிக்க',
+    homeVideosTitle: 'கார்ட்டூன்கள்',
+    homeVideosSubtitle: 'பார்க்க',
+    homeSongsTitle: 'பாடல்கள்',
+    homeSongsSubtitle: 'நடனமாட',
+    homeConversationTitle: 'பேசிப் பழகுங்கள்',
+    homeConversationSubtitle: 'பேச',
+    homeQuickActionsTitle: 'விரைவு செயல்கள்',
+    songsTitle: 'பாடல்கள்',
+    songsSearchPlaceholder: 'பாடல்கள் அல்லது கலைஞர்களைத் தேடவும்...',
+    songsLoading: 'பாடல்கள் ஏற்றப்படுகிறது...',
+    songsEmptyTitle: 'பாடல்கள் இதுவரை இல்லை.',
+    songsEmptySubtitle: 'பிறகு சரிபார்க்கவும்!',
+    songsNowPlaying: '🎵 தற்போது இயங்குகிறது 🎵',
+    songsUnknown: 'அறியப்படாத பாடல்',
+    storiesTitle: 'கதைகள்',
+    storiesLoading: 'கதைகள் ஏற்றப்படுகிறது...',
+    storiesEmptyTitle: 'கதைகள் இதுவரை இல்லை.',
+    storiesEmptySubtitle: 'பிறகு சரிபார்க்கவும்!',
+    storiesSubtitle: 'படிக்க ஒரு கதையைத் தேர்ந்தெடுக்கவும்',
+    storiesReadLabel: 'படிக்க',
+    conversationTitle: 'பேசிப் பழகுங்கள்!',
+    conversationSubtitle: 'வழிகாட்டிய உரையாடல்களுடன் பேச பழகவும்',
+    conversationLoading: 'உரையாடல்கள் ஏற்றப்படுகிறது...',
+    conversationEmptyTitle: 'உரையாடல்கள் இன்னும் இல்லை. 🎤',
+    conversationEmptySubtitle: 'பின்னர் வேடிக்கையான உரையாடல்களைச் சரிபார்க்கவும்!',
+    conversationCardSubtitle: 'உரையாடல் • வழிகாட்டப்பட்டது',
     settings: 'அமைப்புகள்',
     changeLanguage: 'மொழியை மாற்றவும்',
     darkMode: 'இருண்ட பயன்முறை',
@@ -221,6 +341,44 @@ const translations: Record<Language, Translations> = {
     welcomeTo: 'සාදරයෙන් පිළිගනිමු',
     learnWithFun: 'විනෝදයෙන් සහ නිර්මාණශීලීව ඉගෙන ගන්න',
     startLearningAdventure: '🌟 කර්ක තොඩංගුන්කල් 🌟',
+    homeHello: 'හෙලෝ',
+    homeProgressTitle: 'ඔබේ ප්‍රගතිය',
+    homeNextLevel: 'ඊළඟ මට්ටම:',
+    homeStarsLabel: 'තරු',
+    homeLevelLabel: 'මට්ටම',
+    homeAccuracyLabel: 'නායනිකතාව',
+    homeTimeLabel: 'කාලය',
+    homeAdventureTitle: 'ඇඩ්වෙන්චර් මැප්',
+    homeAdventureSubtitle: 'ඔබේ ගමන දිගටම',
+    homeCategoriesTitle: 'ඉගෙනීමේ ප්‍රභේද',
+    homeStoryTitle: 'කතා',
+    homeStorySubtitle: 'කියවන්න',
+    homeVideosTitle: 'කාටූන්',
+    homeVideosSubtitle: 'බලන්න',
+    homeSongsTitle: 'සිඟිති ගී',
+    homeSongsSubtitle: 'නටන්න',
+    homeConversationTitle: 'කතා බහ',
+    homeConversationSubtitle: 'කතා කරන්න',
+    homeQuickActionsTitle: 'ක්ෂණික ක්‍රියාකාරකම්',
+    songsTitle: 'ගීත',
+    songsSearchPlaceholder: 'ගීත හෝ කලාකරුවන් සොයන්න...',
+    songsLoading: 'ගීත පූරණය වෙමින්...',
+    songsEmptyTitle: 'ගීත තවම නොමැත.',
+    songsEmptySubtitle: 'පසුව පරීක්ෂා කරන්න!',
+    songsNowPlaying: '🎵 දැන් වාදනය වෙමින් 🎵',
+    songsUnknown: 'නොදන්නා ගීතය',
+    storiesTitle: 'කතා',
+    storiesLoading: 'කතා පූරණය වෙමින්...',
+    storiesEmptyTitle: 'කතා තවම නොමැත.',
+    storiesEmptySubtitle: 'පසුව පරීක්ෂා කරන්න!',
+    storiesSubtitle: 'කතාවක් තෝරා කියවන්න',
+    storiesReadLabel: 'කියවන්න',
+    conversationTitle: 'කතා කරන්න!',
+    conversationSubtitle: 'මාර්ගගත සාකච්ඡා සමඟ කතා කිරීමට පුහුණුවන්න',
+    conversationLoading: 'සාකච්ඡා පූරණය වෙමින්...',
+    conversationEmptyTitle: 'සාකච්ඡා තවම නොමැත. 🎤',
+    conversationEmptySubtitle: 'සෙල්ලම් කතා පසුව පරීක්ෂා කරන්න!',
+    conversationCardSubtitle: 'සාකච්ඡාව • මගපෙන්වූ',
     settings: 'සැකසීම්',
     changeLanguage: 'භාෂාව වෙනස් කරන්න',
     darkMode: 'අඳුරු ප්‍රකාරය',

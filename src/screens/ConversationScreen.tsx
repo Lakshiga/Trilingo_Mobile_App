@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { ActivityDto } from '../services/api';
 import { getLearningLanguageField } from '../utils/languageUtils';
-import { Language } from '../utils/translations';
+import { getTranslations, Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import {
   findActivityTypeIds,
   findMainActivityIds,
@@ -30,6 +31,8 @@ const ConversationScreen: React.FC = () => {
   const { theme } = useTheme();
   const { currentUser } = useUser();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
+  const t = useMemo(() => getTranslations(nativeLanguage), [nativeLanguage]);
   
   const [conversations, setConversations] = useState<ActivityDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +40,13 @@ const ConversationScreen: React.FC = () => {
   const slideAnim = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+    };
+    loadLang();
+
     const fetchConversations = async () => {
       try {
         setLoading(true);
@@ -94,7 +104,7 @@ const ConversationScreen: React.FC = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [learningLanguage]);
+  }, [learningLanguage, nativeLanguage]);
 
   const handleConversationPress = (activity: ActivityDto) => {
     const conversationName = getLearningLanguageField(learningLanguage, activity);
@@ -122,7 +132,7 @@ const ConversationScreen: React.FC = () => {
           style={styles.loadingAnimation}
         />
         <Text style={styles.loadingText}>
-          Loading conversations...
+          {t.conversationLoading}
         </Text>
       </LinearGradient>
     );
@@ -149,9 +159,9 @@ const ConversationScreen: React.FC = () => {
         <View style={styles.headerTextWrap}>
           <View style={styles.headerTitleContainer}>
             <MaterialCommunityIcons name="microphone" size={28} color="#FFFFFF" />
-            <Text style={styles.headerTitle}>Speak Up! 🎤</Text>
+            <Text style={styles.headerTitle}>{t.conversationTitle} 🎤</Text>
           </View>
-          <Text style={styles.headerSubtitle}>Practice speaking with guided chats</Text>
+          <Text style={styles.headerSubtitle}>{t.conversationSubtitle}</Text>
         </View>
       </Animated.View>
 
@@ -200,7 +210,7 @@ const ConversationScreen: React.FC = () => {
                       </LinearGradient>
                       <View style={styles.textBlock}>
                         <Text style={styles.cardTitle} numberOfLines={2}>{conversationName}</Text>
-                        <Text style={styles.cardSubtitle}>Conversation • Guided</Text>
+                        <Text style={styles.cardSubtitle}>{t.conversationCardSubtitle}</Text>
                       </View>
                     </View>
                     <MaterialIcons name="chevron-right" size={28} color="#4F46E5" />
@@ -211,8 +221,8 @@ const ConversationScreen: React.FC = () => {
           ) : (
             <View style={styles.emptyContainer}>
               <MaterialCommunityIcons name="microphone-off" size={60} color="#CBD5E1" />
-              <Text style={styles.emptyText}>No conversations available yet. 🎤</Text>
-              <Text style={styles.emptySubtext}>Check back later for fun chats!</Text>
+              <Text style={styles.emptyText}>{t.conversationEmptyTitle}</Text>
+              <Text style={styles.emptySubtext}>{t.conversationEmptySubtitle}</Text>
             </View>
           )}
         </Animated.View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,8 @@ import LottieView from 'lottie-react-native';
 import apiService from '../services/api';
 import { CLOUDFRONT_URL } from '../config/apiConfig';
 import { getLanguageKey } from '../utils/languageUtils';
-import { Language } from '../utils/translations';
+import { getTranslations, Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import VideoPlayer from '../components/activity-types/VideoPlayer';
 
 const { width, height } = Dimensions.get('window');
@@ -74,6 +75,17 @@ const VideosScreen: React.FC = () => {
   // @ts-ignore
   const learningLanguage: Language = currentUser?.learningLanguage || 'Tamil';
   const langKey = getLanguageKey(learningLanguage);
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
+  const t = useMemo(() => getTranslations(nativeLanguage), [nativeLanguage]);
+
+  useEffect(() => {
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+    };
+    loadLang();
+  }, []);
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,7 +237,7 @@ const VideosScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <MaterialCommunityIcons name="youtube-tv" size={28} color="#FFFFFF" />
-          <Text style={styles.headerTitle}>Cartoons 🎬</Text>
+          <Text style={styles.headerTitle}>{t.homeVideosTitle} 🎬</Text>
         </View>
         <View style={{ width: 40 }} />
       </Animated.View>
@@ -239,7 +251,7 @@ const VideosScreen: React.FC = () => {
             loop
             style={styles.loadingAnimation}
           />
-          <Text style={styles.loadingText}>Loading videos...</Text>
+          <Text style={styles.loadingText}>{t.loadingVideos}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContent}>
@@ -294,8 +306,8 @@ const VideosScreen: React.FC = () => {
           ) : (
             <View style={styles.center}>
               <MaterialCommunityIcons name="video-off" size={60} color="#CBD5E1" />
-              <Text style={styles.emptyText}>No videos found yet! 🎥</Text>
-              <Text style={styles.emptySubtext}>Check back later for fun cartoons!</Text>
+              <Text style={styles.emptyText}>{t.noVideosAvailable}</Text>
+              <Text style={styles.emptySubtext}>{t.checkBackLater}</Text>
             </View>
           )}
         </ScrollView>

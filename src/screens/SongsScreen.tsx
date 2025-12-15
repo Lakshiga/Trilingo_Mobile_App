@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,8 @@ import {
   LISTENING_MAIN_ACTIVITY_NAMES,
   SONG_PLAYER_ACTIVITY_TYPE_NAMES,
 } from '../utils/activityMappings';
+import { getTranslations, Language } from '../utils/translations';
+import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 
 // Define the song type
 type Song = {
@@ -34,6 +36,18 @@ const SongsScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
+
+  useEffect(() => {
+    const loadLang = async () => {
+      const pref = await loadStudentLanguagePreference();
+      const native = languageCodeToLanguage(pref.nativeLanguageCode);
+      setNativeLanguage(native);
+    };
+    loadLang();
+  }, []);
+
+  const t = useMemo(() => getTranslations(nativeLanguage), [nativeLanguage]);
 
   // Function to lighten a hex color
   const lightenColor = (hex: string, percent: number) => {
@@ -259,7 +273,7 @@ const SongsScreen: React.FC = () => {
       {/* Fun Header with Musical Notes */}
       <View style={styles.headerContainer}>
         <Text style={styles.musicalNote}>🎵</Text>
-        <Text style={styles.header}>Songs</Text>
+        <Text style={styles.header}>{t.songsTitle}</Text>
         <Text style={styles.musicalNote}>🎶</Text>
       </View>
 
@@ -270,7 +284,7 @@ const SongsScreen: React.FC = () => {
         </View>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search songs or artists..."
+          placeholder={t.songsSearchPlaceholder}
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -286,7 +300,7 @@ const SongsScreen: React.FC = () => {
             loop
             style={styles.loadingAnimation}
           />
-          <Text style={styles.loadingText}>Loading songs...</Text>
+          <Text style={styles.loadingText}>{t.songsLoading}</Text>
         </View>
       )}
 
@@ -300,8 +314,8 @@ const SongsScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No songs available yet.</Text>
-              <Text style={styles.emptySubtext}>Check back later!</Text>
+              <Text style={styles.emptyText}>{t.songsEmptyTitle}</Text>
+              <Text style={styles.emptySubtext}>{t.songsEmptySubtitle}</Text>
             </View>
           }
         />
@@ -319,9 +333,9 @@ const SongsScreen: React.FC = () => {
             const playingSong = songs.find(song => song.id === currentlyPlaying);
             return (
               <View style={styles.playerInfo}>
-                <Text style={styles.nowPlayingLabel}>🎵 Now Playing 🎵</Text>
+                <Text style={styles.nowPlayingLabel}>{t.songsNowPlaying}</Text>
                 <Text style={styles.playerText}>
-                  {playingSong ? `${playingSong.title}` : 'Unknown Song'}
+                  {playingSong ? `${playingSong.title}` : t.songsUnknown}
                 </Text>
                 <Text style={styles.playerArtist}>
                   {playingSong ? playingSong.artist : ''}
