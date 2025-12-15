@@ -56,6 +56,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   const [registrationStage, setRegistrationStage] = useState<'parent' | 'success' | 'child'>('parent');
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [continueLocked, setContinueLocked] = useState(false);
   
   const [userData, setUserData] = useState({
     // Parent Data
@@ -78,6 +79,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   const womanWorkRef = useRef<LottieView>(null);
   const successRef = useRef<LottieView>(null);
   const lottieOpacity = useRef(new Animated.Value(0)).current;
+  const lottieTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- VALIDATION STATE ---
   const [passwordValidations, setPasswordValidations] = useState({
@@ -185,12 +187,22 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     // Reset validations/animations for new step
     lottieOpacity.setValue(0);
     if (womanWorkRef.current) { womanWorkRef.current.pause(); womanWorkRef.current.reset(); }
+    setContinueLocked(false);
     setPasswordValidations({ minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecialChar: false });
     setEmailError('');
 
     // Disable animation on step change
     lottieOpacity.setValue(0);
   }, [currentStep, registrationStage]);
+
+  useEffect(() => {
+    return () => {
+      if (lottieTimerRef.current) {
+        clearTimeout(lottieTimerRef.current);
+        lottieTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // --- HANDLERS ---
 
@@ -218,18 +230,38 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
 
     if (hasError) return;
 
-    const isLastStep = currentStep === activeQuestions.length - 1;
-    if (isLastStep) {
-      if (registrationStage === 'parent') {
-        handleParentRegistration();
+    // Lock continue until step changes or async finishes
+    setContinueLocked(true);
+
+    const proceedToNext = () => {
+      const isLastStep = currentStep === activeQuestions.length - 1;
+      if (isLastStep) {
+        if (registrationStage === 'parent') {
+          handleParentRegistration();
+        } else {
+          handleChildCreation();
+        }
       } else {
-        handleChildCreation();
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+          Animated.timing(slideAnim, { toValue: -20, duration: 200, useNativeDriver: true }),
+        ]).start(() => setCurrentStep(p => p + 1));
       }
+    };
+
+    // Play mascot once per Continue click, then proceed after ~2s
+    const delayMs = 2000;
+    if (womanWorkRef.current) {
+      lottieOpacity.setValue(1);
+      womanWorkRef.current.reset();
+      womanWorkRef.current.play();
+      if (lottieTimerRef.current) clearTimeout(lottieTimerRef.current);
+      lottieTimerRef.current = setTimeout(() => {
+        lottieOpacity.setValue(0);
+        proceedToNext();
+      }, delayMs);
     } else {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: -20, duration: 200, useNativeDriver: true }),
-      ]).start(() => setCurrentStep(p => p + 1));
+      proceedToNext();
     }
   };
 
@@ -304,6 +336,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
             id: student?.id,
             nickname: userData.studentNickname,
             avatar: userData.studentAvatar,
+            nativeLanguageCode: nativeCode,
+            targetLanguageCode: targetCode,
           })
         );
       } catch (e) {
@@ -387,7 +421,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           
           {/* HEADER */}
           <View style={styles.topBar}>
-            {registrationStage === 'parent' && (
+            {(registrationStage === 'parent' || registrationStage === 'child') && (
               <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                 <MaterialCommunityIcons name="arrow-left" size={28} color="#0D5B81" />
               </TouchableOpacity>
@@ -405,21 +439,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           {/* INPUT AREA */}
           <View style={[styles.inputAreaWrapper, isKeyboardVisible && styles.inputAreaWrapperKeyboard]}>
             
-            {!isKeyboardVisible && (
-              <View style={styles.mascotArea}>
-                  <Animated.View style={{ opacity: lottieOpacity, transform: [{ scale: lottieOpacity }], position: 'absolute', width: '100%', height: '100%' }}>
-                    <LottieView
-                      ref={womanWorkRef}
-                      source={require('../../assets/animations/Woman work from home with laptops.json')}
-                      style={styles.lottieFile}
-                      loop={true}
-                    />
-                  </Animated.View>
-                  <Animated.View style={{ opacity: lottieOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), position: 'absolute' }}>
-                    <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#2D4F9C" style={{ opacity: 0.15 }} />
-                  </Animated.View>
-              </View>
-            )}
+            <View style={styles.mascotArea}>
+                <Animated.View style={{ opacity: lottieOpacity, transform: [{ scale: lottieOpacity }], position: 'absolute', width: '100%', height: '100%' }}>
+                  <LottieView
+                    ref={womanWorkRef}
+                    source={require('../../assets/animations/Woman work from home with laptops.json')}
+                    style={styles.lottieFile}
+                    loop={true}
+                  />
+                </Animated.View>
+                <Animated.View style={{ opacity: lottieOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), position: 'absolute' }}>
+                  <MaterialCommunityIcons name={currentQ.icon as any} size={70} color="#2D4F9C" style={{ opacity: 0.15 }} />
+                </Animated.View>
+            </View>
 
             <Animated.View 
               style={[
@@ -500,9 +532,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
         
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
-            style={[styles.continueButton, isLoading && styles.disabledButton]} 
+            style={[
+              styles.continueButton,
+              (isLoading || continueLocked) && styles.disabledButton
+            ]} 
             onPress={handleNext}
-            disabled={isLoading}
+            disabled={isLoading || continueLocked}
           >
             {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>{currentStep === activeQuestions.length - 1 ? "Finish" : "Continue"}</Text>}
           </TouchableOpacity>

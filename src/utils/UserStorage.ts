@@ -18,6 +18,7 @@ interface UserData {
 
 const USER_DATA_KEY = '@trilingo_user_data';
 const USER_PREFERENCES_PREFIX = '@trilingo_user_prefs_';
+const STUDENT_PROFILE_KEY = '@trilingo_student_profile';
 
 interface UserLanguagePreferences {
   nativeLanguage: string;
@@ -64,6 +65,38 @@ export class UserStorage {
       }
     } catch (error) {
       console.error('Error saving user data:', error);
+    }
+  }
+
+  // Save student profile (includes language codes)
+  static async saveStudentProfile(profile: {
+    id?: string;
+    nickname?: string;
+    avatar?: string;
+    nativeLanguageCode?: string;
+    targetLanguageCode?: string;
+  }): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STUDENT_PROFILE_KEY, JSON.stringify(profile));
+    } catch (error) {
+      console.error('Error saving student profile:', error);
+    }
+  }
+
+  // Get cached student profile (with language codes)
+  static async getStudentProfile(): Promise<{
+    id?: string;
+    nickname?: string;
+    avatar?: string;
+    nativeLanguageCode?: string;
+    targetLanguageCode?: string;
+  } | null> {
+    try {
+      const raw = await AsyncStorage.getItem(STUDENT_PROFILE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      console.error('Error getting student profile:', error);
+      return null;
     }
   }
 
