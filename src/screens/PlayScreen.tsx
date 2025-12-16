@@ -9,6 +9,7 @@ import { renderActivityByTypeId, isActivityTypeSupported } from '../components/a
 import apiService, { ExerciseDto, ActivityDto } from '../services/api';
 import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 import { loadStudentLanguagePreference, languageCodeToKey } from '../utils/studentLanguage';
+import { useExerciseScoring } from '../hooks/useExerciseScoring';
 
 const { width } = Dimensions.get('window');
 
@@ -30,134 +31,141 @@ const THEME = {
 };
 
 const PlayScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<{ params: PlayScreenRouteParams }, 'params'>>();
+  const navigation = useNavigation();
+  const route = useRoute<RouteProp<Record<string, PlayScreenRouteParams>, string>>();
   const { currentUser } = useUser();
-  const { requestAudioFocus, resumeBackground } = useBackgroundAudio();
-  const releaseRef = useRef<(() => void) | null>(null);
+  const { resumeBackground } = useBackgroundAudio();
   
-  const params = route.params || {};
-  const activityId = params.activityId;
-  const activityTypeId = params.activityTypeId;
-  const activityTitle = params.activityTitle;
+  // Extract route params
+  const { activityId, activityTypeId, activityTitle } = route.params || {};
   
-  const [exerciseCount, setExerciseCount] = useState(0);
-  const [exercises, setExercises] = useState<ExerciseDto[]>([]);
-  const [activityDetails, setActivityDetails] = useState<ActivityDto | null>(null);
-  const [loadingActivityDetails, setLoadingActivityDetails] = useState(false);
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  // State
   const [loadingExercises, setLoadingExercises] = useState(true);
+  const [exercises, setExercises] = useState<ExerciseDto[]>([]);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [currentLang, setCurrentLang] = useState('en');
+  const [activityDetails, setActivityDetails] = useState<ActivityDto | null>(null);
   const [conversationContent, setConversationContent] = useState<any>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
-  const [studentLangKey, setStudentLangKey] = useState<'en' | 'ta' | 'si' | null>(null);
+  const [loadingActivityDetails, setLoadingActivityDetails] = useState(false);
   
-  const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
-  const fallbackLangKey: 'en' | 'ta' | 'si' = learningLanguage === 'English' ? 'en' : learningLanguage === 'Tamil' ? 'ta' : 'si';
-  const currentLang: string = studentLangKey || fallbackLangKey;
+  // Exercise scoring hook
+  const { submitExerciseAttempt, isSubmitting } = useExerciseScoring();
+  
+  // Timer state for tracking time spent
+  const [timeSpent, setTimeSpent] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Attempt tracking
+  const [attemptCount, setAttemptCount] = useState(1);
 
-  const displayTitle: string = (activityTitle && typeof activityTitle === 'string' && activityTitle.trim()) 
-    ? activityTitle.trim() 
-    : 'Activity';
-
+  // --- LANGUAGE SETUP ---
   useEffect(() => {
-    releaseRef.current = requestAudioFocus();
-    return () => {
-      releaseRef.current?.();
-      releaseRef.current = null;
-      resumeBackground().catch(() => null);
-    };
-  }, [requestAudioFocus, resumeBackground]);
-
-  useEffect(() => {
-    const loadLang = async () => {
+    const loadLanguage = async () => {
       const pref = await loadStudentLanguagePreference();
-      if (pref?.targetLanguageCode) {
-        setStudentLangKey(languageCodeToKey(pref.targetLanguageCode));
-      }
+      const langKey = languageCodeToKey(pref.targetLanguageCode);
+      setCurrentLang(langKey);
     };
-    loadLang();
+    loadLanguage();
   }, []);
 
+  // --- DATA LOADING ---
   useEffect(() => {
-    const fetchExerciseCount = async () => {
-      if (!activityId) {
-        setLoadingExercises(false);
-        return;
-      }
+    const loadData = async () => {
+      if (!activityId || !activityTypeId) return;
+      
       try {
         setLoadingExercises(true);
-        // Fetch activity details for fallback (conversation/song content)
+        
+        // Load exercises
+        const exerciseData = await apiService.getExercisesByActivityId(activityId);
+        const sortedExercises = exerciseData.sort((a, b) => a.sequenceOrder - b.sequenceOrder);
+        setExercises(sortedExercises);
+        
+        // Load activity details
         setLoadingActivityDetails(true);
-        const activityDetail = await apiService.getActivityById(activityId);
-        setActivityDetails(activityDetail || null);
-
-        const result = await apiService.getExercisesByActivityId(activityId);
-        const count = result?.length || 0;
-        setExercises(result || []);
-        setExerciseCount(count);
-        setCurrentExerciseIndex(0);
-
-        // Fallback: if no exercises but this is a Song or Conversation activity, try details_JSON directly
-        if (count === 0 && (activityTypeId === 6 || activityTypeId === 14)) {
-          const activity: ActivityDto | null = activityDetail || (await apiService.getActivityById(activityId));
-          if (activity?.details_JSON) {
-            setExercises([
-              {
-                id: activity.id,
-                jsonData: activity.details_JSON,
-              } as ExerciseDto,
-            ]);
-            setExerciseCount(1);
-          }
+        const activityData = await apiService.getActivityById(activityId);
+        setActivityDetails(activityData);
+        setLoadingActivityDetails(false);
+        
+        // Special handling for conversation activities
+        if (activityTypeId === 14) {
+          setLoadingConversation(true);
+          // Conversation content loading logic would go here
+          setLoadingConversation(false);
         }
       } catch (error) {
-        setExerciseCount(0);
-        setExercises([]);
+        console.error('Error loading data:', error);
+        Alert.alert('Error', 'Failed to load activity. Please try again.');
       } finally {
         setLoadingExercises(false);
-        setLoadingActivityDetails(false);
       }
     };
-    fetchExerciseCount();
-  }, [activityId, activityTypeId]);
 
-  useEffect(() => {
-    const fetchConversation = async () => {
-      if (!activityId || activityTypeId !== 14) return;
-      try {
-        setLoadingConversation(true);
-        const activity: ActivityDto | null = await apiService.getActivityById(activityId);
-        if (activity?.details_JSON) {
-          try {
-            const parsed = JSON.parse(activity.details_JSON);
-            // Keep the full structure so ConversationPlayer can pick title/instruction + conversationData
-            setConversationContent(parsed);
-          } catch (e) {
-            setConversationContent(null);
-          }
-        }
-      } catch {
-        setConversationContent(null);
-      } finally {
-        setLoadingConversation(false);
-      }
+    loadData();
+    
+    // Start timer for tracking time spent
+    timerRef.current = setInterval(() => {
+      setTimeSpent(prev => prev + 1);
+    }, 1000);
+    
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-    fetchConversation();
   }, [activityId, activityTypeId]);
 
-  if (!activityId || !activityTypeId) {
-    navigation.goBack();
-    return null;
-  }
-
+  // --- NAVIGATION HANDLERS ---
   const handleNextExercise = async () => {
-    const count = exercises.length || exerciseCount;
-    if (currentExerciseIndex < count - 1) {
+    // Submit score for current exercise before moving to next
+    if (exercises[currentExerciseIndex] && exercises[currentExerciseIndex].id) {
+      try {
+        // Calculate a simple score based on time spent (faster = higher score)
+        // In a real implementation, this would be based on actual performance
+        const baseScore = 10;
+        const timePenalty = Math.floor(timeSpent / 30); // 1 point penalty for every 30 seconds
+        const finalScore = Math.max(0, Math.min(10, baseScore - timePenalty));
+        
+        const result = await submitExerciseAttempt({
+          exerciseId: exercises[currentExerciseIndex].id,
+          score: finalScore,
+          timeSpentSeconds: timeSpent,
+          attemptNumber: attemptCount,
+          attemptDetails: `Completed in ${timeSpent} seconds with ${finalScore} points`
+        });
+        
+        if (result) {
+          console.log(`Exercise scored: ${finalScore} points, Points earned: ${result.pointsEarned}, Is first attempt: ${result.isFirstAttempt}`);
+          // Show feedback to user about their score
+          if (result.isFirstAttempt) {
+            console.log(`Congratulations! You earned ${result.pointsEarned} XP points!`);
+          } else {
+            console.log('This was not your first attempt. Your score from the first attempt remains final.');
+          }
+          
+          // Reset timer for next exercise
+          setTimeSpent(0);
+          // Increment attempt count for demo purposes
+          setAttemptCount(prev => prev + 1);
+        }
+      } catch (error) {
+        console.error('Error submitting score:', error);
+        // Continue even if scoring fails
+      }
+    }
+    
+    // Move to next exercise or finish
+    if (currentExerciseIndex < exercises.length - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
     } else {
-      // Finish: submit progress (10 stars) then exit after save
-      await submitProgress();
-      navigation.goBack();
+      // All exercises completed
+      try {
+        await submitProgress();
+        Alert.alert('Congratulations!', 'You have completed all exercises!');
+        navigation.goBack();
+      } catch (error) {
+        console.error('Error submitting progress:', error);
+        navigation.goBack();
+      }
     }
   };
 
@@ -196,8 +204,8 @@ const PlayScreen: React.FC = () => {
         activityId,
         score: 10, // 10 stars
         maxScore: 10,
-        timeSpentSeconds: 0,
-        attemptNumber: 1,
+        timeSpentSeconds: timeSpent,
+        attemptNumber: attemptCount,
         isCompleted: true,
       });
       // Optional: you could toast success here
@@ -225,6 +233,13 @@ const PlayScreen: React.FC = () => {
       </View>
     );
   }
+
+  // Get current exercise
+  const currentExercise = exercises[currentExerciseIndex];
+  const exerciseCount = exercises.length;
+  
+  // Display title
+  const displayTitle = activityTitle || activityDetails?.name_en || 'Activity';
 
   return (
     <View style={styles.container}>
@@ -255,7 +270,6 @@ const PlayScreen: React.FC = () => {
       <View style={styles.centerContent}>
         {(() => {
           try {
-            const currentExercise = exercises[currentExerciseIndex];
             const parsedContent = currentExercise?.jsonData ? safeJsonParse(currentExercise.jsonData) : null;
 
             // Conversation player path: use details_JSON content
@@ -362,20 +376,16 @@ const PlayScreen: React.FC = () => {
               currentExerciseIndex: currentExerciseIndex,
               onExerciseComplete: handleNextExercise,
               onExit: () => navigation.goBack(),
+              exerciseId: currentExercise?.id, // Pass exercise ID for scoring
             });
 
             // Safety Checks
             if (activityComponent == null) return <ActivityIndicator size="large" color={THEME.primary} />;
             if (typeof activityComponent === 'string' || typeof activityComponent === 'number') {
-              return <Text style={{fontSize: 20}}>{String(activityComponent)}</Text>;
+              return <Text>{String(activityComponent)}</Text>;
             }
-            if (Array.isArray(activityComponent)) {
-              return <Fragment>{activityComponent}</Fragment>;
-            }
-            if (React.isValidElement(activityComponent)) {
-              return activityComponent;
-            }
-            return <View />;
+            
+            return activityComponent;
           } catch (error) {
             return <Text>Error loading activity</Text>;
           }
@@ -413,75 +423,75 @@ const PlayScreen: React.FC = () => {
 
           {/* Next/Finish Button */}
           <TouchableOpacity
-            style={[styles.navButton]}
+            style={[styles.navButton, styles.nextButton]}
             onPress={handleNextExercise}
-            disabled={loadingExercises}
+            disabled={loadingExercises || isSubmitting}
           >
             <Feather 
-              name={currentExerciseIndex >= exerciseCount - 1 ? "check" : "arrow-right"} 
+              name={currentExerciseIndex === exerciseCount - 1 ? "check" : "arrow-right"} 
               size={28} 
-              color="#FFF" 
+              color={(loadingExercises || isSubmitting) ? '#BDC3C7' : '#555'} 
             />
           </TouchableOpacity>
-
         </View>
       )}
     </View>
   );
 };
 
+// Safe JSON parse helper
+const safeJsonParse = (data: string) => {
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.bg,
+    position: 'relative', 
   },
-
-  // --- TOP BAR ---
   headerBar: {
-    paddingTop: 45, // StatusBar space
-    paddingBottom: 15,
-    paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: THEME.primary,
-    elevation: 4,
+    paddingHorizontal: 15,
+    paddingTop: 50, 
+    paddingBottom: 15,
+    // Shadow for depth
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    zIndex: 100,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   titleContainer: {
     flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
   },
   headerTitle: {
-    fontSize: 18, // Adjusted font size as requested
-    fontWeight: 'bold',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    fontSize: 20,
+    fontWeight: 'bold',
     textAlign: 'center',
   },
-
-  // --- CENTER CONTENT ---
   centerContent: {
-    flex: 1, // Maximizes space
-    width: '100%',
-    backgroundColor: '#FFFFFF', // Keep background clean
-    // Removed margins/padding to maximize area as requested
-    position: 'relative', 
+    flex: 1,
+    position: 'relative',
   },
-
+  
   // --- BOTTOM BAR ---
   bottomBar: {
     height: 100,
@@ -506,6 +516,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 2
+  },
+  nextButton: {
+    backgroundColor: THEME.primary, // Blue for next/finish
   },
   
   // Progress in Bottom Bar
@@ -533,14 +546,5 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
-
-// Safe JSON parse helper
-const safeJsonParse = (data: string) => {
-  try {
-    return JSON.parse(data);
-  } catch (e) {
-    return null;
-  }
-};
 
 export default PlayScreen;

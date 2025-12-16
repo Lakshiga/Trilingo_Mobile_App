@@ -163,6 +163,15 @@ export interface CreateProgressRequest {
   notes?: string;
 }
 
+// Exercise Attempt DTO
+export interface SubmitExerciseAttemptDto {
+  exerciseId: number;
+  score: number; // 0-10
+  timeSpentSeconds: number;
+  attemptNumber: number;
+  attemptDetails?: string;
+}
+
 // MainActivity DTO from backend (for Songs/Videos)
 export interface MainActivityDto {
   id: number;
@@ -887,6 +896,41 @@ class ApiService {
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
+    }
+  }
+
+  // NEW: Submit Exercise Attempt Method
+  async submitExerciseAttempt(payload: SubmitExerciseAttemptDto): Promise<ApiResponse<ProgressDto>> {
+    try {
+      // Get student ID from storage
+      const studentId = await this.getStudentId();
+      if (!studentId) {
+        throw new Error('Student ID not found. Please login again.');
+      }
+      
+      const response = await this.api.post<ApiResponse<ProgressDto>>(`/StudentProgress/submit-exercise-attempt/${studentId}`, payload);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  // Helper method to get student ID
+  private async getStudentId(): Promise<string | null> {
+    try {
+      // Try to get student ID from AsyncStorage
+      const raw = await AsyncStorage.getItem('@trilingo_student_profile');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.studentId || null;
+      }
+      
+      // Fallback to current user ID
+      const currentUser = await this.getCurrentUser();
+      return currentUser?.id || null;
+    } catch (error) {
+      console.error('Error getting student ID:', error);
+      return null;
     }
   }
 

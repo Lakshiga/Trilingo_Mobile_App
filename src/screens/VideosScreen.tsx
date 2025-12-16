@@ -10,7 +10,8 @@ import {
   Modal,
   StatusBar,
   Dimensions,
-  Animated
+  Animated,
+  Alert
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -25,6 +26,49 @@ import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/
 import VideoPlayer from '../components/activity-types/VideoPlayer';
 
 const { width, height } = Dimensions.get('window');
+
+// --- Helper Functions for Filtering Activities ---
+const VIDEO_MAIN_ACTIVITY_NAMES = ['Video', 'Videos', 'video', 'videos'];
+const VIDEO_ACTIVITY_TYPE_NAMES = ['VideoPlayer', 'video player', 'Video Player', 'video', 'Video'];
+
+const findMainActivityIds = (
+  mainActivities: any[],
+  namesToMatch: string[]
+): Set<number> => {
+  const ids = new Set<number>();
+  mainActivities.forEach((ma) => {
+    const nameMatch = namesToMatch.some(
+      (name) =>
+        ma.name_en?.toLowerCase().includes(name.toLowerCase()) ||
+        ma.name_ta?.toLowerCase().includes(name.toLowerCase()) ||
+        ma.name_si?.toLowerCase().includes(name.toLowerCase())
+    );
+    if (nameMatch) {
+      ids.add(ma.id);
+    }
+  });
+  return ids;
+};
+
+const findActivityTypeIds = (
+  activityTypes: any[],
+  namesToMatch: string[]
+): Set<number> => {
+  const ids = new Set<number>();
+  activityTypes.forEach((at) => {
+    const nameMatch = namesToMatch.some(
+      (name) =>
+        at.name_en?.toLowerCase().includes(name.toLowerCase()) ||
+        at.name_ta?.toLowerCase().includes(name.toLowerCase()) ||
+        at.name_si?.toLowerCase().includes(name.toLowerCase()) ||
+        at.jsonMethod?.toLowerCase().includes(name.toLowerCase())
+    );
+    if (nameMatch) {
+      ids.add(at.id);
+    }
+  });
+  return ids;
+};
 
 // --- Helper to extract YouTube ID from ID or URL ---
 const extractYoutubeId = (input: string): string | null => {
@@ -46,35 +90,31 @@ const extractYoutubeId = (input: string): string | null => {
   return null;
 };
 
-// Multi-lang helper
+// --- Helper to extract thumbnail from YouTube ID ---
+const getYoutubeThumbnail = (youtubeId: string): string => {
+  return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+};
+
+// --- Helper to get localized text ---
 const getLocalized = (value: any, langKey: string): string => {
   if (!value) return '';
   if (typeof value === 'string') return value;
-  if (typeof value === 'number') return String(value);
   return value[langKey] || value.en || value.ta || value.si || '';
 };
 
-const normalizeUrl = (raw?: string | null): string | null => {
-  if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `${CLOUDFRONT_URL}${raw.startsWith('/') ? '' : '/'}${raw}`;
-};
-
-type VideoItem = {
+interface VideoItem {
   id: string;
   title: string;
   description: string;
   youtubeId?: string;
-  fallbackUrl?: string; // AWS/CloudFront or direct MP4
+  fallbackUrl?: string;
   thumbnailUrl?: string;
-  rawJson: any; // Store raw for player
-};
+  rawJson: any;
+}
 
 const VideosScreen: React.FC = () => {
   const navigation = useNavigation();
-  const { currentUser } = useUser();
-  // @ts-ignore
-  const learningLanguage: Language = currentUser?.learningLanguage || 'Tamil';
+  const { learningLanguage } = useUser();
   const langKey = getLanguageKey(learningLanguage);
   const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   const t = useMemo(() => getTranslations(nativeLanguage), [nativeLanguage]);
@@ -98,100 +138,141 @@ const VideosScreen: React.FC = () => {
     const fetchVideos = async () => {
       try {
         setLoading(true);
-        const allActivities = await apiService.getAllActivities();
+        console.log('Fetching all activities, activity types, and main activities...');
+        
+        // Fetch all required data in parallel
+        const [allActivities, activityTypes, mainActivities] = await Promise.all([
+          apiService.getAllActivities(),
+          apiService.getAllActivityTypes(),
+          apiService.getAllMainActivities(),
+        ]);
+        
+        console.log(`Found ${allActivities.length} activities, ${activityTypes.length} activity types, ${mainActivities.length} main activities`);
+
+        // Find video-related main activity IDs
+        const videoMainIds = findMainActivityIds(mainActivities, VIDEO_MAIN_ACTIVITY_NAMES);
+        console.log('Video main activity IDs:', Array.from(videoMainIds));
+
+        // Find video player activity type IDs
+        const videoPlayerTypeIds = findActivityTypeIds(activityTypes, VIDEO_ACTIVITY_TYPE_NAMES);
+        console.log('Video player type IDs:', Array.from(videoPlayerTypeIds));
+
+        // Filter activities that are video-related
+        const videoActivities = allActivities.filter(activity => {
+          const hasVideoMainId = videoMainIds.size === 0 || videoMainIds.has(activity.mainActivityId);
+          const hasVideoTypeId = videoPlayerTypeIds.size === 0 || videoPlayerTypeIds.has(activity.activityTypeId);
+          return hasVideoMainId && hasVideoTypeId;
+        });
+        
+        console.log(`Found ${videoActivities.length} video activities`);
 
         const videoList: VideoItem[] = [];
 
-        allActivities.forEach((activity) => {
-          if (!activity.details_JSON) return;
+        videoActivities.forEach((activity) => {
+          console.log(`Processing video activity ID: ${activity.id}, Type: ${activity.jsonMethod}`);
+          if (!activity.details_JSON) {
+            console.log(`Skipping activity ${activity.id} - no details_JSON`);
+            return;
+          }
           try {
             let parsed: any = activity.details_JSON;
             // Handle double-encoded JSON
             if (typeof parsed === 'string') {
               try {
                 parsed = JSON.parse(parsed);
-              } catch (_e) {}
+                console.log(`Parsed JSON for activity ${activity.id}`);
+              } catch (_e) {
+                console.log(`Failed to parse JSON for activity ${activity.id}`);
+              }
             }
             if (typeof parsed === 'string') {
               try {
                 parsed = JSON.parse(parsed);
-              } catch (_e) {}
-            }
-            if (!parsed || typeof parsed !== 'object') {
-              return;
+                console.log(`Double parsed JSON for activity ${activity.id}`);
+              } catch (_e) {
+                console.log(`Failed to double parse JSON for activity ${activity.id}`);
+              }
             }
 
-            // Normalise: some activities send an array of items, each with mediaUrl/videoUrl, etc.
-            const items = Array.isArray(parsed) ? parsed : [parsed];
-
+            // Extract video info
             let youtubeId: string | null = null;
             let fallbackUrl: string | null = null;
+            let thumbnailUrl: string | null = null;
             let title = '';
             let description = '';
-            let thumbnailUrl: string | null = null;
 
-            for (const item of items) {
-              const vd = item.videoData || {};
-              const candidates = [
-                vd.videoId,
-                vd.youtubeUrl,
-                vd.videoUrl,
-                vd.mediaUrl,
-                item.videoUrl,
-                item.youtubeUrl,
-                item.mediaUrl,
-                vd.mediaUrl,
-                item.videoUrl,
-                item.youtubeUrl,
-                item.mediaUrl,
-              ];
+            // Try different structures
+            const candidates = [
+              parsed,
+              parsed.videoData,
+              parsed.storyData,
+              parsed.conversationData,
+              parsed.songData,
+            ].filter(Boolean);
 
-              for (const c of candidates) {
-                const raw = getLocalized(c, langKey);
-                const yt = extractYoutubeId(raw);
-                if (yt) {
-                  youtubeId = yt;
+            console.log(`Activity ${activity.id} candidates:`, candidates.length);
+
+            for (const item of candidates) {
+              console.log(`Checking item:`, item);
+              // Try to extract YouTube ID
+              const idCandidates = [
+                item.videoId,
+                item.youtubeId,
+                item.youtubeUrl,
+                item.videoUrl,
+                item.mediaUrl,
+              ].filter(Boolean);
+
+              for (const idCandidate of idCandidates) {
+                const localizedCandidate = getLocalized(idCandidate, langKey);
+                console.log(`Checking ID candidate:`, localizedCandidate);
+                const ytId = extractYoutubeId(localizedCandidate);
+                if (ytId) {
+                  youtubeId = ytId;
+                  thumbnailUrl = getYoutubeThumbnail(ytId);
+                  console.log(`Found YouTube ID: ${youtubeId}`);
                   break;
                 }
-                if (!fallbackUrl && raw && typeof raw === 'string') {
-                  // treat as AWS/direct url if not youtube
-                  if (!raw.includes('youtube.com') && !raw.includes('youtu.be')) {
-                    fallbackUrl = normalizeUrl(raw) || raw;
+              }
+
+              // Try to extract fallback URL
+              if (!youtubeId) {
+                const urlCandidates = [
+                  item.videoUrl,
+                  item.mediaUrl,
+                  item.fallbackUrl,
+                ].filter(Boolean);
+
+                for (const urlCandidate of urlCandidates) {
+                  const url = getLocalized(urlCandidate, langKey);
+                  console.log(`Checking URL candidate:`, url);
+                  if (url && (url.startsWith('http') || url.startsWith('/'))) {
+                    fallbackUrl = url.startsWith('/') ? `${CLOUDFRONT_URL}${url}` : url;
+                    console.log(`Found fallback URL: ${fallbackUrl}`);
+                    break;
                   }
                 }
               }
 
-              const thumbCandidates = [
-                vd.thumbnailUrl,
-                item.thumbnailUrl,
-                vd.posterUrl,
-                item.posterUrl,
-              ];
-              for (const c of thumbCandidates) {
-                const rawThumb = getLocalized(c, langKey);
-                if (rawThumb && typeof rawThumb === 'string') {
-                  thumbnailUrl = normalizeUrl(rawThumb) || rawThumb;
-                  break;
-                }
-              }
-
-              if (youtubeId || fallbackUrl) {
-                title =
-                  getLocalized(item.title, langKey) ||
-                  getLocalized(parsed.title, langKey) ||
-                  activity.name_en ||
-                  activity.name_ta ||
-                  activity.name_si ||
-                  'Video';
-                description =
-                  getLocalized(item.description, langKey) ||
-                  getLocalized(parsed.description, langKey) ||
-                  '';
-                break;
-              }
+              // Extract title and description with proper localization
+              title =
+                getLocalized(item.title, langKey) ||
+                getLocalized(parsed.title, langKey) ||
+                activity.name_en ||
+                activity.name_ta ||
+                activity.name_si ||
+                'Video';
+              description =
+                getLocalized(item.description, langKey) ||
+                getLocalized(parsed.description, langKey) ||
+                '';
+              
+              console.log(`Extracted title: ${title}, description: ${description.substring(0, 50)}...`);
+              break;
             }
 
             if (!youtubeId && !fallbackUrl) {
+              console.log(`Activity ${activity.id} has no valid video source`);
               return;
             }
 
@@ -203,6 +284,7 @@ const VideosScreen: React.FC = () => {
                 'Video';
             }
 
+            console.log(`Adding video to list:`, { id: activity.id, title, youtubeId, fallbackUrl });
             videoList.push({
               id: activity.id.toString(),
               title,
@@ -213,9 +295,11 @@ const VideosScreen: React.FC = () => {
               rawJson: parsed,
             });
           } catch (e) {
+            console.error(`Error processing activity ${activity.id}:`, e);
           }
         });
 
+        console.log(`Final video list has ${videoList.length} videos`);
         setVideos(videoList);
         
         // Animate entrance
@@ -225,6 +309,7 @@ const VideosScreen: React.FC = () => {
         ]).start();
       } catch (error) {
         console.error('Error fetching videos:', error);
+        Alert.alert('Error', 'Failed to load videos. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -326,6 +411,18 @@ const VideosScreen: React.FC = () => {
               <MaterialCommunityIcons name="video-off" size={60} color="#CBD5E1" />
               <Text style={styles.emptyText}>{t.noVideosAvailable}</Text>
               <Text style={styles.emptySubtext}>{t.checkBackLater}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={() => {
+                  // Force refresh
+                  setLoading(true);
+                  setTimeout(() => {
+                    setLoading(false);
+                  }, 1000);
+                }}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
@@ -346,6 +443,8 @@ const VideosScreen: React.FC = () => {
               <VideoPlayer
                 content={{
                   ...selectedVideo.rawJson,
+                  title: selectedVideo.title,
+                  description: selectedVideo.description,
                   videoData: {
                     ...(selectedVideo.rawJson?.videoData || {}),
                     videoId: selectedVideo.youtubeId,
@@ -495,6 +594,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0EA5E9',
     marginTop: 8,
+  },
+  // Retry Button
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   // Modal Close
   closeBtn: {

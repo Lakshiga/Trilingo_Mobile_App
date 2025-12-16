@@ -1,93 +1,98 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  Dimensions,
-  Animated,
-  Modal, // Added Modal
-} from 'react-native';
-import { MaterialIcons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, Modal } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import { ActivityComponentProps, MultiLingualText } from './types';
-import { useResponsive } from '../../utils/responsive';
-import { getCloudFrontUrl, getImageUrl as getImageUrlHelper } from '../../utils/awsUrlHelper';
-import apiService from '../../services/api';
+import { useExerciseScoring } from '../../hooks/useExerciseScoring';
+import apiService, { ExerciseDto } from '../../services/api';
+import { getText } from '../../utils/translations';
+import { useUser } from '../../context/UserContext';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-// --- THEME COLORS ---
+// --- CONSTANTS ---
 const COLORS = {
-  bg: '#E3F2FD',
+  primary: '#0284C7',
+  secondary: '#0EA5E9',
+  success: '#10B981',
+  error: '#EF4444',
+  background: '#F8FAFC',
   card: '#FFFFFF',
-  primary: '#1565C0',
-  accent: '#FFCA28',
-  success: '#4CAF50',
-  error: '#F44336',
-  text: '#37474F',
-  optionBorder: '#BBDEFB',
+  text: '#1E293B',
+  textSecondary: '#64748B',
+  border: '#E2E8F0',
+  disabled: '#CBD5E1',
 };
 
-// --- INTERFACES ---
-interface QuestionItem {
-  type: 'text' | 'image' | 'audio';
-  content: MultiLingualText;
-}
-
+// --- TYPES ---
 interface Option {
-  content: MultiLingualText;
-  isCorrect: boolean;
+  id: string;
+  text: {
+    en: string;
+    ta: string;
+    si: string;
+  };
 }
 
-interface QuestionObj {
-  questionId: string;
-  question: QuestionItem;
-  answerType: 'text' | 'image' | 'audio';
+interface Question {
+  id: string;
+  text: {
+    en: string;
+    ta: string;
+    si: string;
+  };
   options: Option[];
+  correctOptionId: string;
+  explanation?: {
+    en: string;
+    ta: string;
+    si: string;
+  };
 }
 
 interface MCQData {
-  title: MultiLingualText;
-  instruction: MultiLingualText;
-  questions: QuestionObj[];
+  instruction?: {
+    en: string;
+    ta: string;
+    si: string;
+  };
+  questions: Question[];
+}
+
+interface ActivityComponentProps {
+  activityId?: number;
+  currentLang: string;
+  onComplete: () => void;
+  exerciseId?: number;
 }
 
 const MCQActivity: React.FC<ActivityComponentProps> = ({
-  currentLang = 'ta',
   activityId,
+  currentLang,
   onComplete,
-  currentExerciseIndex = 0,
-  onExerciseComplete,
+  exerciseId,
 }) => {
-  const responsive = useResponsive();
-  
+  // --- STATE ---
   const [loading, setLoading] = useState(true);
-  const [questionData, setQuestionData] = useState<QuestionObj | null>(null);
-  const [instruction, setInstruction] = useState<string>('');
-  const [totalExercises, setTotalExercises] = useState(0);
-  
+  const [instruction, setInstruction] = useState('');
+  const [questionData, setQuestionData] = useState<Question | null>(null);
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
-  const [status, setStatus] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [congratulationSound, setCongratulationSound] = useState<Audio.Sound | null>(null);
-  const [sadSound, setSadSound] = useState<Audio.Sound | null>(null);
-  const [correctSound, setCorrectSound] = useState<Audio.Sound | null>(null);
-  
-  // Modal State
+  const [status, setStatus] = useState<'idle' | 'checking' | 'correct' | 'wrong'>('idle');
   const [showModal, setShowModal] = useState(false);
-  const [showConfettiOverlay, setShowConfettiOverlay] = useState(false);
-
-  // Animation refs
+  const [totalExercises, setTotalExercises] = useState(0);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
+  const [timeSpent, setTimeSpent] = useState(0);
+  const [attemptCount, setAttemptCount] = useState(1);
+  
+  // --- HOOKS ---
+  const { submitExerciseAttempt, isSubmitting } = useExerciseScoring();
+  const { currentUser } = useUser();
+  
+  // --- REFS ---
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const modalScaleAnim = useRef(new Animated.Value(0)).current;
   const confettiRef = useRef<LottieView>(null);
   const happyBoyRef = useRef<LottieView>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- 1. DATA FETCHING ---
   useEffect(() => {
@@ -100,7 +105,6 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
         setSelectedOptionIndex(null);
         setStatus('idle');
         setShowModal(false);
-        setShowConfettiOverlay(false);
         
         const exercises = await apiService.getExercisesByActivityId(activityId);
         
@@ -112,14 +116,15 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
           if (currentExercise && currentExercise.jsonData) {
             const parsed: MCQData = JSON.parse(currentExercise.jsonData);
             setInstruction(getText(parsed.instruction));
-
+            
             if (parsed.questions && parsed.questions.length > 0) {
               setQuestionData(parsed.questions[0]);
             }
           }
         }
       } catch (error) {
-        console.error("MCQ Load Error", error);
+        console.error('Error fetching MCQ data:', error);
+        Alert.alert('Error', 'Failed to load exercise. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -127,233 +132,93 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
 
     fetchData();
     
-    // Cleanup sounds
+    // Start timer
+    timerRef.current = setInterval(() => {
+      setTimeSpent(prev => prev + 1);
+    }, 1000);
+    
     return () => {
-      if (sound) sound.unloadAsync();
-      if (congratulationSound) congratulationSound.unloadAsync();
-      if (sadSound) sadSound.unloadAsync();
-      if (correctSound) correctSound.unloadAsync();
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [activityId, currentExerciseIndex]);
 
-  // --- Modal Animation Effect ---
-  useEffect(() => {
-    if (showModal) {
-      modalScaleAnim.setValue(0);
-      Animated.spring(modalScaleAnim, {
-        toValue: 1,
-        friction: 5,
-        tension: 40,
-        useNativeDriver: true
-      }).start();
-    }
-  }, [showModal]);
-
-  // --- 2. HELPER FUNCTIONS ---
-  
-  const getText = (obj: MultiLingualText | undefined): string => {
-    if (!obj) return '';
-    // @ts-ignore
-    return obj[currentLang] || obj.en || obj.ta || '';
-  };
-
-  const getMediaUrl = (obj: MultiLingualText | undefined | { [key: string]: any }): string | null => {
-    if (!obj) return null;
-    try {
-      const url = getImageUrlHelper(obj, currentLang as 'en' | 'ta' | 'si');
-      if (url) return url;
-    } catch (error) {
-      console.error('MCQ Image URL resolution error:', error);
-    }
-    const pathFromText = getText(obj as MultiLingualText | undefined);
-    if (pathFromText && (pathFromText.includes('/') || pathFromText.includes('.'))) {
-      return pathFromText.startsWith('http') ? pathFromText : getCloudFrontUrl(pathFromText);
-    }
-    return null;
-  };
-
-  const playSound = async (url: string) => {
-    try {
-      if (sound) await sound.unloadAsync();
-      const { sound: newSound } = await Audio.Sound.createAsync({ uri: url });
-      setSound(newSound);
-      await newSound.playAsync();
-    } catch (err) {}
-  };
-
-  const playCongratulationSound = async () => {
-    try {
-      // Stop and unload previous sound if exists
-      if (congratulationSound) {
-        await congratulationSound.unloadAsync();
-      }
-      
-      // Load and play congratulation sound
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/congratulation.wav')
-      );
-      setCongratulationSound(newSound);
-      await newSound.playAsync();
-      
-      // Clean up after sound finishes
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          newSound.unloadAsync();
-          setCongratulationSound(null);
-        }
-      });
-    } catch (err) {}
-  };
-
-  const playSadSound = async () => {
-    try {
-      // Stop and unload previous sound if exists
-      if (sadSound) {
-        await sadSound.unloadAsync();
-      }
-      
-      // Load and play sad sound
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/sad.wav')
-      );
-      setSadSound(newSound);
-      await newSound.playAsync();
-      
-      // Clean up after sound finishes
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          newSound.unloadAsync();
-          setSadSound(null);
-        }
-      });
-    } catch (err) {}
-  };
-
-  const playCorrectSound = async () => {
-    try {
-      // Stop and unload previous sound if exists
-      if (correctSound) {
-        await correctSound.unloadAsync();
-      }
-      
-      // Load and play correct sound
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/correct.wav')
-      );
-      setCorrectSound(newSound);
-      await newSound.playAsync();
-      
-      // Clean up after sound finishes
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          newSound.unloadAsync();
-          setCorrectSound(null);
-        }
-      });
-    } catch (err) {}
-  };
-
-  // --- 3. HANDLERS ---
-
-  const handleSelect = (index: number) => {
-    // If modal is already open or already correct, ignore clicks
-    if (showModal || showConfettiOverlay || status === 'correct') return;
-    if (!questionData) return;
-    
+  // --- 2. OPTION SELECTION ---
+  const handleSelectOption = (index: number) => {
+    if (status !== 'idle') return;
     setSelectedOptionIndex(index);
-    
-    const isCorrect = questionData.options[index].isCorrect;
-    const isLastExercise = currentExerciseIndex >= totalExercises - 1;
-    
-    if (isCorrect) {
-      setStatus('correct');
-      // Play congratulation sound
-      playCongratulationSound();
-      
-      // Click Animation
-      Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.05, duration: 100, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true })
-      ]).start();
+  };
 
-      if (isLastExercise) {
-        // Last exercise: Show Happy Boy animation in popup modal
-        setShowModal(true);
-        if (happyBoyRef.current) {
-          happyBoyRef.current.play();
-        }
-        // Auto exit after animation finishes (approximately 3-4 seconds)
-        setTimeout(() => {
-          setShowModal(false);
-          if (onComplete) onComplete();
-        }, 3500);
-      } else {
-        // Not last exercise: Show Confetti full screen transparent overlay
-        playCorrectSound();
-        setShowConfettiOverlay(true);
-        if (confettiRef.current) {
-          confettiRef.current.play();
-        }
-        // Auto move to next exercise after animation
-        setTimeout(() => {
-          setShowConfettiOverlay(false);
-          if (onExerciseComplete) onExerciseComplete();
-        }, 2500);
+  // --- 3. CHECK ANSWER ---
+  const checkAnswer = async () => {
+    if (selectedOptionIndex === null || !questionData) return;
+    
+    setStatus('checking');
+    
+    // Simple animation
+    // In a real app, you might want to add more sophisticated animations
+    
+    // Check if answer is correct
+    const selectedOption = questionData.options[selectedOptionIndex];
+    const isCorrect = selectedOption.id === questionData.correctOptionId;
+    
+    // Set status and show modal
+    setStatus(isCorrect ? 'correct' : 'wrong');
+    setShowModal(true);
+    
+    // Play appropriate animation
+    setTimeout(() => {
+      if (isCorrect) {
+        confettiRef.current?.play();
+        happyBoyRef.current?.play();
       }
-    } else {
-      setStatus('wrong');
-      // Play sad sound for wrong answer
-      playSadSound();
-      // Wrong answer: Show modal with Sad animation
-      setShowModal(true);
+    }, 100);
+    
+    // For correct answers, submit the score
+    if (isCorrect && exerciseId) {
+      // Calculate score based on performance
+      // This is a simple example - you might want to make this more sophisticated
+      const timeBonus = Math.max(0, 10 - Math.floor(timeSpent / 10)); // Up to 10 points for speed
+      const attemptPenalty = Math.max(0, attemptCount - 1) * 2; // 2 points penalty per attempt after first
+      const baseScore = 10;
+      const finalScore = Math.max(0, baseScore + timeBonus - attemptPenalty);
+      
+      try {
+        await submitExerciseAttempt({
+          exerciseId,
+          userId: currentUser?.id,
+          score: finalScore,
+          timeSpent,
+          attemptCount,
+        });
+      } catch (error) {
+        console.error('Error submitting exercise attempt:', error);
+        Alert.alert('Error', 'Failed to submit your score. Please try again.');
+      }
     }
   };
 
+  // --- 4. MODAL ACTIONS ---
   const handleModalAction = () => {
-    // Close modal first
     setShowModal(false);
-
     if (status === 'correct') {
-      // Last exercise completed, exit
-      if (onComplete) onComplete();
+      onComplete();
     } else {
-      // Reset selection so they can try again
       setSelectedOptionIndex(null);
       setStatus('idle');
+      setAttemptCount(prev => prev + 1);
     }
   };
 
-  // --- 4. RENDERERS ---
-
+  // --- 5. RENDERERS ---
   const renderQuestionContent = () => {
     if (!questionData) return null;
-    const { type, content } = questionData.question;
-    const mediaUrl = getMediaUrl(content);
-
-    switch (type) {
-      case 'image':
-        return mediaUrl ? (
-          <View style={styles.questionImageContainer}>
-            <Image source={{ uri: mediaUrl }} style={styles.questionImage} resizeMode="contain" />
-          </View>
-        ) : null;
-      case 'audio':
-        return (
-          <TouchableOpacity style={styles.bigAudioButton} onPress={() => mediaUrl && playSound(mediaUrl)}>
-            <MaterialIcons name="volume-up" size={40} color="#FFF" />
-            <Text style={styles.audioText}>Listen</Text>
-          </TouchableOpacity>
-        );
-      case 'text':
-      default:
-        return <Text style={styles.questionText}>{getText(content)}</Text>;
-    }
+    return <Text style={styles.questionText}>{getText(questionData.text)}</Text>;
   };
 
-  const renderOptionItem = (option: Option, index: number, answerType: string) => {
+  const renderOptionItem = (option: Option, index: number) => {
     const isSelected = selectedOptionIndex === index;
     // Highlight immediately if selected
-    let borderColor = COLORS.optionBorder;
+    let borderColor = COLORS.border;
     let bgColor = COLORS.card;
 
     if (isSelected) {
@@ -368,8 +233,6 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
       }
     }
 
-    const mediaUrl = getMediaUrl(option.content);
-
     return (
       <TouchableOpacity
         key={index}
@@ -378,23 +241,12 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
           styles.optionCard, 
           { borderColor, backgroundColor: bgColor, borderWidth: isSelected ? 3 : 1 }
         ]}
-        onPress={() => handleSelect(index)}
+        onPress={() => handleSelectOption(index)}
       >
         <View style={styles.optionContentWrapper}>
-          {answerType === 'image' && mediaUrl ? (
-            <Image source={{ uri: mediaUrl }} style={styles.optionImage} resizeMode="contain" />
-          ) : answerType === 'audio' ? (
-            <View style={styles.optionAudioRow}>
-               <TouchableOpacity style={styles.miniPlayBtn} onPress={() => mediaUrl && playSound(mediaUrl)}>
-                 <MaterialIcons name="play-arrow" size={24} color="#FFF" />
-               </TouchableOpacity>
-               <Text style={styles.optionTextLabel}>Option {index + 1}</Text>
-            </View>
-          ) : (
-            <Text style={[styles.optionText, isSelected && { fontWeight: 'bold' }]}>
-              {getText(option.content)}
-            </Text>
-          )}
+          <Text style={[styles.optionText, isSelected && { fontWeight: 'bold' }]}>
+            {getText(option.text)}
+          </Text>
         </View>
         
         {/* Simple radio circle */}
@@ -434,14 +286,33 @@ const MCQActivity: React.FC<ActivityComponentProps> = ({
 
         <View style={styles.optionsContainer}>
           {questionData?.options.map((opt, i) => 
-            renderOptionItem(opt, i, questionData.answerType)
+            renderOptionItem(opt, i)
           )}
         </View>
+
+        <TouchableOpacity
+          style={[
+            styles.checkButton,
+            status === 'idle' && { backgroundColor: COLORS.primary },
+            status === 'checking' && { backgroundColor: COLORS.disabled },
+            status === 'correct' && { backgroundColor: COLORS.success },
+            status === 'wrong' && { backgroundColor: COLORS.error },
+          ]}
+          onPress={checkAnswer}
+          disabled={status !== 'idle'}
+        >
+          <Text style={styles.checkButtonText}>
+            {status === 'idle' && 'Check Answer'}
+            {status === 'checking' && 'Checking...'}
+            {status === 'correct' && 'Correct!'}
+            {status === 'wrong' && 'Wrong!'}
+          </Text>
+        </TouchableOpacity>
 
       </ScrollView>
 
       {/* --- FULL SCREEN CONFETTI OVERLAY (For non-last exercises) --- */}
-      {showConfettiOverlay && (
+      {status === 'correct' && (
         <View style={styles.confettiOverlay} pointerEvents="none">
           <LottieView
             ref={confettiRef}
@@ -562,31 +433,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
   },
-  questionImageContainer: {
-    width: '100%',
-    height: 180,
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  questionImage: {
-    width: '100%',
-    height: '100%',
-  },
-  bigAudioButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    alignItems: 'center',
-    elevation: 5,
-  },
-  audioText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 18,
-    marginLeft: 10,
-  },
   optionsContainer: {
     gap: 15,
   },
@@ -608,29 +454,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: '500',
   },
-  optionTextLabel: {
-    fontSize: 16,
-    color: COLORS.text,
-    marginLeft: 10,
-  },
-  optionImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    backgroundColor: '#F5F5F5',
-  },
-  optionAudioRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  miniPlayBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   radioUnselected: {
     width: 24,
     height: 24,
@@ -644,6 +467,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 6,
     borderColor: COLORS.primary,
+  },
+  checkButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 15,
+    borderRadius: 30,
+    alignItems: 'center',
+    elevation: 5,
+  },
+  checkButtonText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 
   // --- MODAL STYLES ---
@@ -714,7 +549,7 @@ const styles = StyleSheet.create({
   },
   confettiFullScreen: {
     width: width,
-    height: height,
+    height: '100%',
   },
 });
 
