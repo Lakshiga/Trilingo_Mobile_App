@@ -29,6 +29,9 @@ import {
 } from '../utils/activityMappings';
 
 const { width } = Dimensions.get('window');
+const THEME_COLOR = '#0284C7';
+const ACCENT_COLOR = '#0EA5E9';
+const BG_GRADIENT: [string, string, string] = ['#E0F2FE', '#DBEAFE', '#E0F2FE'];
 
 interface Story {
   id: number;
@@ -124,14 +127,12 @@ const StoriesScreen: React.FC = () => {
           // Get pages count
           const pages = storyData.pages || storyData.pageCount || 10;
           
-          // Gradients - Blue theme matching home page
-          const gradients: readonly [string, string, ...string[]][] = [
-            ['#0EA5E9', '#0284C7'] as const,
-            ['#0284C7', '#0369A1'] as const,
-            ['#0369A1', '#075985'] as const,
-            ['#0EA5E9', '#075985'] as const,
-            ['#0284C7', '#0EA5E9'] as const,
-            ['#0369A1', '#0284C7'] as const,
+          // Unified soft blue gradients
+          const gradients: readonly [string, string][] = [
+            [ACCENT_COLOR, THEME_COLOR],
+            ['#60A5FA', '#3B82F6'],
+            ['#93C5FD', '#60A5FA'],
+            ['#38BDF8', '#0284C7'],
           ];
           
           return {
@@ -367,16 +368,22 @@ const StoriesScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={isDarkMode ? ['#1F2937', '#111827', '#0F172A'] : ['#FFF5E6', '#FFE4E1', '#E6F3FF']}
+        colors={isDarkMode ? ['#1F2937', '#111827', '#0F172A'] : BG_GRADIENT}
         style={styles.gradient}
       >
-        {/* Back Button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
-        </TouchableOpacity>
+        <StatusBar barStyle="light-content" backgroundColor={THEME_COLOR} />
+
+        {/* Header Bar */}
+        <View style={styles.headerBar}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerBarTitle}>{t.storiesTitle}</Text>
+          <View style={{ width: 44 }} />
+        </View>
 
         <ScrollView
           style={styles.scrollView}
@@ -448,19 +455,37 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+    backgroundColor: THEME_COLOR,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: THEME_COLOR,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
   backButton: {
-    position: 'absolute',
-    top: 45,
-    left: 16,
-    zIndex: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
     padding: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+  },
+  headerBarTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   scrollView: {
     flex: 1,
