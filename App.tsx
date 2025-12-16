@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { LogBox } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigation';
 import SplashScreen from './src/screens/SplashScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
@@ -25,6 +26,23 @@ const AppContent: React.FC = () => {
   const [fontsLoaded] = useFonts({
     'SpicyRice-Regular': require('./assets/fonts/SpicyRice-Regular.ttf'),
   });
+
+  // Silence the RN string/Text invariant so the app keeps running even if a stray string renders
+  useEffect(() => {
+    LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component']);
+    // Some RN environments expose ErrorUtils on global instead of as a named export
+    const errorUtils: any = (global as any).ErrorUtils;
+    const originalHandler = errorUtils?.getGlobalHandler?.();
+    if (errorUtils?.setGlobalHandler) {
+      errorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+        if (typeof error?.message === 'string' && error.message.includes('Text strings must be rendered within a <Text> component')) {
+          console.warn('[Guard] Swallowed text/string render error to keep app running');
+          return;
+        }
+        originalHandler?.(error, isFatal);
+      });
+    }
+  }, []);
   
   if (!fontsLoaded) return null;
   

@@ -13,6 +13,7 @@ import {
   Keyboard,
   ScrollView,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,8 +24,13 @@ import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- OPTIONS ---
-const CHILD_AGE_OPTIONS = ['2-4', '5-7', '8-10', '11-13', '14+'];
 const LANGUAGE_OPTIONS = ['English', 'Tamil', 'Sinhala'];
+const LEARNING_LEVEL_OPTIONS = [
+  'Total Beginner (No knowledge)',
+  'Familiar (Knows a few words)',
+  'Conversational (Can speak basic sentences)',
+  'Advanced (Fluent/School Level)',
+];
 
 // Map labels to locale codes for API
 const LANGUAGE_MAP: { [key: string]: string } = {
@@ -66,10 +72,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     name: '', // Will default to username if not asked
     // Child Data
     studentNickname: '',
-    studentAgeGroup: '',
+    dobDay: null as number | null,
+    dobMonth: null as number | null,
+    dobYear: null as number | null,
     studentNativeLanguageLabel: '',
     studentTargetLanguageLabel: '',
     studentAvatar: '😀',
+    learningLevel: '',
   });
 
   // --- ANIMATION REFS ---
@@ -90,14 +99,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // --- QUESTIONS CONFIGURATION ---
-  const parentQuestions = useMemo(() => [
-    { 
-      key: 'email', 
-      question: "What is your Email?", 
-      placeholder: "name@example.com", 
-      keyboardType: 'email-address', 
-      icon: 'email' 
-    },
+  type BaseQuestion = { key: string; question: string; icon: string };
+  type InputQuestion = BaseQuestion & { placeholder: string; secure?: boolean; keyboardType?: any; isDate?: false; isSelection?: false };
+  type DateQuestion = BaseQuestion & { isDate: true };
+  type SelectionQuestion = BaseQuestion & { isSelection: true; options: string[] };
+  type Question = InputQuestion | DateQuestion | SelectionQuestion;
+
+  const isSelectionQuestion = (q: Question): q is SelectionQuestion => 'isSelection' in q && q.isSelection === true;
+  const isDateQuestion = (q: Question): q is DateQuestion => 'isDate' in q && q.isDate === true;
+  const isInputQuestion = (q: Question): q is InputQuestion => !isSelectionQuestion(q) && !isDateQuestion(q);
+
+  const parentQuestions: Question[] = useMemo(() => [
     { 
       key: 'username', 
       question: "Choose a Username", 
@@ -111,9 +123,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       secure: true, 
       icon: 'lock' 
     },
+    { 
+      key: 'email', 
+      question: "What is your Email?", 
+      placeholder: "name@example.com", 
+      keyboardType: 'email-address', 
+      icon: 'email' 
+    },
   ], []);
 
-  const childQuestions = useMemo(() => [
+  const childQuestions: Question[] = useMemo(() => [
     {
       key: 'studentNickname',
       question: "What is your child's name?",
@@ -121,10 +140,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       icon: 'face-man-shimmer'
     },
     {
-      key: 'studentAgeGroup',
-      question: "How old is the child?",
-      isSelection: true,
-      options: CHILD_AGE_OPTIONS,
+      key: 'dateOfBirth',
+      question: "What's your child's date of birth?",
+      isDate: true,
       icon: 'cake-variant'
     },
     {
@@ -141,6 +159,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       options: LANGUAGE_OPTIONS,
       icon: 'school'
     },
+    {
+      key: 'learningLevel',
+      question: "How much do you know already?",
+      isSelection: true,
+      options: LEARNING_LEVEL_OPTIONS,
+      icon: 'medal'
+    },
   ], []);
 
   // Determine current question based on stage
@@ -149,6 +174,51 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   const progress = (registrationStage === 'child') 
     ? (currentStep + 1) / childQuestions.length 
     : (currentStep + 1) / parentQuestions.length;
+
+  const emailStepIndex = parentQuestions.findIndex(q => q.key === 'email');
+  const years = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const minYear = currentYear - 16;
+    const maxYear = currentYear - 2;
+    const result: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) result.push(y);
+    return result;
+  }, []);
+  
+  const months = useMemo(() => [
+    { label: 'January', value: 1 },
+    { label: 'February', value: 2 },
+    { label: 'March', value: 3 },
+    { label: 'April', value: 4 },
+    { label: 'May', value: 5 },
+    { label: 'June', value: 6 },
+    { label: 'July', value: 7 },
+    { label: 'August', value: 8 },
+    { label: 'September', value: 9 },
+    { label: 'October', value: 10 },
+    { label: 'November', value: 11 },
+    { label: 'December', value: 12 }
+  ], []);
+  
+  const getDaysArray = (year: number, month: number) => {
+    if (!year || !month) return [];
+    const count = daysInMonth(year, month);
+    const daysArray = [];
+    for (let i = 1; i <= count; i++) {
+      daysArray.push({ label: i.toString(), value: i });
+    }
+    return daysArray;
+  };
+  
+  const daysInMonth = (year: number, month: number) => {
+    if (!year || !month) return 31;
+    return new Date(year, month, 0).getDate();
+  };
+  const days = useMemo(() => {
+    const { dobYear, dobMonth } = userData;
+    const count = daysInMonth(dobYear || new Date().getFullYear(), dobMonth || 1);
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }, [userData.dobMonth, userData.dobYear]);
 
   // --- VALIDATION LOGIC ---
   const checkPasswordValidations = (password: string) => ({
@@ -189,7 +259,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     if (womanWorkRef.current) { womanWorkRef.current.pause(); womanWorkRef.current.reset(); }
     setContinueLocked(false);
     setPasswordValidations({ minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecialChar: false });
-    setEmailError('');
+    // Keep email error visible when we land on email step again (e.g., email already taken)
+    if (currentQ.key !== 'email') {
+      setEmailError('');
+    }
 
     // Disable animation on step change
     lottieOpacity.setValue(0);
@@ -211,16 +284,36 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     const val = userData[currentQ.key as keyof typeof userData];
     
     // 1. Check Empty
-    if (!val) {
+    if (!val && !isDateQuestion(currentQ)) {
       Alert.alert("Required", "Please fill in the details to proceed.");
       return;
     }
 
     // 2. Validations
     let hasError = false;
+    if (currentQ.key === 'dateOfBirth') {
+      const { dobDay, dobMonth, dobYear } = userData;
+      if (!dobDay || !dobMonth || !dobYear) {
+        Alert.alert('Validation', 'Please select day, month, and year.');
+        return;
+      }
+      // basic validity check on days
+      const maxDay = daysInMonth(dobYear, dobMonth);
+      if (dobDay > maxDay) {
+        Alert.alert('Validation', 'Invalid date selected.');
+        return;
+      }
+    }
     if (currentQ.key === 'email') {
       if (!checkEmailValidation(userData.email)) {
-        setEmailError('Invalid Email');
+        const message = 'Invalid Email';
+        setEmailError(message);
+        Alert.alert('Validation', message);
+        hasError = true;
+      }
+      // If a duplicate-email error is already showing, block progression
+      if (emailError) {
+        Alert.alert('Validation', emailError);
         hasError = true;
       }
     } else if (currentQ.key === 'password') {
@@ -281,16 +374,29 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       // Move to Success Screen
       setRegistrationStage('success');
     } catch (error: any) {
-      const msg = error?.message || '';
-      if (msg.toLowerCase().includes('email') && msg.toLowerCase().includes('taken')) {
-        setEmailError('Email already taken');
+      const rawMsg = String(error?.response?.data?.message || error?.message || '');
+      const msg = rawMsg.toLowerCase();
+      const isEmailDup =
+        msg.includes('email') &&
+        (msg.includes('taken') || msg.includes('exist') || msg.includes('already') || msg.includes('duplicate'));
+
+      if (isEmailDup) {
+        const message = 'Email already taken';
+        setEmailError(message);
         setRegistrationStage('parent');
-        setCurrentStep(0); // email is step 0 in parentQuestions
-        return;
-      } else {
-        Alert.alert('Registration Failed', msg);
+        setCurrentStep(emailStepIndex >= 0 ? emailStepIndex : 0); // jump back to email step
+        setContinueLocked(false);
+        Alert.alert('Validation', message);
         return;
       }
+
+      if (msg.includes('internal server error') || error?.response?.status === 500) {
+        Alert.alert('Server Issue', 'Something went wrong on the server. Please try again in a moment.');
+      } else {
+        Alert.alert('Registration Failed', rawMsg || 'Please try again.');
+      }
+      setContinueLocked(false);
+      return;
     } finally {
       setIsLoading(false);
     }
@@ -301,29 +407,23 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
     setCurrentStep(0);
   };
 
-  const calculateDobFromAgeGroup = (ageGroup: string) => {
-    const currentYear = new Date().getFullYear();
-    let substractYears = 5; // Default
-    if (ageGroup === '2-4') substractYears = 3;
-    if (ageGroup === '5-7') substractYears = 6;
-    if (ageGroup === '8-10') substractYears = 9;
-    if (ageGroup === '11-13') substractYears = 12;
-    if (ageGroup === '14+') substractYears = 15;
-    
-    return `${currentYear - substractYears}-01-01T00:00:00Z`;
-  };
-
   const handleChildCreation = async () => {
     setIsLoading(true);
     try {
-      const dob = calculateDobFromAgeGroup(userData.studentAgeGroup);
+      const { dobDay, dobMonth, dobYear } = userData;
+      if (!dobDay || !dobMonth || !dobYear) {
+        Alert.alert('Validation', 'Please select a valid date of birth.');
+        setIsLoading(false);
+        return;
+      }
+      const dobUtc = new Date(Date.UTC(dobYear, dobMonth - 1, dobDay)).toISOString();
       const nativeCode = LANGUAGE_MAP[userData.studentNativeLanguageLabel] || 'en-US';
       const targetCode = LANGUAGE_MAP[userData.studentTargetLanguageLabel] || 'ta-LK';
 
       const student = await apiService.createStudent({
         nickname: userData.studentNickname,
         avatar: userData.studentAvatar,
-        dateOfBirth: dob,
+        dateOfBirth: dobUtc,
         nativeLanguageCode: nativeCode,
         targetLanguageCode: targetCode,
       });
@@ -345,7 +445,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       }
       
       // Navigate to Home
-      navigation.navigate('Home'); 
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
     } catch (error: any) {
       Alert.alert('Student Creation Failed', error.message);
     } finally {
@@ -381,15 +484,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
           source={require('../../assets/animations/success-check.json')} // Make sure you have a success lottie or generic
           autoPlay
           loop={true}
-          style={{ width: '50%', height: '50%' }}
+          style={styles.successLottie}
         />
-        <Text style={styles.successTitle}>Registered Successfully!</Text>
-        <Text style={styles.successSub}>Your parent account is ready.</Text>
-        <Text style={styles.successSub}>Now, let's set up the profile for your child.</Text>
-        
-        <TouchableOpacity style={styles.continueButton} onPress={startChildSetup}>
-           <Text style={styles.continueText}>Set Up Child Profile</Text>
-        </TouchableOpacity>
+        <View style={styles.successFooter}>
+          <Text style={styles.successTitle}>Registered Successfully!</Text>
+          <Text style={styles.successSub}>Your parent account is ready.</Text>
+          <Text style={styles.successSub}>Now, let's set up the profile for your child.</Text>
+          
+          <TouchableOpacity style={styles.continueButton} onPress={startChildSetup}>
+             <Text style={styles.continueText}>Set Up Child Profile</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -468,48 +573,134 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
               <View style={styles.inputContainer}>
                 
                 {/* SELECTION (Age / Language) */}
-                {(currentQ as any).isSelection ? (
+                {isSelectionQuestion(currentQ) ? (
                   <View style={styles.gridContainer}>
-                    {(currentQ as any).options?.map((option: string) => {
+                    {currentQ.options?.map((option: string, index: number) => {
                       const isSelected = userData[currentQ.key as keyof typeof userData] === option;
+                      const isDisabled = currentQ.key === 'learningLevel' && index > 0; // Only first level enabled
                       return (
                         <TouchableOpacity
                           key={option}
-                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                          onPress={() => setUserData({ ...userData, [currentQ.key]: option })}
-                          activeOpacity={0.7}
+                          style={[
+                            styles.optionButton,
+                            isSelected && styles.optionButtonSelected,
+                            isDisabled && styles.optionButtonDisabled,
+                          ]}
+                          onPress={() => {
+                            if (isDisabled) {
+                              Alert.alert('Coming soon', 'This level will be available soon.');
+                              return;
+                            }
+                            setUserData({ ...userData, [currentQ.key]: option });
+                          }}
+                          activeOpacity={isDisabled ? 1 : 0.7}
+                          disabled={isDisabled}
                         >
-                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{option}</Text>
+                          <Text
+                            style={[
+                              styles.optionText,
+                              isSelected && styles.optionTextSelected,
+                              isDisabled && styles.optionTextDisabled,
+                            ]}
+                          >
+                            {option}
+                          </Text>
                           {isSelected && <MaterialCommunityIcons name="check-circle" size={16} color="#FFF" style={styles.checkmark} />}
                         </TouchableOpacity>
                       );
                     })}
+                  </View>
+                ) : isDateQuestion(currentQ) ? (
+                  <View style={styles.dobDropdownContainer}>
+                    <View style={styles.dobDropdownRow}>
+                      <View style={styles.dropdownWrapper}>
+                        <Text style={styles.dropdownLabel}>Day</Text>
+                        <View style={styles.pickerContainer}>
+                          <Picker
+                            selectedValue={userData.dobDay ? userData.dobDay.toString() : ''}
+                            style={styles.picker}
+                            onValueChange={(itemValue) => {
+                              const day = itemValue ? parseInt(itemValue.toString()) : null;
+                              setUserData({ ...userData, dobDay: day });
+                            }}
+                            mode="dropdown"
+                          >
+                            <Picker.Item label="Select Day" value="" />
+                            {getDaysArray(userData.dobYear || new Date().getFullYear(), userData.dobMonth || 1).map(day => (
+                              <Picker.Item key={day.value} label={day.label} value={day.value.toString()} />
+                            ))}
+                          </Picker>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.dropdownWrapper}>
+                        <Text style={styles.dropdownLabel}>Month</Text>
+                        <View style={styles.pickerContainer}>
+                          <Picker
+                            selectedValue={userData.dobMonth ? userData.dobMonth.toString() : ''}
+                            style={styles.picker}
+                            onValueChange={(itemValue) => {
+                              const month = itemValue ? parseInt(itemValue.toString()) : null;
+                              setUserData({ ...userData, dobMonth: month });
+                            }}
+                            mode="dropdown"
+                          >
+                            <Picker.Item label="Select Month" value="" />
+                            {months.map(month => (
+                              <Picker.Item key={month.value} label={month.label} value={month.value.toString()} />
+                            ))}
+                          </Picker>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.dropdownWrapper}>
+                        <Text style={styles.dropdownLabel}>Year</Text>
+                        <View style={styles.pickerContainer}>
+                          <Picker
+                            selectedValue={userData.dobYear ? userData.dobYear.toString() : ''}
+                            style={styles.picker}
+                            onValueChange={(itemValue) => {
+                              const year = itemValue ? parseInt(itemValue.toString()) : null;
+                              setUserData({ ...userData, dobYear: year });
+                            }}
+                            mode="dropdown"
+                          >
+                            <Picker.Item label="Select Year" value="" />
+                            {years.map(year => (
+                              <Picker.Item key={year} label={year.toString()} value={year.toString()} />
+                            ))}
+                          </Picker>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 ) : (
                   /* TEXT INPUT */
                   <View style={styles.inputWrapperContainer}>
                     <View style={styles.textInputWrapper}>
                       <MaterialCommunityIcons name={currentQ.icon as any} size={24} color="#2D4F9C" style={styles.inputIcon} />
-                      <TextInput
-                        key={currentQ.key + showPassword}
-                        style={styles.modernInput}
-                        value={userData[currentQ.key as keyof typeof userData] as string}
-                        onChangeText={(text) => {
-                          setUserData({ ...userData, [currentQ.key]: text });
-                          if(currentQ.key === 'email') {
-                            // Clear any previous duplicate/format errors while typing
-                            setEmailError(text.length > 0 && !checkEmailValidation(text) ? 'Invalid Email' : '');
-                          }
-                          if(currentQ.key === 'password') setPasswordValidations(checkPasswordValidations(text));
-                        }}
-                        placeholder={currentQ.placeholder}
-                        placeholderTextColor="#94A3B8"
-                        autoFocus={true}
-                        keyboardType={(currentQ as any).keyboardType ?? 'default' as any}
-                        secureTextEntry={((currentQ as any).secure ?? false) && !showPassword}
-                        autoCapitalize={currentQ.key === 'email' ? 'none' : 'words'}
-                      />
-                      {((currentQ as any).secure ?? false) && (
+                      {isInputQuestion(currentQ) && (
+                        <TextInput
+                          key={currentQ.key + showPassword}
+                          style={styles.modernInput}
+                          value={userData[currentQ.key as keyof typeof userData] as string}
+                          onChangeText={(text) => {
+                            setUserData({ ...userData, [currentQ.key]: text });
+                            if(currentQ.key === 'email') {
+                              // Clear any previous duplicate/format errors while typing
+                              setEmailError(text.length > 0 && !checkEmailValidation(text) ? 'Invalid Email' : '');
+                            }
+                            if(currentQ.key === 'password') setPasswordValidations(checkPasswordValidations(text));
+                          }}
+                          placeholder={currentQ.placeholder}
+                          placeholderTextColor="#94A3B8"
+                          autoFocus={true}
+                          keyboardType={(currentQ.keyboardType ?? 'default') as any}
+                          secureTextEntry={((currentQ.secure ?? false) && !showPassword)}
+                          autoCapitalize={currentQ.key === 'email' ? 'none' : 'words'}
+                        />
+                      )}
+                      {isInputQuestion(currentQ) && (currentQ.secure ?? false) && (
                         <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeToggleButton}>
                           <MaterialCommunityIcons name={showPassword ? "eye-off" : "eye"} size={24} color="#2D4F9C" />
                         </TouchableOpacity>
@@ -563,8 +754,10 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
 
   // Success Screen
   successContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  successLottie: { width: '65%', height: '65%', maxWidth: 360, maxHeight: 360, marginBottom: 10 },
   successTitle: { fontSize: 28, fontWeight: 'bold', color: '#0D5B81', marginTop: 20 },
-  successSub: { fontSize: 16, color: '#64748B', textAlign: 'center', marginTop: 20 },
+  successSub: { fontSize: 16, color: '#64748B', textAlign: 'center', marginTop: 8 },
+  successFooter: { width: '100%', position: 'absolute', bottom: 40, alignItems: 'center', paddingHorizontal: 20, gap: 6 },
   
   // Header
   topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
@@ -598,9 +791,29 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   optionButton: { backgroundColor: '#F8FAFC', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#CBD5E1', minWidth: '40%', alignItems: 'center', justifyContent: 'center', marginBottom: 5, flexDirection: 'row' },
   optionButtonSelected: { backgroundColor: '#4289BA', borderColor: '#4289BA', elevation: 5 },
+  optionButtonDisabled: { opacity: 0.55 },
   optionText: { fontSize: responsive.wp(4), color: '#64748B', fontWeight: '600' },
   optionTextSelected: { color: '#FFFFFF', fontWeight: 'bold' },
+  optionTextDisabled: { color: '#94A3B8' },
   checkmark: { marginLeft: 6 },
+
+  // Date of Birth Dropdowns
+  dobDropdownContainer: { width: '100%', marginBottom: 20 },
+  dobDropdownRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dropdownWrapper: { flex: 1, marginHorizontal: 5 },
+  dropdownLabel: { fontSize: responsive.wp(4), color: '#0D5B81', fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  pickerContainer: { 
+    borderWidth: 1, 
+    borderColor: '#CBD5E1', 
+    borderRadius: 10, 
+    backgroundColor: '#F8FAFC',
+    overflow: 'hidden'
+  },
+  picker: { 
+    height: 50, 
+    width: '100%',
+    color: '#0F172A'
+  },
 
   // Validation
   validationContainer: { marginTop: 8, width: '100%', paddingLeft: 5 },
