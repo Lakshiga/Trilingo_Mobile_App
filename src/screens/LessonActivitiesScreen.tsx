@@ -147,14 +147,15 @@ const LessonActivitiesScreen: React.FC = () => {
   };
 
   const getActivityName = (activity: ActivityDto) => {
+    // Always prefer native language; only fall back to English/other native fields, not learning language
     switch (nativeLanguage) {
       case 'Tamil':
-        return activity.name_ta || getLearningLanguageField(learningLanguage, activity);
+        return activity.name_ta || activity.name_en || activity.name_si || activity.name_ta || '';
       case 'Sinhala':
-        return activity.name_si || getLearningLanguageField(learningLanguage, activity);
+        return activity.name_si || activity.name_en || activity.name_ta || activity.name_si || '';
       case 'English':
       default:
-        return activity.name_en || getLearningLanguageField(learningLanguage, activity);
+        return activity.name_en || activity.name_ta || activity.name_si || activity.name_en || '';
     }
   };
 
