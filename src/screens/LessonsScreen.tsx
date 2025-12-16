@@ -31,6 +31,7 @@ const { width } = Dimensions.get('window');
 interface RouteParams {
   levelId: number;
   levelName?: string;
+  refreshTimestamp?: number;
 }
 
 const LessonsScreen: React.FC = () => {
@@ -44,11 +45,13 @@ const LessonsScreen: React.FC = () => {
   const params = route.params as RouteParams;
   const levelId = params?.levelId || 1;
   const levelName = params?.levelName || 'Level 01';
+  const refreshTimestamp = params?.refreshTimestamp;
 
   const [lessons, setLessons] = useState<StageDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [lockedLessons, setLockedLessons] = useState<Set<number>>(new Set());
   const [showComingSoonModal, setShowComingSoonModal] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Force refresh counter
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -99,9 +102,9 @@ const LessonsScreen: React.FC = () => {
           }
         }
         
-        // Check if user has paid for this level (for all levels that require payment)
+        // Check if user has paid for this level (only for levels 3 and above)
         let hasPaidAccess = false;
-        if (currentUser && !currentUser.isGuest) {
+        if (currentUser && !currentUser.isGuest && levelId >= 3) {
           try {
             const accessResponse = await apiService.checkLevelAccess(levelId);
             if (accessResponse && accessResponse.isSuccess) {
@@ -112,6 +115,9 @@ const LessonsScreen: React.FC = () => {
             // If error, assume no access (will show payment modal)
             hasPaidAccess = false;
           }
+        } else if (levelId < 3) {
+          // Levels 1 and 2 are always free
+          hasPaidAccess = false;
         }
         
         // Lock all lessons except first 2 (index 0 and 1)
@@ -157,9 +163,19 @@ const LessonsScreen: React.FC = () => {
   // Refresh lessons when screen comes into focus (e.g., after payment)
   useFocusEffect(
     useCallback(() => {
+      // Increment refresh trigger to force re-run
+      setRefreshTrigger(prev => prev + 1);
+
       const refreshLessons = async () => {
         if (!currentUser) return; // Don't refresh if no user
-        
+
+        console.log('Refreshing lessons after payment check...');
+        if (refreshTimestamp) {
+          console.log(`Payment refresh triggered with timestamp: ${refreshTimestamp}`);
+          // Add a small delay to ensure backend has updated payment status
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
         try {
           const allLessons = await apiService.getStagesByLevelId(levelId);
           const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
@@ -190,19 +206,29 @@ const LessonsScreen: React.FC = () => {
             }
           }
           
-          // Check if user has paid for this level (for all levels that require payment)
+          // Check if user has paid for this level (only for levels 3 and above)
           let hasPaidAccess = false;
-          if (currentUser && !currentUser.isGuest) {
+          if (currentUser && !currentUser.isGuest && levelId >= 3) {
             try {
+              console.log(`Checking payment access for level ${levelId}, user: ${currentUser.username}`);
               const accessResponse = await apiService.checkLevelAccess(levelId);
+              console.log('Payment access response:', accessResponse);
               if (accessResponse && accessResponse.isSuccess) {
                 hasPaidAccess = accessResponse.hasAccess;
+                console.log(`Payment access result: hasPaidAccess = ${hasPaidAccess}`);
+              } else {
+                console.log('Payment access check failed or returned unsuccessful');
+                hasPaidAccess = false;
               }
             } catch (error) {
               console.error('Error checking payment access:', error);
               // If error, assume no access (will show payment modal)
               hasPaidAccess = false;
             }
+          } else if (levelId < 3) {
+            // Levels 1 and 2 are always free
+            console.log(`Level ${levelId} is free (no payment required)`);
+            hasPaidAccess = false;
           }
           
           // Lock all lessons except first 2 (index 0 and 1)
@@ -211,13 +237,16 @@ const LessonsScreen: React.FC = () => {
           if (hasPaidAccess) {
             // User has paid, unlock all lessons - don't add any to lockedSet
             // All lessons will be unlocked
+            console.log(`User has paid access - unlocking all ${validLessons.length} lessons`);
           } else {
             // User hasn't paid, lock lessons after 2nd one
             for (let i = 2; i < validLessons.length; i++) {
               lockedSet.add(validLessons[i].id);
             }
+            console.log(`User has no paid access - locking ${validLessons.length - 2} lessons after first 2`);
           }
-          
+
+          console.log(`Final lesson state: ${validLessons.length} total lessons, ${lockedSet.size} locked`);
           setLessons(validLessons);
           setLockedLessons(lockedSet);
         } catch (error) {
@@ -226,7 +255,7 @@ const LessonsScreen: React.FC = () => {
       };
 
       refreshLessons();
-    }, [levelId, currentUser])
+    }, [levelId, currentUser, refreshTrigger, refreshTimestamp])
   );
 
   useEffect(() => {
@@ -240,35 +269,18 @@ const LessonsScreen: React.FC = () => {
     try {
       // Check if lesson is locked
       if (lockedLessons.has(lesson.id)) {
-        // For level 3+, check if user has paid (only if user is logged in)
-        if (levelId >= 3 && currentUser && !currentUser.isGuest) {
-          try {
-            const accessResponse = await apiService.checkLevelAccess(levelId);
-            if (accessResponse && accessResponse.isSuccess && accessResponse.hasAccess) {
-              // User has paid, allow access to the lesson
-              (navigation as any).navigate('LessonActivities', { 
-                lessonId: lesson.id, 
-                lessonName: getLessonName(lesson),
-                levelId: levelId 
-              });
-              return;
-            }
-          } catch (error: any) {
-            console.error('Error checking level access:', error);
-            // If API call fails, show modal (payment might be required)
-            // Don't throw, just continue to show modal
-          }
-        }
-        // Show modal for locked lessons
+        // Show payment modal for locked lessons
+        console.log(`Lesson ${lesson.id} is locked, showing payment modal`);
         setShowComingSoonModal(true);
         return;
       }
 
       // Lesson is unlocked, navigate to it
-      (navigation as any).navigate('LessonActivities', { 
-        lessonId: lesson.id, 
+      console.log(`Lesson ${lesson.id} is unlocked, navigating to activities`);
+      (navigation as any).navigate('LessonActivities', {
+        lessonId: lesson.id,
         lessonName: getLessonName(lesson),
-        levelId: levelId 
+        levelId: levelId
       });
     } catch (error: any) {
       console.error('Error in handleLessonPress:', error);
