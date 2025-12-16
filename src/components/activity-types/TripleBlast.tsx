@@ -135,7 +135,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
         await sadSound.unloadAsync();
       }
       const { sound: newSound } = await Audio.Sound.createAsync(
-        require('../../../assets/sounds/wrong.mp3')
+        require('../../../assets/sounds/sad.wav')
       );
       setSadSound(newSound);
       await newSound.playAsync();
@@ -439,7 +439,7 @@ const TripleBlast: React.FC<ActivityComponentProps> = ({
           <View style={styles.overlay} pointerEvents="none">
              <LottieView
                ref={failRef}
-               source={require('../../../assets/animations/wrong.json')}
+               source={require('../../../assets/animations/Sad - Failed.json')}
                autoPlay loop={false}
                style={{ width: 400, height: 400 }}
              />
