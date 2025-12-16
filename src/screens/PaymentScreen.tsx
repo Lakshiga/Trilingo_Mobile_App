@@ -77,14 +77,7 @@ export default function PaymentScreen() {
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     // Navigate to Lessons screen which will refresh and show unlocked lessons
-    // Add a timestamp parameter to force refresh
-    const refreshTimestamp = Date.now();
-    console.log(`Navigating back to lessons with refresh timestamp: ${refreshTimestamp}`);
-    navigation.navigate('Lessons', {
-      levelId: nextLevelId,
-      levelName,
-      refreshTimestamp
-    });
+    navigation.navigate('Lessons', { levelId: nextLevelId, levelName });
   };
 
   const handleCreateSession = async () => {

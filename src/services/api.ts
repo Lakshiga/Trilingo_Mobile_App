@@ -357,7 +357,7 @@ class ApiService {
     try {
       const response = await this.api.get<ApiResponse<User>>('/auth/me');
       return response.data.data || null;
-    } catch (error) {
+    } catch (error: any) {
       // Silently handle 404 errors for current user (user might not be logged in)
       if (error.response?.status !== 404) {
         console.warn('Failed to get current user:', error);
@@ -746,6 +746,9 @@ class ApiService {
 
   async verifyPayment(sessionId: string): Promise<PaymentStatusResponse> {
     try {
+      if (!sessionId) {
+        throw new Error('Session ID is required for payment verification');
+      }
       const response = await this.api.post<PaymentStatusResponse>('/payments/verify-payment', {
         sessionId,
       });
@@ -1069,5 +1072,5 @@ class ApiService {
 }
 
 // Create and export singleton instance
-export const apiService = new ApiService();
+const apiService = new ApiService();
 export default apiService;
