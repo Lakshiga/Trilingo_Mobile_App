@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -69,11 +69,25 @@ export default function ProfileScreen() {
   const { isDarkMode, setDarkMode } = useTheme();
   const { currentUser, logout, updateUser } = useUser();
   const [summary, setSummary] = useState<ProgressSummaryDto | null>(null);
-  const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
+  const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string; nativeLanguageCode?: string; targetLanguageCode?: string } | null>(null);
   // Always prefer student nickname; fallback to cached nickname; avoid parent name
   const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
   const navigation = useNavigation();
-  const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || ('English' as Language);
+  const nativeLanguage: Language = useMemo(() => {
+      // First try to get from cached student profile
+      if (cachedStudentProfile?.nativeLanguageCode) {
+        // Map language codes to language names
+        const codeMap: { [key: string]: Language } = {
+          'en-US': 'English',
+          'ta-LK': 'Tamil',
+          'si-LK': 'Sinhala'
+        };
+        return codeMap[cachedStudentProfile.nativeLanguageCode] || 'Tamil'; // Default to Tamil
+      }
+      
+      // Fallback to parent's native language
+      return (currentUser?.nativeLanguage as Language) || ('Tamil' as Language);
+    }, [currentUser, cachedStudentProfile]);
   const tx = (key: string): string => getTranslation(nativeLanguage, key as any);
   const { isBackgroundEnabled, enableBackground, disableBackground } = useBackgroundAudio();
   
