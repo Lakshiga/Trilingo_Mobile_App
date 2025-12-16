@@ -10,13 +10,13 @@ import {
   Platform,
   Animated,
   ActivityIndicator,
-  ImageBackground,
   Keyboard,
   ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Video, ResizeMode } from 'expo-av';
 import { useResponsive } from '../utils/responsive';
 import apiService from '../services/api';
 import { useNavigation } from '@react-navigation/native';
@@ -401,11 +401,15 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <ImageBackground
-        source={require('../../assets/register.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
+      <View style={styles.backgroundWrapper}>
+        <Video
+          source={require('../../assets/register_bubble.mp4')}
+          style={styles.backgroundVideo}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          shouldPlay
+          isMuted
+        />
         <LinearGradient
           colors={['rgba(255,255,255,0.85)', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.95)']}
           style={StyleSheet.absoluteFill}
@@ -542,7 +546,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
             {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>{currentStep === activeQuestions.length - 1 ? "Finish" : "Continue"}</Text>}
           </TouchableOpacity>
         </View>
-      </ImageBackground>
+      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -550,7 +554,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
 // --- STYLES ---
 const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.create({
   container: { flex: 1 },
-  backgroundImage: { flex: 1, width: '100%', height: '100%' },
+  backgroundWrapper: { flex: 1, width: '100%', height: '100%', overflow: 'hidden' },
+  backgroundVideo: { ...StyleSheet.absoluteFillObject, opacity: 0.8 },
   scrollContent: { flexGrow: 1 },
   contentSafeArea: { flex: 1, paddingTop: responsive.hp(4), paddingHorizontal: responsive.wp(6), paddingBottom: responsive.hp(1) },
   inputAreaWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: responsive.hp(2) },
