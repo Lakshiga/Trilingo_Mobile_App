@@ -690,6 +690,28 @@ const HomeScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
+        {/* --- WELCOME TO Q-BIT TEXT --- */}
+        <Animated.View 
+          style={[
+            styles.welcomeContainer,
+            {
+              opacity: headerAnim,
+              transform: [{
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0],
+                }),
+              }],
+            },
+          ]}
+        >
+          <Text style={styles.welcomeText}>Welcome to</Text>
+          <View style={styles.qbitContainer}>
+            <Text style={styles.qbitText}>✨Q-Bit</Text>
+            <Text style={styles.sparkleEmoji}>✨</Text>
+          </View>
+        </Animated.View>
+
         {/* --- JOY IN EDUCATION ANIMATION --- */}
         <View style={styles.heroCard}>
           <LottieView
@@ -720,68 +742,66 @@ const HomeScreen: React.FC = () => {
               tint="light"
               style={styles.progressContainer}
             >
-              <View style={styles.progressGlassOverlay}>
-                <View style={styles.progressHeader}>
-                  <Text style={styles.progressTitle}>{t.homeProgressTitle}</Text>
-                  <Text style={styles.levelText}>{t.homeLevelLabel} {String(progressData.level || 1)}</Text>
-                </View>
-                
-                <View style={styles.xpContainer}>
-                  <Text style={styles.xpText}>{String(progressData.totalXpPoints || 0)} XP</Text>
-                  <Text style={styles.nextLevelText}>{t.homeNextLevel} {String(progressData.nextLevelXp || 300)} XP</Text>
-                </View>
-                
-                <View style={styles.progressBarBackground}>
-                  <Animated.View 
-                    style={[
-                      styles.progressBarFill, 
-                      { 
-                        width: `${calculateProgress()}%`,
-                        backgroundColor: calculateProgress() === 100 ? '#0284C7' : '#0284C7'
-                      }
-                    ]} 
-                  />
-                </View>
-                
-                <View style={styles.statsRow}>
-                  <View style={styles.statBox}>
-                    <MaterialCommunityIcons name="star" size={24} color="#0284C7" />
-                    <Text style={styles.statValue}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
-                    <Text style={styles.statLabel}>{t.homeStarsLabel}</Text>
-                  </View>
-                  
-                  <View style={styles.statBox}>
-                    <MaterialCommunityIcons name="trophy" size={24} color="#0369A1" />
-                    <Text style={styles.statValue}>{String(progressData.level || 1)}</Text>
-                    <Text style={styles.statLabel}>{t.homeLevelLabel}</Text>
-                  </View>
-                  
-                  <View style={styles.statBox}>
-                    <MaterialCommunityIcons name="chart-line" size={24} color="#0EA5E9" />
-                    <Text style={styles.statValue}>{String(Math.round(progressData.averageScore || 0))}%</Text>
-                    <Text style={styles.statLabel}>{t.homeAccuracyLabel}</Text>
-                  </View>
-                  
-                  <View style={styles.statBox}>
-                    <MaterialCommunityIcons name="clock-outline" size={24} color="#0284C7" />
-                    <Text style={styles.statValue}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
-                    <Text style={styles.statLabel}>{t.homeTimeLabel}</Text>
-                  </View>
-                </View>
-
-                {continueTarget && (
-                  <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                    <Text style={styles.continueButtonText}>{t.continue}</Text>
-                    <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
-                  </TouchableOpacity>
-                )}
-                {!continueTarget && (
-                  <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                    <Text style={styles.continueButtonText}>{t.start}</Text>
-                    <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
-                  </TouchableOpacity>
-                )}
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressTitle}>{t.homeProgressTitle}</Text>
+                <Text style={styles.levelText}>{t.homeLevelLabel} {String(progressData.level || 1)}</Text>
               </View>
+              
+              <View style={styles.xpContainer}>
+                <Text style={styles.xpText}>{String(progressData.totalXpPoints || 0)} XP</Text>
+                <Text style={styles.nextLevelText}>{t.homeNextLevel} {String(progressData.nextLevelXp || 300)} XP</Text>
+              </View>
+              
+              <View style={styles.progressBarBackground}>
+                <Animated.View 
+                  style={[
+                    styles.progressBarFill, 
+                    { 
+                      width: `${calculateProgress()}%`,
+                      backgroundColor: calculateProgress() === 100 ? '#0284C7' : '#0284C7'
+                    }
+                  ]} 
+                />
+              </View>
+              
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <MaterialCommunityIcons name="star" size={24} color="#0284C7" />
+                  <Text style={styles.statValue}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
+                  <Text style={styles.statLabel}>{t.homeStarsLabel}</Text>
+                </View>
+                
+                <View style={styles.statBox}>
+                  <MaterialCommunityIcons name="trophy" size={24} color="#0369A1" />
+                  <Text style={styles.statValue}>{String(progressData.level || 1)}</Text>
+                  <Text style={styles.statLabel}>{t.homeLevelLabel}</Text>
+                </View>
+                
+                <View style={styles.statBox}>
+                  <MaterialCommunityIcons name="chart-line" size={24} color="#0EA5E9" />
+                  <Text style={styles.statValue}>{String(Math.round(progressData.averageScore || 0))}%</Text>
+                  <Text style={styles.statLabel}>{t.homeAccuracyLabel}</Text>
+                </View>
+                
+                <View style={styles.statBox}>
+                  <MaterialCommunityIcons name="clock-outline" size={24} color="#0284C7" />
+                  <Text style={styles.statValue}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
+                  <Text style={styles.statLabel}>{t.homeTimeLabel}</Text>
+                </View>
+              </View>
+
+              {continueTarget && (
+                <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                  <Text style={styles.continueButtonText}>{t.continue}</Text>
+                  <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+                </TouchableOpacity>
+              )}
+              {!continueTarget && (
+                <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
+                  <Text style={styles.continueButtonText}>{t.start}</Text>
+                  <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
+                </TouchableOpacity>
+              )}
             </BlurView>
            </Animated.View>
          )}
@@ -789,15 +809,18 @@ const HomeScreen: React.FC = () => {
 
         {/* --- ACTIVITY CATEGORIES (Animated) --- */}
         <Animated.View
-          style={{
-            opacity: categoriesAnim,
-            transform: [{
-              translateY: categoriesAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [30, 0],
-              }),
-            }],
-          }}
+          style={[
+            styles.categoriesSection,
+            {
+              opacity: categoriesAnim,
+              transform: [{
+                translateY: categoriesAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [30, 0],
+                }),
+              }],
+            },
+          ]}
         >
           <Text style={styles.sectionTitle}>{t.homeCategoriesTitle} 🎨</Text>
           
@@ -813,7 +836,7 @@ const HomeScreen: React.FC = () => {
           </View>
         </Animated.View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
     </View>
   );
@@ -892,12 +915,46 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
 
+  // Welcome to Q-Bit text - Kid-friendly attractive UI
+  welcomeContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  welcomeText: {
+    fontSize:38,
+    fontWeight: '700',
+    color: '#0369A1',
+    marginBottom: 4,
+    textShadowColor: 'rgba(2, 132, 199, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  qbitContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qbitText: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#0284C7',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(2, 132, 199, 0.3)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 6,
+  },
+  sparkleEmoji: {
+    fontSize: 36,
+    marginLeft: 8,
+  },
+
   // Hero animation card - White background with increased border radius
   heroCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 85,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 15,
     shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -907,15 +964,15 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
   },
   heroAnimation: {
     width: '100%',
-    height: 200,
+    height: responsive.width >= 600 ? 220 : 180,
   },
 
   // Progress Section - Enhanced glass view effect
   progressContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'transparent',
     borderRadius: 28,
-    padding: 22,
-    marginBottom: 25,
+    padding: responsive.width >= 600 ? 24 : 18,
+    marginBottom: 18,
     borderWidth: 2.5,
     borderColor: 'rgba(255, 255, 255, 0.6)',
     shadowColor: '#0284C7',
@@ -1032,13 +1089,16 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     fontWeight: '800',
   },
 
+  categoriesSection: {
+    marginTop: 25,
+    marginBottom: 10,
+  },
   sectionTitle: { 
-    fontSize: 24, 
+    fontSize: responsive.width >= 600 ? 26 : 22, 
     fontWeight: '900', 
     color: '#0369A1', 
-    marginBottom: 18, 
+    marginBottom: 16, 
     marginLeft: 5,
-    marginTop: 12,
     textShadowColor: 'rgba(2, 132, 199, 0.2)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
