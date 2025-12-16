@@ -89,11 +89,31 @@ const LevelsScreen: React.FC = () => {
     }
   }, [showComingSoonModal]);
 
-  const handleLevelPress = (level: LevelDto) => {
+  const handleLevelPress = async (level: LevelDto) => {
     if (lockedLevels.has(level.id)) {
       setShowComingSoonModal(true);
       return;
     }
+
+    // Check payment access for levels >= 3 (after completing level 2)
+    if (level.id >= 3) {
+      try {
+        const accessResponse = await apiService.checkLevelAccess(level.id);
+        if (!accessResponse.isSuccess || !accessResponse.hasAccess) {
+          // Payment required
+          (navigation as any).navigate('Payment', {
+            levelId: level.id,
+            levelName: getLearningLanguageField(learningLanguage, level),
+            nextLevelId: level.id,
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking level access:', error);
+        // Continue to level if check fails
+      }
+    }
+
     (navigation as any).navigate('Lessons', {
       levelId: level.id,
       levelName: getLearningLanguageField(learningLanguage, level)

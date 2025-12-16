@@ -16,6 +16,7 @@ import { useBackgroundAudio } from '../context/BackgroundAudioContext';
 import apiService, { ProgressSummaryDto, ActivityDto, ActivityTypeDto } from '../services/api';
 import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/studentLanguage';
 import { Language, getTranslations } from '../utils/translations';
+import { getLanguageTextStyle } from '../utils/languageUtils';
 import LottieView from 'lottie-react-native';
 
 const { width } = Dimensions.get('window');
@@ -222,7 +223,7 @@ const BackgroundDoodles: React.FC = () => {
 };
 
 // --- ANIMATED CATEGORY CARD COMPONENT (With Cartoon Images) ---
-const AnimatedCategoryCard = ({ item, index, onPress }: { item: CategoryItem; index: number; onPress: () => void }) => {
+const AnimatedCategoryCard = ({ item, index, onPress, nativeLanguage }: { item: CategoryItem; index: number; onPress: () => void; nativeLanguage: Language }) => {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const pressAnim = useRef(new Animated.Value(1)).current;
   
@@ -321,23 +322,27 @@ const AnimatedCategoryCard = ({ item, index, onPress }: { item: CategoryItem; in
             </View>
 
             {/* Title and Subtitle */}
-            <Text style={{
-              fontSize: 18, 
-              fontWeight: '900', 
-              color: '#FFF', 
-              textAlign: 'center',
-              marginBottom: 4,
-              textShadowColor: 'rgba(0, 0, 0, 0.3)',
-              textShadowOffset: { width: 0, height: 2 },
-              textShadowRadius: 4,
-            }}>{item.title}</Text>
-            <Text style={{
-              fontSize: 13, 
-              fontWeight: '700', 
-              color: 'rgba(255,255,255,0.95)', 
-              marginTop: 2,
-              textAlign: 'center',
-            }}>{item.subtitle}</Text>
+            <Text style={[
+              {
+                fontWeight: '900', 
+                color: '#FFF', 
+                textAlign: 'center',
+                marginBottom: 4,
+                textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                textShadowOffset: { width: 0, height: 2 },
+                textShadowRadius: 4,
+              },
+              getLanguageTextStyle(nativeLanguage, 18),
+            ]}>{item.title}</Text>
+            <Text style={[
+              {
+                fontWeight: '700', 
+                color: 'rgba(255,255,255,0.95)', 
+                marginTop: 2,
+                textAlign: 'center',
+              },
+              getLanguageTextStyle(nativeLanguage, 13),
+            ]}>{item.subtitle}</Text>
 
             {/* Clickable Indicator - Arrow Icon */}
             <View style={{
@@ -401,6 +406,7 @@ const HomeScreen: React.FC = () => {
     title: string;
   } | null>(null);
   const [profileImageError, setProfileImageError] = useState(false);
+  const [profileImageLocal, setProfileImageLocal] = useState<string | null>(null);
   const [cachedStudentProfile, setCachedStudentProfile] = useState<{ id?: string; nickname?: string; avatar?: string } | null>(null);
   const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
@@ -431,15 +437,42 @@ const HomeScreen: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    // Load native language preference for UI labels
-    const loadLang = async () => {
-      const pref = await loadStudentLanguagePreference();
-      const native = languageCodeToLanguage(pref.nativeLanguageCode);
-      setNativeLanguage(native);
-    };
-    loadLang();
+  const getProfileStorageKey = (user: any) => {
+    if (!user) return 'guest_profile_image';
+    if ((user as any).isGuest) return 'guest_profile_image';
+    return `profile_image_${user.id || user.username || 'user'}`;
+  };
 
+  useEffect(() => {
+    const loadProfileImageFromStorage = async () => {
+      try {
+        const key = getProfileStorageKey(currentUser);
+        const stored = await AsyncStorage.getItem(key);
+        if (stored) {
+          setProfileImageLocal(stored);
+        } else {
+          setProfileImageLocal(null);
+        }
+      } catch {
+        setProfileImageLocal(null);
+      }
+    };
+    loadProfileImageFromStorage();
+  }, [currentUser]);
+
+  // Load native language preference - reload on focus to pick up changes
+  useFocusEffect(
+    useCallback(() => {
+      const loadLang = async () => {
+        const pref = await loadStudentLanguagePreference();
+        const native = languageCodeToLanguage(pref.nativeLanguageCode);
+        setNativeLanguage(native);
+      };
+      loadLang();
+    }, [])
+  );
+
+  useEffect(() => {
     // Entrance animations
     Animated.stagger(200, [
       Animated.spring(headerAnim, { toValue: 1, friction: 8, useNativeDriver: true }),
@@ -584,7 +617,7 @@ const HomeScreen: React.FC = () => {
       );
     }
     
-    const raw = currentUser.profileImageUrl;
+    const raw = profileImageLocal || currentUser.profileImageUrl;
     if (raw && isEmojiLike(raw)) {
       return (
         <View style={[styles.profilePlaceholder, styles.emojiContainer]}>
@@ -673,8 +706,8 @@ const HomeScreen: React.FC = () => {
         ]}
       >
         <View style={styles.headerTextContainer}>
-          <Text style={styles.greetingText}>{t.homeHello},</Text>
-          <Text style={styles.appName}>
+          <Text style={[styles.greetingText, getLanguageTextStyle(nativeLanguage, 18)]}>{t.homeHello},</Text>
+          <Text style={[styles.appName, getLanguageTextStyle(nativeLanguage, 20)]}>
             {displayName}{' '}
             <Text>👋</Text>
           </Text>
@@ -705,9 +738,9 @@ const HomeScreen: React.FC = () => {
             },
           ]}
         >
-          <Text style={styles.welcomeText}>Welcome to</Text>
+          <Text style={[styles.welcomeText, getLanguageTextStyle(nativeLanguage, 20)]}>Welcome to</Text>
           <View style={styles.qbitContainer}>
-            <Text style={styles.qbitText}>✨Q-Bit</Text>
+            <Text style={[styles.qbitText, getLanguageTextStyle(nativeLanguage, 28)]}>✨Q-Bit</Text>
             <Text style={styles.sparkleEmoji}>✨</Text>
           </View>
         </Animated.View>
@@ -743,13 +776,13 @@ const HomeScreen: React.FC = () => {
               style={styles.progressContainer}
             >
               <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>{t.homeProgressTitle}</Text>
-                <Text style={styles.levelText}>{t.homeLevelLabel} {String(progressData.level || 1)}</Text>
+                <Text style={[styles.progressTitle, getLanguageTextStyle(nativeLanguage, 18)]}>{t.homeProgressTitle}</Text>
+                <Text style={[styles.levelText, getLanguageTextStyle(nativeLanguage, 14)]}>{t.homeLevelLabel} {String(progressData.level || 1)}</Text>
               </View>
               
               <View style={styles.xpContainer}>
-                <Text style={styles.xpText}>{String(progressData.totalXpPoints || 0)} XP</Text>
-                <Text style={styles.nextLevelText}>{t.homeNextLevel} {String(progressData.nextLevelXp || 300)} XP</Text>
+                <Text style={[styles.xpText, getLanguageTextStyle(nativeLanguage, 16)]}>{String(progressData.totalXpPoints || 0)} XP</Text>
+                <Text style={[styles.nextLevelText, getLanguageTextStyle(nativeLanguage, 12)]}>{t.homeNextLevel} {String(progressData.nextLevelXp || 300)} XP</Text>
               </View>
               
               <View style={styles.progressBarBackground}>
@@ -767,38 +800,38 @@ const HomeScreen: React.FC = () => {
               <View style={styles.statsRow}>
                 <View style={styles.statBox}>
                   <MaterialCommunityIcons name="star" size={24} color="#0284C7" />
-                  <Text style={styles.statValue}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
-                  <Text style={styles.statLabel}>{t.homeStarsLabel}</Text>
+                  <Text style={[styles.statValue, getLanguageTextStyle(nativeLanguage, 18)]}>{String(progressData.totalActivitiesCompleted || 0)}</Text>
+                  <Text style={[styles.statLabel, getLanguageTextStyle(nativeLanguage, 12)]}>{t.homeStarsLabel}</Text>
                 </View>
                 
                 <View style={styles.statBox}>
                   <MaterialCommunityIcons name="trophy" size={24} color="#0369A1" />
-                  <Text style={styles.statValue}>{String(progressData.level || 1)}</Text>
-                  <Text style={styles.statLabel}>{t.homeLevelLabel}</Text>
+                  <Text style={[styles.statValue, getLanguageTextStyle(nativeLanguage, 18)]}>{String(progressData.level || 1)}</Text>
+                  <Text style={[styles.statLabel, getLanguageTextStyle(nativeLanguage, 12)]}>{t.homeLevelLabel}</Text>
                 </View>
                 
                 <View style={styles.statBox}>
                   <MaterialCommunityIcons name="chart-line" size={24} color="#0EA5E9" />
-                  <Text style={styles.statValue}>{String(Math.round(progressData.averageScore || 0))}%</Text>
-                  <Text style={styles.statLabel}>{t.homeAccuracyLabel}</Text>
+                  <Text style={[styles.statValue, getLanguageTextStyle(nativeLanguage, 18)]}>{String(Math.round(progressData.averageScore || 0))}%</Text>
+                  <Text style={[styles.statLabel, getLanguageTextStyle(nativeLanguage, 12)]}>{t.homeAccuracyLabel}</Text>
                 </View>
                 
                 <View style={styles.statBox}>
                   <MaterialCommunityIcons name="clock-outline" size={24} color="#0284C7" />
-                  <Text style={styles.statValue}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
-                  <Text style={styles.statLabel}>{t.homeTimeLabel}</Text>
+                  <Text style={[styles.statValue, getLanguageTextStyle(nativeLanguage, 18)]}>{String(formatTime(progressData.totalTimeSpentSeconds || 0))}</Text>
+                  <Text style={[styles.statLabel, getLanguageTextStyle(nativeLanguage, 12)]}>{t.homeTimeLabel}</Text>
                 </View>
               </View>
 
               {continueTarget && (
                 <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                  <Text style={styles.continueButtonText}>{t.continue}</Text>
+                  <Text style={[styles.continueButtonText, getLanguageTextStyle(nativeLanguage, 16)]}>{t.continue}</Text>
                   <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
                 </TouchableOpacity>
               )}
               {!continueTarget && (
                 <TouchableOpacity style={styles.continueButton} activeOpacity={0.9} onPress={handleContinue}>
-                  <Text style={styles.continueButtonText}>{t.start}</Text>
+                  <Text style={[styles.continueButtonText, getLanguageTextStyle(nativeLanguage, 16)]}>{t.start}</Text>
                   <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
                 </TouchableOpacity>
               )}
@@ -822,7 +855,7 @@ const HomeScreen: React.FC = () => {
             },
           ]}
         >
-          <Text style={styles.sectionTitle}>{t.homeCategoriesTitle} 🎨</Text>
+          <Text style={[styles.sectionTitle, getLanguageTextStyle(nativeLanguage, 20)]}>{t.homeCategoriesTitle} 🎨</Text>
           
           <View style={styles.gridContainer}>
             {categories.map((item, index) => (
@@ -831,6 +864,7 @@ const HomeScreen: React.FC = () => {
                 item={item}
                 index={index}
                 onPress={() => handleNavigation(item.type)}
+                nativeLanguage={nativeLanguage}
               />
             ))}
           </View>

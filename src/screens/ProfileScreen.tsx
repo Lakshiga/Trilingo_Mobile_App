@@ -41,7 +41,6 @@ interface SettingItem {
 
 const AVATAR_CHOICES = ['👤', '😊', '🎓', '🌟', '⭐', '🦄', '🎨', '🚀', '💫', '🐱', '🦊', '🐼'] as const;
 
-// ... (Keep helper functions like getProfileStorageKey, isValidProfileImage same as before) ...
 type ProfileUserLike = {
   id?: string | null;
   username?: string | null;
@@ -75,6 +74,7 @@ export default function ProfileScreen() {
   const displayName = summary?.studentNickname || cachedStudentProfile?.nickname || 'Student';
   const navigation = useNavigation();
   const nativeLanguage: Language = (currentUser?.nativeLanguage as Language) || ('English' as Language);
+  const tx = (key: string): string => getTranslation(nativeLanguage, key as any);
   const { isBackgroundEnabled, enableBackground, disableBackground } = useBackgroundAudio();
   
   const [notifications, setNotifications] = useState(true);
@@ -120,11 +120,10 @@ export default function ProfileScreen() {
     }
   };
 
-  // ... (Keep uploadProfileImageToServer, handleAvatarSave, pickImage, takePhoto logic exactly as is) ...
   const uploadProfileImageToServer = async (imageUri: string) => {
     if (!currentUser || currentUser.isGuest) {
       await saveImageToStorage(imageUri);
-      Alert.alert('Cool!', 'Picture saved on this device.');
+      Alert.alert(tx('cool'), tx('pictureSaved'));
       return;
     }
     try {
@@ -134,7 +133,7 @@ export default function ProfileScreen() {
         await saveImageToStorage(serverUrl);
         setProfileImage(serverUrl);
         await updateUser({ profileImageUrl: serverUrl });
-        Alert.alert('Awesome!', 'Profile picture updated!');
+        Alert.alert(tx('awesome'), tx('profileUpdated'));
       } else {
         throw new Error(response.message || 'Upload failed');
       }
@@ -147,11 +146,11 @@ export default function ProfileScreen() {
       // Show user-friendly error message
       const errorMessage = error.message || 'Could not upload to server';
       if (errorMessage.includes('Session expired')) {
-        Alert.alert('Session Expired', 'Please log in again to upload images.');
+        Alert.alert(tx('sessionExpired'), tx('pleaseLoginAgain'));
       } else if (errorMessage.includes('blocked') || errorMessage.includes('403')) {
-        Alert.alert('Upload Blocked', 'Image saved locally. Server upload is temporarily unavailable.');
+        Alert.alert(tx('uploadBlocked'), tx('serverUnavailable'));
       } else {
-        Alert.alert('Saved Locally', 'Image saved on this device. Server upload failed.');
+        Alert.alert(tx('saveLocally'), tx('savedLocally'));
       }
     }
   };
@@ -170,14 +169,14 @@ export default function ProfileScreen() {
 
   const handleProfilePicturePress = () => {
     Alert.alert(
-      'New Look!',
-      'How do you want to look today?',
+      tx('newLook'),
+      tx('howWantToLook'),
       [
-        { text: 'Pick Avatar', onPress: () => setAvatarModalVisible(true) },
-        { text: 'Take Photo', onPress: async () => {
+        { text: tx('pickAvatar'), onPress: () => setAvatarModalVisible(true) },
+        { text: tx('takePhoto'), onPress: async () => {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-              Alert.alert('Oh no!', 'We need camera permission.');
+              Alert.alert(tx('ohNo'), tx('needCameraPermission'));
               return;
             }
             const result = await ImagePicker.launchCameraAsync({
@@ -193,10 +192,10 @@ export default function ProfileScreen() {
             }
           } 
         },
-        { text: 'Gallery', onPress: async () => {
+        { text: tx('gallery'), onPress: async () => {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-              Alert.alert('Oh no!', 'We need gallery permission.');
+              Alert.alert(tx('ohNo'), tx('needGalleryPermission'));
               return;
             }
             const result = await ImagePicker.launchImageLibraryAsync({
@@ -212,7 +211,7 @@ export default function ProfileScreen() {
             }
           } 
         },
-        { text: 'Cancel', style: 'cancel' },
+        { text: tx('cancel'), style: 'cancel' },
       ],
       { cancelable: true }
     );
@@ -263,22 +262,14 @@ export default function ProfileScreen() {
   const settingsData: SettingItem[] = [
     {
       id: 'edit-profile',
-      title: 'My Details',
+      title: tx('myDetails') || 'My Details',
       icon: 'pencil',
       type: 'navigate',
       color: '#4FACFE', // Blue
     },
     {
-      id: 'language',
-      title: 'Language',
-      icon: 'translate',
-      type: 'navigate',
-      subtitle: nativeLanguage || 'English',
-      color: '#00C9FF', // Cyan
-    },
-    {
       id: 'bg-music',
-      title: 'Background Music',
+      title: tx('backgroundMusic') || 'Background Music',
       icon: 'music',
       type: 'toggle',
       value: isBackgroundEnabled,
@@ -286,25 +277,18 @@ export default function ProfileScreen() {
     },
     {
       id: 'dark-mode',
-      title: 'Night Mode',
+      title: tx('nightMode') || 'Night Mode',
       icon: 'weather-night',
       type: 'toggle',
       value: isDarkMode,
       color: '#5F27CD', // Purple
     },
-    {
-      id: 'change-password',
-      title: 'Secret Code',
-      icon: 'lock',
-      type: 'navigate',
-      color: '#FF6B6B', // Red/Pink
-    },
   ];
 
   const handleLogout = () => {
-    Alert.alert('Leaving?', 'See you next time, hero!', [
-      { text: 'Stay', style: 'cancel' },
-      { text: 'Bye Bye', onPress: () => {
+    Alert.alert(tx('leaving'), tx('seeYou'), [
+      { text: tx('stay'), style: 'cancel' },
+      { text: tx('byeBye'), onPress: () => {
           logout().then(() => (navigation as any).reset({ index: 0, routes: [{ name: 'Welcome' }] }));
         }, style: 'destructive' 
       },
@@ -347,7 +331,7 @@ export default function ProfileScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => (navigation as any).navigate('Home')}>
             <MaterialIcons name="arrow-back" size={24} color="#006064" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Profile</Text>
+          <Text style={styles.headerTitle}>{tx('myProfile') || 'My Profile'}</Text>
           <View style={{ width: 40 }} /> {/* Spacer for alignment */}
         </View>
 
@@ -379,21 +363,21 @@ export default function ProfileScreen() {
                  <MaterialIcons name="verified" size={20} color="#4FACFE" style={{marginLeft: 4}}/>
               )}
             </View>
-            <Text style={styles.userRole}>{currentUser?.email || 'Ready to learn!'}</Text>
+            <Text style={styles.userRole}>{currentUser?.email ? String(currentUser.email) : String(tx('ready') || 'Ready')}</Text>
             
             {/* Gamification Badge */}
             <View style={styles.levelBadge}>
-               <Text style={styles.levelText}>⭐ Level 1 Explorer</Text>
+               <Text style={styles.levelText}>{tx('level1Explorer') || 'Level 1 Explorer'}</Text>
             </View>
             {!currentUser?.isGuest && (
               <View style={styles.statsRow}>
                 <View style={styles.statPill}>
                   <MaterialIcons name="star" size={16} color="#FFD700" />
-                  <Text style={styles.statText}>{stars} Stars</Text>
+                  <Text style={styles.statText}>{String(stars || 0)} {tx('stars') || 'Stars'}</Text>
                 </View>
                 <View style={styles.statPill}>
                   <MaterialIcons name="check-circle" size={16} color="#34D399" />
-                  <Text style={styles.statText}>{completedCount} Completed</Text>
+                  <Text style={styles.statText}>{String(completedCount || 0)} {tx('completed') || 'Completed'}</Text>
                 </View>
               </View>
             )}
@@ -401,57 +385,61 @@ export default function ProfileScreen() {
         </Animated.View>
 
         {/* --- SETTINGS BUBBLES --- */}
-        <Text style={styles.sectionTitle}>Settings</Text>
+        <Text style={styles.sectionTitle}>{tx('settings') || 'Settings'}</Text>
         
         <View style={styles.settingsGrid}>
-          {settingsData.map((item, index) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.settingBubble]}
-              onPress={() => handleSettingPress(item)}
-              activeOpacity={0.7}
-              disabled={item.type === 'toggle'}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: item.color + '20' }]}> 
-                <MaterialCommunityIcons name={item.icon} size={24} color={item.color} />
-              </View>
-              
-              <View style={styles.settingContent}>
-                <Text style={styles.settingLabel}>{String(item.title || '')}</Text>
-                {item.subtitle && String(item.subtitle).trim() ? <Text style={styles.settingSubLabel}>{String(item.subtitle)}</Text> : null}
-              </View>
+          {settingsData.map((item) => {
+            const titleText = item.title ? String(item.title) : '';
+            const subtitleText = item.subtitle && String(item.subtitle).trim() ? String(item.subtitle) : '';
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.settingBubble]}
+                onPress={() => handleSettingPress(item)}
+                activeOpacity={0.7}
+                disabled={item.type === 'toggle'}
+              >
+                <View style={[styles.iconCircle, { backgroundColor: item.color + '20' }]}> 
+                  <MaterialCommunityIcons name={item.icon} size={24} color={item.color} />
+                </View>
+                
+                <View style={styles.settingContent}>
+                  {titleText ? <Text style={styles.settingLabel}>{titleText}</Text> : null}
+                  {subtitleText ? <Text style={styles.settingSubLabel}>{subtitleText}</Text> : null}
+                </View>
 
-              {item.type === 'toggle' ? (
-                <Switch
-                  value={item.value}
-                  onValueChange={(val) => {
-                     if (item.id === 'dark-mode') setDarkMode(val);
-                     if (item.id === 'notifications') setNotifications(val);
-                     if (item.id === 'bg-music') {
-                       if (val) {
-                         enableBackground();
-                       } else {
-                         disableBackground();
+                {item.type === 'toggle' ? (
+                  <Switch
+                    value={item.value}
+                    onValueChange={(val) => {
+                       if (item.id === 'dark-mode') setDarkMode(val);
+                       if (item.id === 'notifications') setNotifications(val);
+                       if (item.id === 'bg-music') {
+                         if (val) {
+                           enableBackground();
+                         } else {
+                           disableBackground();
+                         }
                        }
-                     }
-                  }}
-                  trackColor={{ false: '#E2E8F0', true: item.color }}
-                  thumbColor={'#FFF'}
-                />
-              ) : (
-                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-              )}
-            </TouchableOpacity>
-          ))}
+                    }}
+                    trackColor={{ false: '#E2E8F0', true: item.color }}
+                    thumbColor={'#FFF'}
+                  />
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* --- LOGOUT BUTTON --- */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <MaterialIcons name="logout" size={20} color="#FF6B6B" />
-          <Text style={styles.logoutText}>Log Out</Text>
+          <Text style={styles.logoutText}>{tx('logout') || 'Logout'}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.versionText}>Version 1.0.0 • Q-bit Kids</Text>
+        <Text style={styles.versionText}>{tx('version') || 'Version'}</Text>
         <View style={{height: 30}} />
       </ScrollView>
 
@@ -460,7 +448,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
            <View style={styles.stickerSheet}>
               <View style={styles.modalHeader}>
-                 <Text style={styles.modalTitle}>Pick a Sticker!</Text>
+                 <Text style={styles.modalTitle}>{tx('pickSticker') || 'Pick a Sticker'}</Text>
                  <TouchableOpacity onPress={() => setAvatarModalVisible(false)}>
                     <Ionicons name="close-circle" size={30} color="#94A3B8" />
                  </TouchableOpacity>

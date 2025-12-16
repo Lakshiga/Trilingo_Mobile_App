@@ -93,6 +93,28 @@ export interface ExerciseDto {
   updatedAt: string;
 }
 
+// Payment DTOs
+export interface PaymentSessionRequest {
+  levelId: number;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface PaymentSessionResponse {
+  isSuccess: boolean;
+  sessionId?: string;
+  sessionUrl?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface PaymentStatusResponse {
+  isSuccess: boolean;
+  hasAccess: boolean;
+  message?: string;
+  error?: string;
+}
+
 // Progress DTOs (backend ProgressDto)
 export interface ProgressDto {
   id: number;
@@ -336,7 +358,10 @@ class ApiService {
       const response = await this.api.get<ApiResponse<User>>('/auth/me');
       return response.data.data || null;
     } catch (error) {
-      console.warn('Failed to get current user:', error);
+      // Silently handle 404 errors for current user (user might not be logged in)
+      if (error.response?.status !== 404) {
+        console.warn('Failed to get current user:', error);
+      }
       return null;
     }
   }
@@ -690,6 +715,40 @@ class ApiService {
   async updateProfile(data: { name?: string; email?: string; age?: string; nativeLanguage?: string; learningLanguage?: string; profileImageUrl?: string }): Promise<AuthResponse> {
     try {
       const response = await this.api.put<AuthResponse>('/auth/update-profile', data);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  // Payment Methods
+  async createPaymentSession(levelId: number, successUrl: string, cancelUrl: string): Promise<PaymentSessionResponse> {
+    try {
+      const response = await this.api.post<PaymentSessionResponse>('/payments/create-session', {
+        levelId,
+        successUrl,
+        cancelUrl,
+      });
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async checkLevelAccess(levelId: number): Promise<PaymentStatusResponse> {
+    try {
+      const response = await this.api.get<PaymentStatusResponse>(`/payments/check-access/${levelId}`);
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  }
+
+  async verifyPayment(sessionId: string): Promise<PaymentStatusResponse> {
+    try {
+      const response = await this.api.post<PaymentStatusResponse>('/payments/verify-payment', {
+        sessionId,
+      });
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);

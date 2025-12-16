@@ -19,6 +19,8 @@ import { loadStudentLanguagePreference, languageCodeToLanguage } from '../utils/
 // Define the song type
 type Song = {
   id: string;
+  activityId: number;
+  activityTypeId: number;
   title: string;
   artist: string;
   duration: string;
@@ -90,6 +92,9 @@ const SongsScreen: React.FC = () => {
         );
         
         // Map activities to songs
+        // Choose key for native language
+        const nativeKey = nativeLanguage === 'Tamil' ? 'ta' : nativeLanguage === 'Sinhala' ? 'si' : 'en';
+
         const mappedSongs: Song[] = songActivities.map((activity, index) => {
           let songData: any = {};
           
@@ -133,11 +138,31 @@ const SongsScreen: React.FC = () => {
           }
 
           // Get title (multilingual)
-          const title = songData.title 
-            ? (typeof songData.title === 'object' 
-                ? (songData.title.en || songData.title.ta || songData.title.si || activity.name_en)
-                : songData.title)
-            : activity.name_en || activity.name_ta || activity.name_si || 'Song';
+          // Title strictly prefers native language; only last-resort fallback if missing
+          const title = (() => {
+            const nativeActivityName =
+              nativeKey === 'ta'
+                ? (activity.name_ta || activity.name_si || activity.name_en)
+                : nativeKey === 'si'
+                  ? (activity.name_si || activity.name_ta || activity.name_en)
+                  : (activity.name_en || activity.name_ta || activity.name_si);
+
+            if (songData.title) {
+              if (typeof songData.title === 'object') {
+                if (songData.title[nativeKey]) return songData.title[nativeKey];
+              } else {
+                return songData.title; // single string provided
+              }
+            }
+
+            if (nativeActivityName) return nativeActivityName;
+
+            // Last resort to avoid empty title
+            if (songData.title && typeof songData.title === 'object') {
+              return songData.title.en || songData.title.ta || songData.title.si || 'Song';
+            }
+            return activity.name_en || 'Song';
+          })();
 
           // Get artist
           const artist = songData.artist || 'Unknown Artist';
@@ -153,6 +178,8 @@ const SongsScreen: React.FC = () => {
 
           return {
             id: activity.id.toString(),
+            activityId: activity.id,
+            activityTypeId: activity.activityTypeId,
             title: title,
             artist: artist,
             duration: '0:00', // Duration can be calculated from audio if needed
@@ -181,7 +208,7 @@ const SongsScreen: React.FC = () => {
     };
 
     fetchSongs();
-  }, []);
+  }, [nativeLanguage]);
 
   // Filter songs based on search query
   useEffect(() => {
@@ -211,7 +238,14 @@ const SongsScreen: React.FC = () => {
     return (
       <View style={styles.cardWrapper}>
         <TouchableOpacity
-          onPress={() => togglePlayPause(item.id)}
+          onPress={() => {
+            // Navigate to PlayScreen for full SongPlayer experience
+            navigation.navigate('PlayScreen' as never, {
+              activityId: item.activityId,
+              activityTypeId: item.activityTypeId || 6,
+              activityTitle: item.title,
+            } as never);
+          }}
           activeOpacity={0.8}
         >
           <LinearGradient

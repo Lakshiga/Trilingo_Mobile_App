@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,12 @@ import {
   Dimensions,
   Image,
   ImageBackground,
+  Alert,
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { StageDto } from '../services/api';
@@ -61,6 +63,11 @@ const LessonsScreen: React.FC = () => {
 
   useEffect(() => {
     const fetchLessons = async () => {
+      if (!currentUser) {
+        setLoading(false);
+        return; // Don't fetch if no user
+      }
+      
       try {
         setLoading(true);
         const allLessons = await apiService.getStagesByLevelId(levelId);
@@ -92,6 +99,34 @@ const LessonsScreen: React.FC = () => {
           }
         }
         
+        // Check if user has paid for this level (for all levels that require payment)
+        let hasPaidAccess = false;
+        if (currentUser && !currentUser.isGuest) {
+          try {
+            const accessResponse = await apiService.checkLevelAccess(levelId);
+            if (accessResponse && accessResponse.isSuccess) {
+              hasPaidAccess = accessResponse.hasAccess;
+            }
+          } catch (error) {
+            console.error('Error checking payment access:', error);
+            // If error, assume no access (will show payment modal)
+            hasPaidAccess = false;
+          }
+        }
+        
+        // Lock all lessons except first 2 (index 0 and 1)
+        // First 2 lessons are always unlocked
+        // If user has paid for the level, unlock all lessons
+        if (hasPaidAccess) {
+          // User has paid, unlock all lessons - don't add any to lockedSet
+          // All lessons will be unlocked
+        } else {
+          // User hasn't paid, lock lessons after 2nd one
+          for (let i = 2; i < validLessons.length; i++) {
+            lockedSet.add(validLessons[i].id);
+          }
+        }
+        
         setLessons(validLessons);
         setLockedLessons(lockedSet);
       } catch (error: any) {
@@ -117,7 +152,82 @@ const LessonsScreen: React.FC = () => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
     ]).start();
-  }, [levelId]);
+  }, [levelId, currentUser]);
+
+  // Refresh lessons when screen comes into focus (e.g., after payment)
+  useFocusEffect(
+    useCallback(() => {
+      const refreshLessons = async () => {
+        if (!currentUser) return; // Don't refresh if no user
+        
+        try {
+          const allLessons = await apiService.getStagesByLevelId(levelId);
+          const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
+
+          const mainActivities = await apiService.getAllMainActivities();
+          const learningMainActivityIds = findMainActivityIds(
+            mainActivities,
+            LEARNING_MAIN_ACTIVITY_NAMES
+          );
+
+          const validLessons: StageDto[] = [];
+          const lockedSet = new Set<number>();
+          
+          for (const lesson of sortedLessons) {
+            try {
+              const allActivities = await apiService.getActivitiesByStage(lesson.id);
+              const filteredActivities = learningMainActivityIds.size > 0
+                ? filterActivitiesByIds(allActivities, learningMainActivityIds)
+                : allActivities;
+              
+              if (filteredActivities.length > 0) {
+                validLessons.push(lesson);
+              } else {
+                lockedSet.add(lesson.id);
+              }
+            } catch (error) {
+              lockedSet.add(lesson.id);
+            }
+          }
+          
+          // Check if user has paid for this level (for all levels that require payment)
+          let hasPaidAccess = false;
+          if (currentUser && !currentUser.isGuest) {
+            try {
+              const accessResponse = await apiService.checkLevelAccess(levelId);
+              if (accessResponse && accessResponse.isSuccess) {
+                hasPaidAccess = accessResponse.hasAccess;
+              }
+            } catch (error) {
+              console.error('Error checking payment access:', error);
+              // If error, assume no access (will show payment modal)
+              hasPaidAccess = false;
+            }
+          }
+          
+          // Lock all lessons except first 2 (index 0 and 1)
+          // First 2 lessons are always unlocked
+          // If user has paid for the level, unlock all lessons
+          if (hasPaidAccess) {
+            // User has paid, unlock all lessons - don't add any to lockedSet
+            // All lessons will be unlocked
+          } else {
+            // User hasn't paid, lock lessons after 2nd one
+            for (let i = 2; i < validLessons.length; i++) {
+              lockedSet.add(validLessons[i].id);
+            }
+          }
+          
+          setLessons(validLessons);
+          setLockedLessons(lockedSet);
+        } catch (error) {
+          console.error('Error refreshing lessons:', error);
+        }
+      };
+
+      refreshLessons();
+    }, [levelId, currentUser])
+  );
 
   useEffect(() => {
     if (showComingSoonModal) {
@@ -126,16 +236,70 @@ const LessonsScreen: React.FC = () => {
     }
   }, [showComingSoonModal]);
 
-  const handleLessonPress = (lesson: StageDto) => {
-    if (lockedLessons.has(lesson.id)) {
+  const handleLessonPress = async (lesson: StageDto) => {
+    try {
+      // Check if lesson is locked
+      if (lockedLessons.has(lesson.id)) {
+        // For level 3+, check if user has paid (only if user is logged in)
+        if (levelId >= 3 && currentUser && !currentUser.isGuest) {
+          try {
+            const accessResponse = await apiService.checkLevelAccess(levelId);
+            if (accessResponse && accessResponse.isSuccess && accessResponse.hasAccess) {
+              // User has paid, allow access to the lesson
+              (navigation as any).navigate('LessonActivities', { 
+                lessonId: lesson.id, 
+                lessonName: getLessonName(lesson),
+                levelId: levelId 
+              });
+              return;
+            }
+          } catch (error: any) {
+            console.error('Error checking level access:', error);
+            // If API call fails, show modal (payment might be required)
+            // Don't throw, just continue to show modal
+          }
+        }
+        // Show modal for locked lessons
+        setShowComingSoonModal(true);
+        return;
+      }
+
+      // Lesson is unlocked, navigate to it
+      (navigation as any).navigate('LessonActivities', { 
+        lessonId: lesson.id, 
+        lessonName: getLessonName(lesson),
+        levelId: levelId 
+      });
+    } catch (error: any) {
+      console.error('Error in handleLessonPress:', error);
+      // Show modal as fallback if any error occurs
       setShowComingSoonModal(true);
-      return;
     }
-    (navigation as any).navigate('LessonActivities', { 
-      lessonId: lesson.id, 
-      lessonName: getLessonName(lesson),
-      levelId: levelId 
-    });
+  };
+
+  const handlePaymentButtonPress = () => {
+    try {
+      console.log('Payment button pressed, navigating to Payment screen...');
+      console.log('Level ID:', levelId, 'Level Name:', levelName);
+      setShowComingSoonModal(false);
+      // Small delay to ensure modal closes before navigation
+      setTimeout(() => {
+        try {
+          (navigation as any).navigate('Payment', {
+            levelId: levelId,
+            levelName: levelName,
+            nextLevelId: levelId,
+          });
+          console.log('Navigation to Payment screen successful');
+        } catch (navError: any) {
+          console.error('Navigation error:', navError);
+          Alert.alert('Error', 'Failed to open payment screen. Please try again.');
+        }
+      }, 100);
+    } catch (error: any) {
+      console.error('Error in handlePaymentButtonPress:', error);
+      Alert.alert('Error', 'Failed to open payment screen. Please try again.');
+    }
   };
 
   const getLessonName = (lesson: StageDto) => {
@@ -250,36 +414,67 @@ const LessonsScreen: React.FC = () => {
       <Modal
         visible={showComingSoonModal}
         transparent={true}
-        animationType="none"
+        animationType="fade"
         onRequestClose={() => setShowComingSoonModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Animated.View style={[styles.modalCard, { transform: [{ scale: modalScaleAnim }] }]}>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowComingSoonModal(false)}
+        >
+          <Animated.View 
+            style={[styles.modalCard, { transform: [{ scale: modalScaleAnim }] }]}
+            onStartShouldSetResponder={() => true}
+          >
             <View style={styles.modalIconContainer}>
-               <MaterialCommunityIcons name="hammer-wrench" size={40} color="#FFFFFF" />
+              <MaterialCommunityIcons name="lock" size={40} color="#FFFFFF" />
             </View>
 
-            <Text style={styles.comingSoonTitle}>Under Construction!</Text>
+            <Text style={styles.comingSoonTitle}>
+              Unlock All Lessons
+            </Text>
             
-            <View style={styles.lottieContainer}>
-              <LottieView
-                source={require('../../assets/animations/comming soon.json')} // Ensure path is correct
-                autoPlay loop style={styles.lottieAnimation}
-              />
-            </View>
-
             <Text style={styles.comingSoonMessage}>
-              We are building this lesson for you! Check back soon.
+              Complete the first 2 lessons to unlock more! Payment required to access this lesson and unlock all remaining lessons in this level.
             </Text>
 
+            {/* Amount Display */}
+            <View style={styles.amountContainer}>
+              <Text style={styles.amountLabel}>Amount</Text>
+              <Text style={styles.amountValue}>350 LKR</Text>
+            </View>
+
+            {/* Pay to Unlock Button */}
             <TouchableOpacity
-              style={styles.modalButton}
+              style={styles.paymentButton}
+              onPress={() => {
+                console.log('Payment button clicked! Level:', levelId);
+                handlePaymentButtonPress();
+              }}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#43BCCD', '#FF6B9D']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.paymentButtonGradient}
+              >
+                <MaterialCommunityIcons name="lock-open" size={20} color="#fff" />
+                <Text style={styles.paymentButtonText}>Pay to Unlock</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              style={styles.modalButtonSecondary}
               onPress={() => setShowComingSoonModal(false)}
             >
-              <Text style={styles.modalButtonText}>Okay!</Text>
+              <Text style={styles.modalButtonTextSecondary}>
+                Cancel
+              </Text>
             </TouchableOpacity>
           </Animated.View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -558,6 +753,69 @@ const getStyles = (
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 18,
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#E2E8F0',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    width: '80%',
+    alignItems: 'center',
+    borderBottomWidth: 4,
+    borderBottomColor: '#CBD5E0',
+    marginTop: 12,
+  },
+  modalButtonTextSecondary: {
+    color: '#374151',
+  },
+  paymentButton: {
+    width: '80%',
+    borderRadius: 25,
+    overflow: 'hidden',
+    marginBottom: 12,
+    shadowColor: '#43BCCD',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  paymentButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    gap: 8,
+  },
+  paymentButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  amountContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#E9ECEF',
+  },
+  amountLabel: {
+    fontSize: 14,
+    color: '#6C757D',
+    fontWeight: '600',
+    marginBottom: 5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  amountValue: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: themeColor,
+    letterSpacing: 1,
   },
 });
 
