@@ -7,7 +7,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons, MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { resolveImageUri, isEmojiLike } from '../utils/imageUtils';
@@ -770,9 +769,7 @@ const HomeScreen: React.FC = () => {
               },
             ]}
           >
-            <BlurView
-              intensity={30}
-              tint="light"
+            <View
               style={styles.progressContainer}
             >
               <View style={styles.progressHeader}>
@@ -835,7 +832,7 @@ const HomeScreen: React.FC = () => {
                   <MaterialCommunityIcons name="arrow-right" size={22} color="#fff" />
                 </TouchableOpacity>
               )}
-            </BlurView>
+            </View>
            </Animated.View>
          )}
 
@@ -1001,24 +998,20 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) => StyleSheet.c
     height: responsive.width >= 600 ? 220 : 180,
   },
 
-  // Progress Section - Enhanced glass view effect
+  // Progress Section - Solid background without glass effect
   progressContainer: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 28,
     padding: responsive.width >= 600 ? 24 : 18,
     marginBottom: 18,
     borderWidth: 2.5,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderColor: 'rgba(2, 132, 199, 0.3)',
     shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 12,
     overflow: 'hidden',
-  },
-  progressGlassOverlay: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   progressHeader: {
     flexDirection: 'row',

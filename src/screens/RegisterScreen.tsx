@@ -457,15 +457,24 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterComplete, onB
   };
 
   const handleBack = () => {
-    if (registrationStage === 'success') return; // Can't go back from success immediately
+    if (registrationStage === 'success') {
+      // Allow going back from success screen to parent registration
+      setRegistrationStage('parent');
+      setCurrentStep(parentQuestions.length - 1);
+      return;
+    }
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     } else if (registrationStage === 'child') {
-       // Optional: Allow going back to see success screen?
-       // For now, prevent going back to parent registration to avoid duplicate API calls
-       Alert.alert("Notice", "Parent account already created.");
+       // Allow going back to parent registration
+       setRegistrationStage('parent');
+       setCurrentStep(parentQuestions.length - 1);
     } else {
-      onBack();
+      // Instead of calling onBack which might exit the app, navigate to Welcome screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Welcome' }],
+      });
     }
   };
 
