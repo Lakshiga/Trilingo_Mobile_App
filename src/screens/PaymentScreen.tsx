@@ -77,7 +77,12 @@ export default function PaymentScreen() {
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     // Navigate to Lessons screen which will refresh and show unlocked lessons
-    navigation.navigate('Lessons', { levelId: nextLevelId, levelName });
+    // Pass a flag to indicate that payment was successful
+    navigation.navigate('Lessons', { 
+      levelId: nextLevelId, 
+      levelName: levelName,
+      refreshPaymentStatus: true 
+    });
   };
 
   const handleCreateSession = async () => {

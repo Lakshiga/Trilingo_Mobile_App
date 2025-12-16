@@ -95,7 +95,7 @@ const LevelsScreen: React.FC = () => {
       return;
     }
 
-    // Check payment access for levels >= 3 (after completing level 2)
+    // Check payment access for levels >= 3 (Levels 1 and 2 are free)
     if (level.id >= 3) {
       try {
         const accessResponse = await apiService.checkLevelAccess(level.id);

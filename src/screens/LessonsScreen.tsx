@@ -16,7 +16,7 @@ import {
 import { MaterialIcons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useUser } from '../context/UserContext';
 import apiService, { StageDto } from '../services/api';
@@ -31,19 +31,21 @@ const { width } = Dimensions.get('window');
 interface RouteParams {
   levelId: number;
   levelName?: string;
+  refreshPaymentStatus?: boolean;
 }
 
 const LessonsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const route = useRoute();
+  const route = useRoute<RouteProp<{ params: RouteParams }, 'params'>>();
   const { currentUser } = useUser();
   const responsive = useResponsive();
   const learningLanguage: Language = (currentUser?.learningLanguage as Language) || 'Tamil';
   const [nativeLanguage, setNativeLanguage] = useState<Language>('English');
   
-  const params = route.params as RouteParams;
-  const levelId = params?.levelId || 1;
-  const levelName = params?.levelName || 'Level 01';
+  const params = route.params || {};
+  const levelId = params.levelId || 1;
+  const levelName = params.levelName || 'Level 01';
+  const refreshPaymentStatus = params.refreshPaymentStatus || false;
 
   const [lessons, setLessons] = useState<StageDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,17 +70,17 @@ const LessonsScreen: React.FC = () => {
         return; // Don't fetch if no user
       }
       
+      setLoading(true);
       try {
-        setLoading(true);
         const allLessons = await apiService.getStagesByLevelId(levelId);
         const sortedLessons = allLessons.sort((a, b) => a.id - b.id);
-
+        
         const mainActivities = await apiService.getAllMainActivities();
         const learningMainActivityIds = findMainActivityIds(
           mainActivities,
           LEARNING_MAIN_ACTIVITY_NAMES
         );
-
+        
         const validLessons: StageDto[] = [];
         const lockedSet = new Set<number>();
         
@@ -99,32 +101,50 @@ const LessonsScreen: React.FC = () => {
           }
         }
         
-        // Check if user has paid for this level (only for levels 3 and above)
+        // Check if user has paid for this level
         let hasPaidAccess = false;
-        if (currentUser && !currentUser.isGuest && levelId >= 3) {
+        if (currentUser && !currentUser.isGuest) {
           try {
-            const accessResponse = await apiService.checkLevelAccess(levelId);
-            if (accessResponse && accessResponse.isSuccess) {
-              hasPaidAccess = accessResponse.hasAccess;
+            // If refreshPaymentStatus flag is true, force a fresh check
+            if (refreshPaymentStatus) {
+              // Force a fresh check by calling the API directly
+              const accessResponse = await apiService.checkLevelAccess(levelId);
+              if (accessResponse && accessResponse.isSuccess) {
+                hasPaidAccess = accessResponse.hasAccess;
+              }
+            } else {
+              // Normal check
+              const accessResponse = await apiService.checkLevelAccess(levelId);
+              if (accessResponse && accessResponse.isSuccess) {
+                hasPaidAccess = accessResponse.hasAccess;
+              }
             }
           } catch (error) {
             console.error('Error checking payment access:', error);
             // If error, assume no access (will show payment modal)
             hasPaidAccess = false;
           }
-        } else if (levelId < 3) {
-          // Levels 1 and 2 are always free
-          hasPaidAccess = false;
         }
         
-        // Lock all lessons except first 2 (index 0 and 1)
-        // First 2 lessons are always unlocked
-        // If user has paid for the level, unlock all lessons
-        if (hasPaidAccess) {
-          // User has paid, unlock all lessons - don't add any to lockedSet
-          // All lessons will be unlocked
+        // For new users, first 2 lessons should be free
+        // Lessons in Level 1 are always free (handled by backend)
+        // For Level 2 and above, check payment status
+        const isFirstTwoLessonsFree = levelId === 1; // Only Level 1 has free lessons
+        
+        // Lock lessons based on payment status and free lesson rules
+        if (hasPaidAccess || isFirstTwoLessonsFree) {
+          // User has paid or is accessing free level
+          // Unlock first 2 lessons for free, rest based on payment
+          if (isFirstTwoLessonsFree) {
+            // For Level 1, all lessons are free
+            // Don't add any lessons to lockedSet
+          } else {
+            // For paid levels, unlock all lessons
+            // Don't add any lessons to lockedSet
+          }
         } else {
-          // User hasn't paid, lock lessons after 2nd one
+          // User hasn't paid and not accessing free level
+          // Lock all lessons except first 2
           for (let i = 2; i < validLessons.length; i++) {
             lockedSet.add(validLessons[i].id);
           }
@@ -144,7 +164,7 @@ const LessonsScreen: React.FC = () => {
       const pref = await loadStudentLanguagePreference();
       const native = languageCodeToLanguage(pref.nativeLanguageCode);
       setNativeLanguage(native);
-      if (levelId) {
+      if (currentUser) {
         await fetchLessons();
       }
     };
@@ -155,7 +175,7 @@ const LessonsScreen: React.FC = () => {
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true }),
     ]).start();
-  }, [levelId, currentUser]);
+  }, [levelId, currentUser, refreshPaymentStatus]);
 
   // Refresh lessons when screen comes into focus (e.g., after payment)
   useFocusEffect(
@@ -193,10 +213,11 @@ const LessonsScreen: React.FC = () => {
             }
           }
           
-          // Check if user has paid for this level (only for levels 3 and above)
+          // Check if user has paid for this level
           let hasPaidAccess = false;
-          if (currentUser && !currentUser.isGuest && levelId >= 3) {
+          if (currentUser && !currentUser.isGuest) {
             try {
+              // Force a fresh check when refreshing
               const accessResponse = await apiService.checkLevelAccess(levelId);
               if (accessResponse && accessResponse.isSuccess) {
                 hasPaidAccess = accessResponse.hasAccess;
@@ -206,19 +227,27 @@ const LessonsScreen: React.FC = () => {
               // If error, assume no access (will show payment modal)
               hasPaidAccess = false;
             }
-          } else if (levelId < 3) {
-            // Levels 1 and 2 are always free
-            hasPaidAccess = false;
           }
           
-          // Lock all lessons except first 2 (index 0 and 1)
-          // First 2 lessons are always unlocked
-          // If user has paid for the level, unlock all lessons
-          if (hasPaidAccess) {
-            // User has paid, unlock all lessons - don't add any to lockedSet
-            // All lessons will be unlocked
+          // For new users, first 2 lessons should be free
+          // Lessons in Level 1 are always free (handled by backend)
+          // For Level 2 and above, check payment status
+          const isFirstTwoLessonsFree = levelId === 1; // Only Level 1 has free lessons
+          
+          // Lock lessons based on payment status and free lesson rules
+          if (hasPaidAccess || isFirstTwoLessonsFree) {
+            // User has paid or is accessing free level
+            // Unlock first 2 lessons for free, rest based on payment
+            if (isFirstTwoLessonsFree) {
+              // For Level 1, all lessons are free
+              // Don't add any lessons to lockedSet
+            } else {
+              // For paid levels, unlock all lessons
+              // Don't add any lessons to lockedSet
+            }
           } else {
-            // User hasn't paid, lock lessons after 2nd one
+            // User hasn't paid and not accessing free level
+            // Lock all lessons except first 2
             for (let i = 2; i < validLessons.length; i++) {
               lockedSet.add(validLessons[i].id);
             }
@@ -232,7 +261,7 @@ const LessonsScreen: React.FC = () => {
       };
 
       refreshLessons();
-    }, [levelId, currentUser])
+    }, [levelId, currentUser, refreshPaymentStatus])
   );
 
   useEffect(() => {
@@ -246,8 +275,8 @@ const LessonsScreen: React.FC = () => {
     try {
       // Check if lesson is locked
       if (lockedLessons.has(lesson.id)) {
-        // For level 3+, check if user has paid (only if user is logged in)
-        if (levelId >= 3 && currentUser && !currentUser.isGuest) {
+        // For levels >= 2, check if user has paid (only if user is logged in)
+        if (levelId >= 2 && currentUser && !currentUser.isGuest) {
           try {
             const accessResponse = await apiService.checkLevelAccess(levelId);
             if (accessResponse && accessResponse.isSuccess && accessResponse.hasAccess) {
