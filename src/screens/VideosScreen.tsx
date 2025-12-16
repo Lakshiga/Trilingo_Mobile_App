@@ -66,6 +66,7 @@ type VideoItem = {
   description: string;
   youtubeId?: string;
   fallbackUrl?: string; // AWS/CloudFront or direct MP4
+  thumbnailUrl?: string;
   rawJson: any; // Store raw for player
 };
 
@@ -127,6 +128,7 @@ const VideosScreen: React.FC = () => {
             let fallbackUrl: string | null = null;
             let title = '';
             let description = '';
+            let thumbnailUrl: string | null = null;
 
             for (const item of items) {
               const vd = item.videoData || {};
@@ -158,6 +160,21 @@ const VideosScreen: React.FC = () => {
                   }
                 }
               }
+
+              const thumbCandidates = [
+                vd.thumbnailUrl,
+                item.thumbnailUrl,
+                vd.posterUrl,
+                item.posterUrl,
+              ];
+              for (const c of thumbCandidates) {
+                const rawThumb = getLocalized(c, langKey);
+                if (rawThumb && typeof rawThumb === 'string') {
+                  thumbnailUrl = normalizeUrl(rawThumb) || rawThumb;
+                  break;
+                }
+              }
+
               if (youtubeId || fallbackUrl) {
                 title =
                   getLocalized(item.title, langKey) ||
@@ -192,6 +209,7 @@ const VideosScreen: React.FC = () => {
               description,
               youtubeId: youtubeId || undefined,
               fallbackUrl: fallbackUrl || undefined,
+              thumbnailUrl: thumbnailUrl || undefined,
               rawJson: parsed,
             });
           } catch (e) {
@@ -276,9 +294,9 @@ const VideosScreen: React.FC = () => {
               >
                 {/* Thumbnail Image */}
                 <View style={styles.thumbnailWrapper}>
-                  {item.youtubeId ? (
+                  {item.thumbnailUrl || item.youtubeId ? (
                     <Image
-                      source={{ uri: `https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg` }}
+                      source={{ uri: item.thumbnailUrl || `https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg` }}
                       style={styles.thumbnail}
                       resizeMode="cover"
                     />

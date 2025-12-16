@@ -74,7 +74,11 @@ const StepsAnimationScreen: React.FC = () => {
 
         {/* Title Text inside the Blue Header */}
         <View style={styles.headerContent}>
-          <Text style={styles.topText}>Just a Few Taps to Begin</Text>
+          <Text
+            style={styles.topText}
+          >
+            Just a Few Taps{'\n'}to Begin
+          </Text>
         </View>
       </View>
 
@@ -165,14 +169,15 @@ const getStyles = (responsive: ReturnType<typeof useResponsive>) =>
       paddingTop: responsive.hp(5), // Adjust based on status bar
     },
     topText: {
-      fontSize: responsive.wp(9),
+      fontSize: responsive.wp(8.2),
       color: '#FFFFFF', // White text on Blue bg looks premium
       textAlign: 'center',
-      lineHeight: responsive.wp(12),
+      lineHeight: responsive.wp(10.5),
       fontFamily: 'SpicyRice-Regular', // Keeping your font preference
       textShadowColor: 'rgba(0,0,0,0.2)',
       textShadowOffset: { width: 1, height: 1 },
       textShadowRadius: 5,
+      paddingHorizontal: responsive.wp(2),
     },
 
     // --- CONTENT STYLES ---

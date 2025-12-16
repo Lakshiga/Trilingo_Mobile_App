@@ -59,8 +59,11 @@ const LoginScreenWrapper = () => {
   const handleLogin = async (userData: any) => {
     try {
       await login(userData);
-      // Navigate to home after login
-      navigation.navigate('Home');
+      // Navigate to home after login (single reset to avoid double-stacking)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
     } catch (error) {
       // Re-throw error so LoginScreen can catch it and show modal
       throw error;
