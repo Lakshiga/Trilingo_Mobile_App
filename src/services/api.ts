@@ -735,9 +735,17 @@ class ApiService {
     }
   }
 
-  async checkLevelAccess(levelId: number): Promise<PaymentStatusResponse> {
+  async checkLevelAccess(levelId: number, forceRefresh: boolean = false): Promise<PaymentStatusResponse> {
     try {
-      const response = await this.api.get<PaymentStatusResponse>(`/payments/check-access/${levelId}`);
+      let url = `/payments/check-access/${levelId}`;
+      
+      // Add cache-busting parameter if forceRefresh is true
+      if (forceRefresh) {
+        const timestamp = new Date().getTime();
+        url += `?t=${timestamp}`;
+      }
+      
+      const response = await this.api.get<PaymentStatusResponse>(url);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);

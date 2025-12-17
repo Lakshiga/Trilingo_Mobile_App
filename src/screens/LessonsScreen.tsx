@@ -103,20 +103,35 @@ const LessonsScreen: React.FC = () => {
         
         // Check if user has paid for this level
         let hasPaidAccess = false;
+        let isFreeLevel = levelId <= 2; // Levels 1 and 2 are free levels
         if (currentUser && !currentUser.isGuest) {
           try {
             // If refreshPaymentStatus flag is true, force a fresh check
             if (refreshPaymentStatus) {
-              // Force a fresh check by calling the API directly
-              const accessResponse = await apiService.checkLevelAccess(levelId);
+              // Force a fresh check by calling the API directly with cache busting
+              console.log('Checking level access with force refresh for level:', levelId);
+              const accessResponse = await apiService.checkLevelAccess(levelId, true);
+              console.log('Access response:', accessResponse);
               if (accessResponse && accessResponse.isSuccess) {
                 hasPaidAccess = accessResponse.hasAccess;
+                isFreeLevel = accessResponse.message?.includes("free") || isFreeLevel;
+                console.log('User has paid access:', hasPaidAccess);
+                console.log('Is free level:', isFreeLevel);
+              } else {
+                console.log('Access check failed:', accessResponse);
               }
             } else {
               // Normal check
-              const accessResponse = await apiService.checkLevelAccess(levelId);
+              console.log('Checking level access for level:', levelId);
+              const accessResponse = await apiService.checkLevelAccess(levelId, false);
+              console.log('Access response:', accessResponse);
               if (accessResponse && accessResponse.isSuccess) {
                 hasPaidAccess = accessResponse.hasAccess;
+                isFreeLevel = accessResponse.message?.includes("free") || isFreeLevel;
+                console.log('User has paid access:', hasPaidAccess);
+                console.log('Is free level:', isFreeLevel);
+              } else {
+                console.log('Access check failed:', accessResponse);
               }
             }
           } catch (error) {
@@ -126,29 +141,15 @@ const LessonsScreen: React.FC = () => {
           }
         }
         
-        // For new users, first 2 lessons should be free
-        // Lessons in Level 1 are always free (handled by backend)
-        // For Level 2 and above, check payment status
-        const isFirstTwoLessonsFree = levelId === 1; // Only Level 1 has free lessons
-        
-        // Lock lessons based on payment status and free lesson rules
-        if (hasPaidAccess || isFirstTwoLessonsFree) {
-          // User has paid or is accessing free level
-          // Unlock first 2 lessons for free, rest based on payment
-          if (isFirstTwoLessonsFree) {
-            // For Level 1, all lessons are free
-            // Don't add any lessons to lockedSet
-          } else {
-            // For paid levels, unlock all lessons
-            // Don't add any lessons to lockedSet
-          }
-        } else {
-          // User hasn't paid and not accessing free level
-          // Lock all lessons except first 2
+        // For paid levels, unlock all lessons only if user has paid
+        // For free levels (Levels 1 and 2), unlock all lessons
+        if (!isFreeLevel && !hasPaidAccess) {
+          // User hasn't paid for paid levels, lock all lessons except first 2
           for (let i = 2; i < validLessons.length; i++) {
             lockedSet.add(validLessons[i].id);
           }
         }
+        // If it's a free level or user has paid, all lessons should be unlocked (lockedSet remains empty)
         
         setLessons(validLessons);
         setLockedLessons(lockedSet);
@@ -215,12 +216,20 @@ const LessonsScreen: React.FC = () => {
           
           // Check if user has paid for this level
           let hasPaidAccess = false;
+          let isFreeLevel = levelId <= 2; // Levels 1 and 2 are free levels
           if (currentUser && !currentUser.isGuest) {
             try {
               // Force a fresh check when refreshing
-              const accessResponse = await apiService.checkLevelAccess(levelId);
+              console.log('Refreshing level access for level:', levelId);
+              const accessResponse = await apiService.checkLevelAccess(levelId, true);
+              console.log('Refresh access response:', accessResponse);
               if (accessResponse && accessResponse.isSuccess) {
                 hasPaidAccess = accessResponse.hasAccess;
+                isFreeLevel = accessResponse.message?.includes("free") || isFreeLevel;
+                console.log('User has paid access (refresh):', hasPaidAccess);
+                console.log('Is free level (refresh):', isFreeLevel);
+              } else {
+                console.log('Refresh access check failed:', accessResponse);
               }
             } catch (error) {
               console.error('Error checking payment access:', error);
@@ -229,29 +238,15 @@ const LessonsScreen: React.FC = () => {
             }
           }
           
-          // For new users, first 2 lessons should be free
-          // Lessons in Level 1 are always free (handled by backend)
-          // For Level 2 and above, check payment status
-          const isFirstTwoLessonsFree = levelId === 1; // Only Level 1 has free lessons
-          
-          // Lock lessons based on payment status and free lesson rules
-          if (hasPaidAccess || isFirstTwoLessonsFree) {
-            // User has paid or is accessing free level
-            // Unlock first 2 lessons for free, rest based on payment
-            if (isFirstTwoLessonsFree) {
-              // For Level 1, all lessons are free
-              // Don't add any lessons to lockedSet
-            } else {
-              // For paid levels, unlock all lessons
-              // Don't add any lessons to lockedSet
-            }
-          } else {
-            // User hasn't paid and not accessing free level
-            // Lock all lessons except first 2
+          // For paid levels, unlock all lessons only if user has paid
+          // For free levels (Levels 1 and 2), unlock all lessons
+          if (!isFreeLevel && !hasPaidAccess) {
+            // User hasn't paid for paid levels, lock all lessons except first 2
             for (let i = 2; i < validLessons.length; i++) {
               lockedSet.add(validLessons[i].id);
             }
           }
+          // If it's a free level or user has paid, all lessons should be unlocked (lockedSet remains empty)
           
           setLessons(validLessons);
           setLockedLessons(lockedSet);
@@ -275,18 +270,23 @@ const LessonsScreen: React.FC = () => {
     try {
       // Check if lesson is locked
       if (lockedLessons.has(lesson.id)) {
-        // For levels >= 2, check if user has paid (only if user is logged in)
-        if (levelId >= 2 && currentUser && !currentUser.isGuest) {
+        // For levels >= 3, check if user has paid (only if user is logged in)
+        if (levelId >= 3 && currentUser && !currentUser.isGuest) {
           try {
-            const accessResponse = await apiService.checkLevelAccess(levelId);
+            console.log('Checking level access in handleLessonPress for level:', levelId);
+            const accessResponse = await apiService.checkLevelAccess(levelId, false);
+            console.log('handleLessonPress access response:', accessResponse);
             if (accessResponse && accessResponse.isSuccess && accessResponse.hasAccess) {
               // User has paid, allow access to the lesson
+              console.log('User has access, navigating to lesson:', lesson.id);
               (navigation as any).navigate('LessonActivities', { 
                 lessonId: lesson.id, 
                 lessonName: getLessonName(lesson),
                 levelId: levelId 
               });
               return;
+            } else {
+              console.log('User does not have access to lesson:', lesson.id);
             }
           } catch (error: any) {
             console.error('Error checking level access:', error);
